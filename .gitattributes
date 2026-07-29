@@ -1,0 +1,3 @@
+# Les hooks sont exécutés par sh : un CRLF casserait le shebang
+# (« bad interpreter »). Ils restent en LF quoi qu'il arrive.
+outillage/hooks/** text eol=lf

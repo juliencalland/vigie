@@ -1,0 +1,18 @@
+#!/bin/sh
+# Garde-fou : aucun index.html cassé ou fuyant ne peut être committé.
+# Activation (une fois par clone) : git config core.hooksPath outillage/hooks
+#
+# Le contrôle porte sur le fichier tel qu'il est SUR LE DISQUE (c'est lui qui sera
+# publié) — pas sur la version indexée. Committer un index.html partiellement
+# indexé n'a de toute façon pas de sens ici : le fichier est monolithique.
+
+if git diff --cached --name-only | grep -qx 'index.html'; then
+  echo "pre-commit : vérification de index.html…"
+  if ! node outillage/verifier.js; then
+    echo ""
+    echo "COMMIT REFUSÉ : des contrôles ont échoué (voir ci-dessus)."
+    echo "Corriger, ou forcer en connaissance de cause avec --no-verify."
+    exit 1
+  fi
+fi
+exit 0
