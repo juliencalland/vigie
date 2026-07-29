@@ -509,7 +509,7 @@ const Var_State = {
   tarifs: Object.assign({}, Cst_TarifsDefaut),
   cumulApi: { appels: 0, jetonsEntree: 0, jetonsSortie: 0, recherches: 0, coutUsd: 0 },
   majJournaux: [],   // dernier en premier : {id,debutTs,finTs,mode,modele,statut,phases[],recherches,jetonsEntree,jetonsSortie,coutUsd,stopReason,tronque,cartesProduites,message,coursSeuls}
-  panneaux: { maj: false, journal: false, formAjout: false, regles: true, apiParam: true, seuilsParam: false, instrumentsParam: true, glossParam: false, sitesParam: false, oppoCadre: true },
+  panneaux: { maj: false, journal: false, formAjout: false, regles: true, apiParam: true, seuilsParam: false, instrumentsParam: true, glossParam: false, sitesParam: false, erreursParam: false, oppoCadre: true },
   filtreTag: null,
   filtreJour: null,
   zbId: '',
@@ -1151,6 +1151,7 @@ const Cst_AidePanneaux = {
   instrumentsParam: 'la liste des instruments suivis, envoyée au modèle à chaque consolidation.',
   glossParam: 'le glossaire complet des termes employés dans l’application.',
   sitesParam: 'le choix des sites autorisés pour les recherches de la mise à jour.',
+  erreursParam: 'la liste des codes d’erreur de la mise à jour, avec leur cause et la conduite à tenir.',
   oppoCadre: 'le cadre d’exposition : les chiffres contre lesquels chaque piste est jugée.'
 };
 const Cst_AideThese = {
@@ -3237,6 +3238,26 @@ function Fn_RenderParametres() {
     h += '<div class="tres-petit muted" style="margin-top:6px">La MAJ privilégie déjà Zone Bourse et vérifie chaque date sur source primaire : cette liste sert à <i>écarter</i> des sources, pas à en désigner une de référence. Réglage synchronisé entre vos appareils.</div>';
   }
   h += '</div>';
+  // Codes d'erreur : le même catalogue que celui des messages de MAJ, pour
+  // pouvoir retrouver après coup ce qu'un code signifiait.
+  const oErr = !!Var_State.panneaux.erreursParam;
+  h += '<div class="carte"><button type="button" class="panneau-tete' + (oErr ? ' ouvert' : '') + '" data-action="toggle" data-id="erreursParam">'
+    + '<span>Codes d’erreur de la MAJ (' + Cst_ErreursAPI.length + ')</span><span class="chevron">▶</span></button>';
+  if (oErr) {
+    h += '<div class="tres-petit muted" style="margin:2px 0 6px">Chaque échec de MAJ affiche son code entre crochets. Le voici en clair, avec la conduite à tenir. Les codes marqués « transitoire » se résolvent souvent d’eux-mêmes en relançant.</div>';
+    Cst_ErreursAPI.forEach(e => {
+      h += '<div class="cours-ligne"><span class="lib">' + Fn_Esc(e.quoi) + '</span>'
+        + '<div><span class="met mono">' + Fn_Esc(e.code) + '</span>'
+        + (e.http ? '<span class="met mono">HTTP ' + e.http + '</span>' : '')
+        + (e.retard ? '<span class="met" style="border-color:var(--warn);color:var(--warn)">transitoire</span>' : '')
+        + '</div>'
+        + '<div class="petit" style="margin-top:3px">' + Fn_Gloss(Fn_Esc(e.pourquoi)) + '</div>'
+        + '<div class="petit" style="margin-top:2px;color:var(--accent)">→ ' + Fn_Gloss(Fn_Esc(e.faire)) + '</div>'
+        + '</div>';
+    });
+    h += '<div class="tres-petit muted" style="margin-top:8px">Le crédit restant n’est pas exposé par l’API à une clé standard : aucune vérification préalable n’est possible depuis l’application. Une MAJ lancée sans solde suffisant s’interrompra en cours (code <b class="mono">flux_incomplet</b>) sans rien intégrer — surveillez le solde sur console.anthropic.com avant une consolidation complète.</div>';
+  }
+  h += '</div>';
   // Glossaire complet
   const oGloss = !!Var_State.panneaux.glossParam;
   const clesGloss = Object.keys(Cst_Glossary).sort((a, b) => a.localeCompare(b, 'fr'));
@@ -3447,26 +3468,83 @@ async function Fn_ErreurHttp(rep) {
   } catch (e) { /* corps non JSON */ }
   return { api: true, status: rep.status, type, message };
 }
+/* ----------------------------------------------------------------
+   CATALOGUE DES ERREURS D'APPEL — source UNIQUE, servant à la fois au
+   message affiché pendant la MAJ et au tableau de référence de
+   Paramètres. Une erreur nouvelle s'ajoute ICI et nulle part ailleurs :
+   deux listes finiraient par diverger, et c'est celle que l'utilisateur
+   lit qui se périmerait.
+   `code` = type renvoyé par l'API (ou code interne pour les cas que
+   l'API ne nomme pas). `http` = statut correspondant, celui qu'on
+   retrouve dans les journaux de console.anthropic.com.
+   ---------------------------------------------------------------- */
+const Cst_ErreursAPI = [
+  { code: 'authentication_error', http: 401, retard: false, quoi: 'Clé API refusée',
+    pourquoi: 'Clé mal collée, incomplète, expirée ou révoquée.',
+    faire: 'Recoller la clé dans Paramètres → Accès API, et vérifier qu’elle existe toujours sur console.anthropic.com (API keys).' },
+  { code: 'permission_error', http: 403, retard: false, quoi: 'Accès refusé au modèle',
+    pourquoi: 'La clé n’a pas le droit d’utiliser ce modèle ou cette fonctionnalité.',
+    faire: 'Vérifier les permissions de la clé sur console.anthropic.com. Une clé de projet restreint peut ne pas couvrir ' + Cst_ModeleMAJ + '.' },
+  { code: 'billing_error', http: 400, retard: false, quoi: 'Crédit épuisé',
+    pourquoi: 'Solde à zéro ou plafond de dépense atteint — détecté AVANT l’envoi.',
+    faire: 'Recharger sur console.anthropic.com (Billing), puis relancer. Rien n’a été consommé.' },
+  { code: 'flux_incomplet', http: null, retard: false, quoi: 'Réponse coupée en cours',
+    pourquoi: 'Le serveur a fermé la connexion sans marqueur de fin. Cause la plus fréquente : crédit épuisé PENDANT l’appel — l’API coupe alors sans message. Sinon : coupure réseau, veille de l’appareil, pare-feu.',
+    faire: 'Vérifier le solde (Billing) puis relancer. Aucune donnée n’est intégrée — les jetons déjà consommés restent dus.' },
+  { code: 'not_found_error', http: 404, retard: false, quoi: 'Modèle introuvable',
+    pourquoi: 'L’identifiant de modèle n’existe pas ou plus (modèle retiré).',
+    faire: 'Le modèle appelé est ' + Cst_ModeleMAJ + '. S’il a été retiré, il faut le changer dans le code — signalez-le.' },
+  { code: 'request_too_large', http: 413, retard: false, quoi: 'Requête trop lourde',
+    pourquoi: 'Les pièces jointes dépassent la limite de l’API (32 Mo par requête, tout compris).',
+    faire: 'Réduire le poids : relevé PDF en qualité normale, captures en PNG compressé ou JPEG plutôt qu’en pleine résolution.' },
+  { code: 'invalid_request_error', http: 400, retard: false, quoi: 'Requête refusée',
+    pourquoi: 'Paramètre invalide ou pièce jointe illisible par l’API (format non reconnu, fichier corrompu).',
+    faire: 'Vérifier que le PDF s’ouvre et que les captures sont bien des images. Le message brut de l’API précise le champ en cause.' },
+  { code: 'rate_limit_error', http: 429, retard: true, quoi: 'Débit dépassé',
+    pourquoi: 'Trop de requêtes ou de jetons sur une courte période.',
+    faire: 'Patienter une à deux minutes puis relancer. Ce n’est pas un problème de solde.' },
+  { code: 'api_error', http: 500, retard: true, quoi: 'Panne côté serveur',
+    pourquoi: 'Incident interne de l’API, sans rapport avec votre requête.',
+    faire: 'Réessayer dans quelques minutes. Voir status.anthropic.com si cela persiste.' },
+  { code: 'overloaded_error', http: 529, retard: true, quoi: 'API surchargée',
+    pourquoi: 'Trop de trafic sur le service au moment de l’appel — sans rapport avec votre clé ni votre solde.',
+    faire: 'Réessayer dans quelques minutes, de préférence hors des heures de pointe américaines (après-midi et soirée en France).' },
+  { code: 'refusal', http: null, retard: false, quoi: 'Requête déclinée',
+    pourquoi: 'Les garde-fous du modèle ont refusé de traiter la demande.',
+    faire: 'Relancer. Si le refus persiste, traiter les documents dans une conversation Claude séparée puis reporter les éléments à la main.' },
+  { code: 'contexte_depasse', http: null, retard: false, quoi: 'Fenêtre de contexte dépassée',
+    pourquoi: 'Documents joints + état du portefeuille dépassent ce que le modèle peut lire en une fois.',
+    faire: 'Réduire le nombre d’instruments suivis (Paramètres) ou joindre moins de captures.' },
+  { code: 'parse', http: null, retard: false, quoi: 'Réponse illisible',
+    pourquoi: 'La réponse n’est pas du JSON exploitable, même après réparation des troncatures.',
+    faire: 'Relancer : c’est presque toujours transitoire. Rien n’a été intégré.' },
+  { code: 'reseau', http: null, retard: true, quoi: 'Échec réseau (« Failed to fetch »)',
+    pourquoi: 'La requête n’a jamais atteint api.anthropic.com.',
+    faire: '1) vérifier la connexion ; 2) désactiver bloqueurs et pare-feu qui filtrent api.anthropic.com ; 3) hors artefact, une clé est requise (Paramètres → Accès API).' }
+];
+function Fn_ErreurCatalogue(code) { return Cst_ErreursAPI.find(e => e.code === code) || null; }
+// Message affiché : reprend le catalogue, en y ajoutant ce que seul l'appel
+// connaît (statut HTTP réel, jetons déjà consommés, message brut de l'API).
 function Fn_MessageErreur(err) {
   if (!err) return 'Erreur inconnue.';
   if (err.name === 'AbortError') return 'MAJ annulée par l’utilisateur.';
   const msg = String(err.message || err);
-  if (err instanceof TypeError || /failed to fetch|networkerror|load failed/i.test(msg)) {
-    return '« Failed to fetch » — diagnostic réseau/origine : 1) vérifier la connexion internet ; 2) sur mobile, préférer un chemin file:// ouvert depuis le gestionnaire de fichiers à un chemin content:// que le navigateur peut isoler ; 3) certains bloqueurs (extensions, pare-feu) coupent api.anthropic.com ; 4) hors artefact, une clé BYOK est requise (Paramètres → Accès API).';
+  let code = err.type || '';
+  if (err.fluxIncomplet) code = 'flux_incomplet';
+  else if (err instanceof TypeError || /failed to fetch|networkerror|load failed/i.test(msg)) code = 'reseau';
+  else if (/credit|billing|balance|insufficient/i.test(msg)) code = 'billing_error';
+  const e = Fn_ErreurCatalogue(code);
+  if (!e) return (err.type ? err.type + ' — ' : '') + msg + (err.status ? ' (HTTP ' + err.status + ')' : '');
+  let t = e.quoi.toUpperCase() + ' — ' + e.pourquoi;
+  if (code === 'flux_incomplet' && err.jetonsRecus) {
+    t += ' Reçu avant la coupure : ≈ ' + Fn_FmtNb(err.jetonsRecus, 0) + ' jetons, ' + (err.recherchesFaites || 0) + ' recherche(s).';
   }
-  if (err.type === 'authentication_error') return 'authentication_error — clé API mal collée, incomplète ou révoquée. Vérifier la clé dans Paramètres → Accès API et sur console.anthropic.com.';
-  if (err.fluxIncomplet) {
-    return 'RÉPONSE INCOMPLÈTE — le serveur a fermé la connexion avant la fin de la réponse'
-      + (err.jetonsRecus ? ' (≈ ' + Fn_FmtNb(err.jetonsRecus, 0) + ' jetons reçus, ' + (err.recherchesFaites || 0) + ' recherche(s) menée(s))' : '')
-      + '. Cause la plus fréquente : CRÉDIT ÉPUISÉ en cours d’appel — l’API coupe alors sans message d’erreur. Vérifier le solde sur console.anthropic.com (Billing), le recharger, puis relancer. '
-      + 'AUCUNE donnée n’a été intégrée : ce qui était reçu est amputé, l’intégrer donnerait un portefeuille faux. Les jetons déjà consommés restent facturés. '
-      + 'Autres causes possibles : coupure réseau, mise en veille de l’appareil, ou fermeture de la connexion par un pare-feu.';
-  }
-  if (/credit|billing|balance/i.test(msg) || err.type === 'billing_error') return 'Crédit insuffisant — le solde de la clé est épuisé ou le plafond de dépense atteint : vérifier sur console.anthropic.com (Billing), recharger, puis relancer.';
-  if (err.type === 'rate_limit_error') return 'rate_limit_error — limite de débit atteinte : patienter une minute puis relancer.';
-  if (err.type === 'overloaded_error') return 'overloaded_error — API temporairement surchargée : réessayer dans quelques minutes.';
-  if (err.type === 'permission_error') return 'permission_error — la clé n’a pas accès à ce modèle ou à cette fonctionnalité (console.anthropic.com).';
-  return (err.type ? err.type + ' — ' : '') + msg;
+  t += ' → ' + e.faire;
+  const ref = [e.code, (err.status || e.http) ? 'HTTP ' + (err.status || e.http) : ''].filter(Boolean).join(' · ');
+  t += ' [' + ref + ' — détail dans Paramètres → Codes d’erreur]';
+  // Message brut de l'API : seul endroit où le champ fautif est nommé.
+  if (msg && msg.length < 300 && (code === 'invalid_request_error' || code === 'api_error')) t += ' Message de l’API : « ' + msg + ' »';
+  return t;
 }
 /* ---- Appel streaming SSE (mode BYOK) : accumulateur générique de blocs ---- */
 async function Fn_AppelStream(corps, entetes, journal, signal) {
@@ -3772,7 +3850,12 @@ async function Fn_LancerConsolidation() {
     Fn_Phase(journal, 'redaction', 'ok');
     Fn_Phase(journal, 'reception', 'ok', 'Réponse reçue : ' + Fn_FmtNb(totalSortie, 0) + ' jetons de sortie (stop_reason : ' + (stopReason || '?') + ')');
     if (stopReason === 'refusal') {
-      throw { api: true, type: 'refusal', message: 'Le modèle a décliné la requête (stop_reason: refusal). Réessayer, ou passer par le circuit manuel (nouvelle conversation Claude avec les documents).' };
+      throw { api: true, type: 'refusal', message: 'stop_reason: refusal' };
+    }
+    // Fenêtre de contexte saturée : distinct de max_tokens (plafond de SORTIE).
+    // Ici c'est l'ENTRÉE qui ne tient pas — la réponse est inexploitable.
+    if (stopReason === 'model_context_window_exceeded') {
+      throw { api: true, type: 'contexte_depasse', message: 'stop_reason: model_context_window_exceeded' };
     }
     Fn_Phase(journal, 'parsing', 'en cours');
     const parse = Fn_ParseJsonTolerant(texte);

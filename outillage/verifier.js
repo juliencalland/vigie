@@ -303,6 +303,31 @@ setTimeout(() => {
     verifier('aucune aide réduite à un libellé', courtes.length === 0, 'trop courtes : ' + courtes.join(', '));
   } catch (e) { ko('couverture de l’aide des commandes', e.message); }
 
+  // Codes d'erreur : un échec de MAJ affiche un code entre crochets, et
+  // l'utilisateur doit pouvoir le retrouver dans Paramètres. Tout type d'erreur
+  // levé par le code, et tout type officiel de l'API, doit figurer au catalogue.
+  try {
+    const officiels = ['authentication_error', 'permission_error', 'not_found_error',
+      'request_too_large', 'rate_limit_error', 'api_error', 'overloaded_error', 'invalid_request_error'];
+    const manquants = officiels.filter(c => !vm.runInContext('!!Fn_ErreurCatalogue(' + JSON.stringify(c) + ')', ctx));
+    verifier('types d’erreur officiels de l’API tous documentés',
+      manquants.length === 0, 'absents du catalogue : ' + manquants.join(', '));
+
+    // Codes levés en interne : `type: 'xxx'` dans les throw du fichier.
+    const leves = [];
+    const re = /type:\s*'([a-z_]+)'\s*,\s*(?:fluxIncomplet|message)/g;
+    let m;
+    while ((m = re.exec(js)) !== null) if (leves.indexOf(m[1]) < 0) leves.push(m[1]);
+    const orphelins = leves.filter(c => !vm.runInContext('!!Fn_ErreurCatalogue(' + JSON.stringify(c) + ')', ctx));
+    verifier('codes levés par le code tous documentés (' + leves.length + ' levés)',
+      orphelins.length === 0, 'levés mais non documentés : ' + orphelins.join(', '));
+
+    // Chaque entrée doit dire quoi faire, pas seulement nommer la panne.
+    const creuses = vm.runInContext(
+      'Cst_ErreursAPI.filter(e => !e.quoi || !e.pourquoi || !e.faire || e.faire.length < 40).map(e => e.code)', ctx);
+    verifier('chaque code indique la conduite à tenir', creuses.length === 0, 'incomplets : ' + creuses.join(', '));
+  } catch (e) { ko('couverture des codes d’erreur', e.message); }
+
   console.log('\n' + (echecs === 0
     ? 'TOUT EST VERT — publication possible (penser à incrémenter le CACHE de sw.js).'
     : echecs + ' CONTRÔLE(S) EN ÉCHEC — ne pas publier.'));
