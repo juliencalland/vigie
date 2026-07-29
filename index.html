@@ -203,6 +203,25 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent);vertical-
    HAUTEUR déplace ce que l'utilisateur est en train de lire. Règle appliquée
    ci-dessous : chaque zone vivante occupe une hauteur RÉSERVÉE et constante,
    fixée par le conteneur et jamais par la longueur du contenu. */
+/* Diagramme de contrôle du flux : l'état des 9 étapes d'un seul coup d'œil, et
+   au-dessus la barre qui agrège l'avancement. La liste détaillée reste en
+   dessous pour qui veut le message exact de chaque étape. */
+.flux-barre{position:relative;height:8px;border-radius:5px;background:var(--panel2);border:1px solid var(--line);overflow:hidden;margin:8px 0 6px}
+.flux-jauge{height:100%;width:0;background:var(--accent);transition:width .35s ease}
+.flux-jauge.f-ok{background:var(--ok)}
+.flux-jauge.f-echec{background:var(--crit)}
+.flux{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 6px}
+.flux-etape{display:flex;align-items:center;gap:4px;font-size:10.5px;padding:3px 7px;border-radius:6px;border:1px solid var(--line);background:var(--panel2);color:var(--muted);white-space:nowrap}
+.flux-etape .f-ico{font-family:var(--mono);font-weight:700}
+.flux-etape.f-ok{border-color:var(--ok);color:var(--ok)}
+.flux-etape.f-encours{border-color:var(--accent);color:var(--accent);background:var(--accent-dim);animation:vp-pulse 1.4s ease-in-out infinite}
+.flux-etape.f-echec{border-color:var(--crit);color:var(--crit);background:var(--crit-dim)}
+@keyframes vp-pulse{0%,100%{opacity:1}50%{opacity:.55}}
+/* Bilan de traitement : ce qui a été intégré, et ce qui était déjà connu. */
+.bilan-trait{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:5px;margin:6px 0}
+.bilan-trait .bt{border:1px solid var(--line);border-radius:7px;padding:5px 8px;background:var(--panel2)}
+.bilan-trait .bt-n{font-family:var(--mono);font-weight:700;font-size:15px;color:var(--txt)}
+.bilan-trait .bt-lib{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
 .maj-phases{list-style:none;margin:8px 0;padding:0}
 /* Une phase = exactement une ligne. Les libellés s'allongent en direct
    (« Recherche web n° 3 : « … » ») : sans troncature, chaque message repoussait
@@ -1668,10 +1687,15 @@ function Fn_DeciderAction(action, accepte) {
 function Fn_IntegrerConsolidation(data, journal) {
   const ts = Date.now();
   let cartes = 0;
-  (data.quotes || []).forEach(q => { if (q && q.ticker) Var_State.quotes[q.ticker] = { pre: q.pre, last: q.last, post: q.post, chgPct: q.chgPct, asOf: q.asOf || null, src: q.src || null }; });
-  (data.fundamentals || []).forEach(f => { if (f && f.ticker) Var_State.fundamentals[f.ticker] = { consensus: f.consensus, targetMean: f.targetMean, targetGapPct: f.targetGapPct, revisionTrend: f.revisionTrend, nextReport: f.nextReport, synth: f.synth, src: f.src || null }; });
-  (data.valuation || []).forEach(v => { if (v && v.ticker) Var_State.valuation[v.ticker] = { perTtm: v.perTtm, perFwd1: v.perFwd1, perFwd2: v.perFwd2, evSales: v.evSales, evEbitda: v.evEbitda, pb: v.pb, divYield: v.divYield, peg: v.peg, refHist: v.refHist, refPeers: v.refPeers, valoTendue: (v.valoTendue === true || v.valoTendue === false) ? v.valoTendue : null, note: v.note, src: v.src || null }; });
-  (data.expertise || []).forEach(x => { if (x && x.ticker) Var_State.expertise[x.ticker] = { tendance: x.tendance, expositionEur: x.expositionEur, expositionPctVN: x.expositionPctVN, lectureDesk: x.lectureDesk, revueResultats: x.revueResultats, valorisationVsRef: x.valorisationVsRef, risques: x.risques, src: x.src || null, dateMaj: ts }; });
+  // Décompte de ce qui a réellement été traité. « Terminée » ne dit pas si
+  // quelque chose a bougé : un appel peut aboutir en ne rapportant que du déjà-vu.
+  const det = { quotes: 0, fondamentaux: 0, valorisations: 0, expertise: 0,
+    evNouveaux: 0, evConnus: 0, ecarts: 0, oppNouvelles: 0, oppConnues: 0 };
+  if (journal) journal.detail = det;
+  (data.quotes || []).forEach(q => { if (q && q.ticker) { det.quotes++; Var_State.quotes[q.ticker] = { pre: q.pre, last: q.last, post: q.post, chgPct: q.chgPct, asOf: q.asOf || null, src: q.src || null }; } });
+  (data.fundamentals || []).forEach(f => { if (f && f.ticker) { det.fondamentaux++; Var_State.fundamentals[f.ticker] = { consensus: f.consensus, targetMean: f.targetMean, targetGapPct: f.targetGapPct, revisionTrend: f.revisionTrend, nextReport: f.nextReport, synth: f.synth, src: f.src || null }; } });
+  (data.valuation || []).forEach(v => { if (v && v.ticker) { det.valorisations++; Var_State.valuation[v.ticker] = { perTtm: v.perTtm, perFwd1: v.perFwd1, perFwd2: v.perFwd2, evSales: v.evSales, evEbitda: v.evEbitda, pb: v.pb, divYield: v.divYield, peg: v.peg, refHist: v.refHist, refPeers: v.refPeers, valoTendue: (v.valoTendue === true || v.valoTendue === false) ? v.valoTendue : null, note: v.note, src: v.src || null }; } });
+  (data.expertise || []).forEach(x => { if (x && x.ticker) { det.expertise++; Var_State.expertise[x.ticker] = { tendance: x.tendance, expositionEur: x.expositionEur, expositionPctVN: x.expositionPctVN, lectureDesk: x.lectureDesk, revueResultats: x.revueResultats, valorisationVsRef: x.valorisationVsRef, risques: x.risques, src: x.src || null, dateMaj: ts }; } });
   if (data.margin && Fn_Num(data.margin.liquidationValue) != null) {
     Var_State.margin = {
       securitiesValue: data.margin.securitiesValue, cash: data.margin.cash,
@@ -1698,14 +1722,18 @@ function Fn_IntegrerConsolidation(data, journal) {
     if (!existe) {
       Var_State.aValider.push(Object.assign({ id: Fn_Uid('ec'), type: 'ecart', source: c.payload ? 'contrôle' : 'analyse', statut: 'a_valider' }, c));
       cartes++;
+      det.ecarts++;
     }
   });
   // Événements proposés : cartes « à valider » complètes, dédupliquées par id stable.
   (data.events || []).forEach(ev => {
     if (!ev || !ev.date || !ev.label) return;
     const id = Fn_Slug((ev.ticker ? ev.ticker + '-' : '') + ev.label) + '-' + ev.date;
-    if (Var_State.events.some(e => e.id === id)) return;
-    if (Var_State.aValider.some(c => c.type === 'evenement' && c.statut === 'a_valider' && c.event && c.event.id === id)) return;
+    // Déjà au calendrier ou déjà en attente de validation : compté comme connu,
+    // pas ignoré en silence — c'est une information utile (« rien de neuf »).
+    if (Var_State.events.some(e => e.id === id)) { det.evConnus++; return; }
+    if (Var_State.aValider.some(c => c.type === 'evenement' && c.statut === 'a_valider' && c.event && c.event.id === id)) { det.evConnus++; return; }
+    det.evNouveaux++;
     const pos = ev.ticker ? Fn_PosDe(ev.ticker) : null;
     const tags = [];
     if (ev.ticker) tags.push(ev.ticker);
@@ -1761,6 +1789,7 @@ function Fn_IntegrerConsolidation(data, journal) {
       liquidite: o.liquidite || '', src: o.src || '', dateMaj: ts, modele: (journal && journal.modele) || Cst_ModeleMAJ
     };
     let existante = Var_State.opportunites.find(x => (x.cleModele || x.ticker || '') === cle && x.statut !== 'supprimee');
+    if (!existante) det.oppNouvelles++; else det.oppConnues++;
     if (!existante) {
       Var_State.opportunites.push(Object.assign({
         id: Fn_Uid('opp'), cleModele: cle, statut: 'a_etudier', noteUtilisateur: '',
@@ -2134,6 +2163,45 @@ function Fn_MajSante(journal) {
   if (s < 300) return { cls: 'badge-warn', txt: '⚠ silence de ' + Math.floor(s / 60) + ' min ' + (s % 60) + ' s — le flux est peut-être rompu' };
   return { cls: 'badge-crit', txt: '✗ silence de plus de 5 min — coupure automatique imminente' };
 }
+// Diagramme de contrôle du flux + barre de progression. L'avancement se lit sur
+// les ÉTAPES FRANCHIES, jamais sur le temps écoulé : une durée ne dit rien de ce
+// qui reste à faire, et une barre qui progresse toute seule pendant qu'un appel
+// est mort donnerait exactement la fausse assurance qu'on cherche à supprimer.
+function Fn_HtmlFluxMAJ(journal) {
+  const phases = journal.phases || [];
+  if (!phases.length) return '';
+  const faites = phases.filter(p => p.statut === 'ok').length;
+  const enCours = phases.filter(p => p.statut === 'en cours').length;
+  const echec = phases.some(p => p.statut === 'echec');
+  // Une étape en cours compte pour une demie : elle est engagée, pas franchie.
+  const pct = Math.round(Math.min(100, (faites + enCours * 0.5) / phases.length * 100));
+  const clsJauge = echec ? ' f-echec' : (faites === phases.length ? ' f-ok' : '');
+  let h = '<div class="flux-barre"><div class="flux-jauge' + clsJauge + '" style="width:' + pct + '%"></div></div>'
+    + '<div class="tres-petit muted" style="margin:-2px 0 6px">Avancement : <b class="mono">' + faites + '/' + phases.length + '</b> étape(s) franchie(s)'
+    + (echec ? ' · <b style="color:var(--crit)">arrêt sur échec</b>' : (enCours ? ' · <b style="color:var(--accent)">1 en cours</b>' : '')) + '</div>'
+    + '<div class="flux">';
+  phases.forEach(p => {
+    const ico = p.statut === 'ok' ? '✓' : (p.statut === 'echec' ? '✗' : (p.statut === 'en cours' ? '◌' : '·'));
+    const cls = p.statut === 'ok' ? ' f-ok' : (p.statut === 'echec' ? ' f-echec' : (p.statut === 'en cours' ? ' f-encours' : ''));
+    h += '<span class="flux-etape' + cls + '" title="' + Fn_Esc(p.message || '') + '">'
+      + '<span class="f-ico">' + ico + '</span>' + Fn_Esc(p.cle) + '</span>';
+  });
+  return h + '</div>';
+}
+// Ce que la consolidation a réellement changé : le neuf, et ce qui était déjà
+// connu. Sans ce décompte, « terminée » ne dit pas si quoi que ce soit a bougé.
+function Fn_HtmlBilanTraitement(journal) {
+  const d = journal && journal.detail;
+  if (!d) return '';
+  const cases = [
+    ['cours actualisés', d.quotes], ['fondamentaux', d.fondamentaux], ['valorisations', d.valorisations],
+    ['expertises', d.expertise], ['événements nouveaux', d.evNouveaux], ['événements déjà connus', d.evConnus],
+    ['écarts à valider', d.ecarts], ['opportunités nouvelles', d.oppNouvelles], ['opportunités déjà connues', d.oppConnues]
+  ].filter(c => Fn_Num(c[1]) != null);
+  if (!cases.length) return '';
+  return '<div class="bilan-trait">' + cases.map(c =>
+    '<div class="bt"><div class="bt-n">' + c[1] + '</div><div class="bt-lib">' + Fn_Esc(c[0]) + '</div></div>').join('') + '</div>';
+}
 function Fn_DocSlotHtml(cle, titre, obligatoire, accept, note) {
   const doc = Var_State._runtime.docs[cle];
   // Une pièce jointe qui n'est pas du jour est signalée : elle survit désormais
@@ -2230,6 +2298,7 @@ function Fn_RenderMajPanel() {
             ? '<div class="tres-petit muted">« jetons reçus » est ESTIMÉ pendant le flux (l’usage exact n’arrive qu’à la fin — le bilan le corrigera). Si « dernier signal » dépasse 2 min (rouge), le flux est probablement rompu : Annuler puis relancer. Coupure automatique après 5 min sans signal — ce décompte est SUSPENDU quand l’onglet passe en arrière-plan et repart de zéro à votre retour : vous pouvez changer d’onglet ou d’application sans interrompre la MAJ.</div>'
             : '');
       }
+      h += Fn_HtmlFluxMAJ(journal);
       h += '<ul class="maj-phases">' + (journal.phases || []).map(p => {
         const ico = p.statut === 'ok' ? '✓' : (p.statut === 'echec' ? '✗' : (p.statut === 'en cours' ? '◌' : '·'));
         const cls = p.statut === 'ok' ? 'ph-ok' : (p.statut === 'echec' ? 'ph-echec' : (p.statut === 'en cours' ? 'ph-encours' : 'ph-attente'));
@@ -2268,6 +2337,7 @@ function Fn_RenderMajPanel() {
           + '<span class="met">jetons sortie <b>' + Fn_Esc(Fn_FmtNb(journal.jetonsSortie || 0, 0)) + '</b></span>'
           + '<span class="met">coût estimé <b>' + Fn_Esc(Fn_FmtUsd(journal.coutUsd)) + '</b></span>'
           + '</div>'
+          + Fn_HtmlBilanTraitement(journal)
           + '<div class="tres-petit muted">Coût estimé aux tarifs de Paramètres → Accès API (' + t.entreeParM + ' $/M entrée · ' + t.sortieParM + ' $/M sortie · ' + t.recherchePour1000 + ' $/1000 recherches — à vérifier sur docs.claude.com).'
           + (aboutie ? '' : ' Sur un appel interrompu, les jetons de sortie sont ceux ESTIMÉS pendant le flux : le décompte exact n’arrive qu’avec la fin de la réponse, qui n’a pas eu lieu. Le montant réel se lit sur console.anthropic.com.')
           + '</div>'
@@ -3385,7 +3455,14 @@ function Fn_MessageErreur(err) {
     return '« Failed to fetch » — diagnostic réseau/origine : 1) vérifier la connexion internet ; 2) sur mobile, préférer un chemin file:// ouvert depuis le gestionnaire de fichiers à un chemin content:// que le navigateur peut isoler ; 3) certains bloqueurs (extensions, pare-feu) coupent api.anthropic.com ; 4) hors artefact, une clé BYOK est requise (Paramètres → Accès API).';
   }
   if (err.type === 'authentication_error') return 'authentication_error — clé API mal collée, incomplète ou révoquée. Vérifier la clé dans Paramètres → Accès API et sur console.anthropic.com.';
-  if (/credit|billing|balance/i.test(msg) || err.type === 'billing_error') return 'Crédit insuffisant — le solde de la clé est épuisé ou le plafond de dépense atteint : vérifier sur console.anthropic.com (Billing).';
+  if (err.fluxIncomplet) {
+    return 'RÉPONSE INCOMPLÈTE — le serveur a fermé la connexion avant la fin de la réponse'
+      + (err.jetonsRecus ? ' (≈ ' + Fn_FmtNb(err.jetonsRecus, 0) + ' jetons reçus, ' + (err.recherchesFaites || 0) + ' recherche(s) menée(s))' : '')
+      + '. Cause la plus fréquente : CRÉDIT ÉPUISÉ en cours d’appel — l’API coupe alors sans message d’erreur. Vérifier le solde sur console.anthropic.com (Billing), le recharger, puis relancer. '
+      + 'AUCUNE donnée n’a été intégrée : ce qui était reçu est amputé, l’intégrer donnerait un portefeuille faux. Les jetons déjà consommés restent facturés. '
+      + 'Autres causes possibles : coupure réseau, mise en veille de l’appareil, ou fermeture de la connexion par un pare-feu.';
+  }
+  if (/credit|billing|balance/i.test(msg) || err.type === 'billing_error') return 'Crédit insuffisant — le solde de la clé est épuisé ou le plafond de dépense atteint : vérifier sur console.anthropic.com (Billing), recharger, puis relancer.';
   if (err.type === 'rate_limit_error') return 'rate_limit_error — limite de débit atteinte : patienter une minute puis relancer.';
   if (err.type === 'overloaded_error') return 'overloaded_error — API temporairement surchargée : réessayer dans quelques minutes.';
   if (err.type === 'permission_error') return 'permission_error — la clé n’a pas accès à ce modèle ou à cette fonctionnalité (console.anthropic.com).';
@@ -3401,6 +3478,11 @@ async function Fn_AppelStream(corps, entetes, journal, signal) {
   const blocs = [];
   const baseRech = journal.recherches || 0, baseSortie = journal.jetonsSortie || 0;
   let rech = 0, charsSortie = 0; // charsSortie : estimation vivante (l'usage exact n'arrive qu'en fin de flux)
+  // Un flux SSE complet se termine TOUJOURS par message_stop, précédé d'un
+  // message_delta portant stop_reason. Sans ces marqueurs, la connexion a été
+  // coupée en cours de route : crédit épuisé, coupure réseau, ou fin de session
+  // côté serveur. Sans ce drapeau, la coupure passait pour une fin normale.
+  let finPropre = false;
   for (;;) {
     const lu = await lecteur.read();
     Var_State._runtime.dernierSignal = Date.now();
@@ -3460,11 +3542,25 @@ async function Fn_AppelStream(corps, entetes, journal, signal) {
       } else if (ev.type === 'message_delta') {
         if (ev.usage && ev.usage.output_tokens != null) { sortie = ev.usage.output_tokens; journal.jetonsSortie = baseSortie + sortie; }
         if (ev.delta && ev.delta.stop_reason) stop = ev.delta.stop_reason;
+      } else if (ev.type === 'message_stop') {
+        finPropre = true;
       } else if (ev.type === 'error') {
         throw { api: true, type: (ev.error && ev.error.type) || 'api_error', message: (ev.error && ev.error.message) || 'erreur de flux SSE' };
       }
       Fn_MajCompteursDirect(journal);
     }
+  }
+  // Fin de flux SANS marqueur de fin : la réponse est incomplète, quoi qu'en
+  // dise son contenu. Ne JAMAIS laisser passer ce cas — le parseur tolérant
+  // réparerait le JSON tronqué et la MAJ serait déclarée réussie sur des
+  // données amputées, sans que rien ne le signale. C'est ce que produit un
+  // crédit épuisé en cours d'appel : le serveur ferme la connexion.
+  if (!finPropre && !stop) {
+    throw {
+      api: true, type: 'flux_incomplet', fluxIncomplet: true,
+      jetonsRecus: baseSortie + sortie, recherchesFaites: baseRech + rech,
+      message: 'Le flux s’est interrompu avant la fin de la réponse : la connexion a été fermée sans marqueur de fin.'
+    };
   }
   return { contenu: blocs.filter(Boolean), texte, modele, entree, sortie, recherches: rech, stopReason: stop };
 }
@@ -3710,6 +3806,9 @@ async function Fn_LancerConsolidation() {
     } else {
       journal.statut = 'echec';
       journal.message = Fn_MessageErreur(err);
+      // Flux coupé : c'est la RÉCEPTION qui a échoué, pas l'étape en cours au
+      // moment de la coupure. Le diagramme doit désigner le vrai point de rupture.
+      if (err && err.fluxIncomplet) Fn_Phase(journal, 'reception', 'echec', 'Connexion fermée avant la fin de la réponse — rien n’a été intégré');
     }
     journal.phases.forEach(p => { if (p.statut === 'en cours') p.statut = 'echec'; });
   } finally {
