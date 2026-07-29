@@ -36,7 +36,14 @@
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0}
 body{background:var(--bg);color:var(--txt);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding-bottom:48px}
-#app{max-width:640px;margin:0 auto;padding:0 10px}
+/* Largeur FLUIDE, sans palier : la page suit le redimensionnement en continu.
+   La largeur gagnée sert à ajouter des COLONNES (voir .grille-cartes), jamais à
+   étirer les lignes de texte — au-delà de ~90 caractères, l'œil perd la ligne
+   suivante en revenant à la marge. */
+#app{width:min(100% - 20px,1800px);margin:0 auto}
+/* Onglets à flux unique : plafonnés à une largeur lisible et centrés, sinon
+   leurs paragraphes s'étireraient sur toute la dalle. */
+#onglet-vigie,#onglet-parametres{max-width:78rem;margin:0 auto}
 header#entete{padding:14px 4px 8px}
 header#entete h1{margin:0;font-size:19px;letter-spacing:.3px}
 /* Deux lignes réservées : l'état de synchronisation s'y réécrit pendant la MAJ
@@ -145,7 +152,10 @@ hr.sep{border:none;border-top:1px solid var(--line);margin:10px 0}
 .met.z-ok,.met.z-ok b{border-color:var(--ok);color:var(--ok)}
 .met.z-warn,.met.z-warn b{border-color:var(--warn);color:var(--warn)}
 .met.z-crit,.met.z-crit b{border-color:var(--crit);color:var(--crit)}
-.ligne-svap{font-size:12.5px;margin:5px 0}
+/* Surveiller / Arbitrage / Pratique : trois paragraphes d'analyse, souvent longs.
+   Interligne ouvert et mesure plafonnée, sinon la ligne court sur toute la dalle
+   et l'œil se perd en revenant à la marge. */
+.ligne-svap{font-size:12.5px;line-height:1.6;margin:7px 0;max-width:92ch}
 .ligne-svap .svap-lib{font-weight:700;letter-spacing:.3px;font-size:11px;text-transform:uppercase}
 .svap-surv .svap-lib{color:var(--accent)}
 .svap-arb .svap-lib{color:var(--warn)}
@@ -275,31 +285,48 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 .instr-ligne{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line);font-size:12.5px}
 .instr-ligne:last-child{border-bottom:none}
 .vide{color:var(--muted);font-size:13px;padding:8px 2px}
-.cours-ligne{font-size:12.5px;margin:4px 0}
+/* Bloc de fiche. L'étiquette passe SUR SA PROPRE LIGNE : en flux inline, elle se
+   soudait aux valeurs (« Cours pré — · séance 536,25 · post — 27/07/26… ») et la
+   fiche entière se lisait comme une seule phrase, sans début ni fin. Un filet
+   sépare les blocs et l'interligne s'ouvre : l'œil retrouve des points d'accroche. */
+.cours-ligne{font-size:12.5px;line-height:1.55;margin:0;padding:9px 0;border-top:1px solid var(--line);max-width:92ch}
+.cours-ligne:first-of-type{border-top:none;padding-top:2px}
+.cours-ligne .lib{display:block;color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:3px}
 /* Lignes du cadre d'exposition : les pastilles y sont nombreuses et reviennent à
    la ligne sur mobile — le flux flex garantit un espacement constant en hauteur
-   comme en largeur, quel que soit le nombre de retours. */
-.expo-ligne{display:flex;flex-wrap:wrap;align-items:center;gap:5px}
-.cours-ligne .lib{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px;font-weight:700}
+   comme en largeur, quel que soit le nombre de retours. L'étiquette y reste sur
+   la même ligne (le display:block ci-dessus ne s'applique pas à un enfant flex). */
+.expo-ligne{display:flex;flex-wrap:wrap;align-items:center;gap:5px;max-width:none}
+.expo-ligne .lib{margin-bottom:0}
+/* Provenance : la partie la plus longue et la moins consultée d'une fiche.
+   Reléguée sur sa propre ligne, en retrait derrière un filet — présente pour qui
+   vérifie, transparente pour qui lit. */
+.src{display:block;margin-top:5px;padding-left:9px;border-left:2px solid var(--line);color:var(--muted);font-size:10.5px;line-height:1.5;max-width:88ch}
+/* Couples étiquette/valeur : l'œil descend une colonne d'étiquettes au lieu de
+   traverser une phrase à séparateurs « · ». */
+.faits{display:grid;grid-template-columns:auto minmax(0,1fr);gap:3px 12px;margin:0}
+.faits dt{color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.3px;font-weight:700;padding-top:2px}
+.faits dd{margin:0;min-width:0}
+/* Mesure de lecture : sans plafond, un écran large étire les paragraphes bien
+   au-delà de ce que l'œil suit d'une ligne à l'autre. */
+.carte>.petit,.carte>.tres-petit{max-width:92ch}
 @media (min-width:520px){
   .form-grille{grid-template-columns:1fr 1fr 1fr}
   .form-grille .col2{grid-column:auto}
   .form-grille .col3{grid-column:1/4}
 }
-/* Exploitation de la largeur d'écran : téléphone (base ≤ 640) · tablette · PC */
 @media (min-width:768px){
-  #app{max-width:900px}
   .cal-date{font-size:10px}
   .cal-evt{font-size:10px}
 }
-@media (min-width:1200px){
-  #app{max-width:1160px}
-}
-@media (min-width:1000px){
-  #c-contenu,#d-contenu{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start}
-  #c-contenu>.carte,#d-contenu>.carte{margin-bottom:0}
-  #c-contenu>.tres-petit,#c-contenu>.vide,#d-contenu>.bloc-titre,#d-contenu>.carte:first-child{grid-column:1/-1}
-}
+/* Listes de fiches : le nombre de colonnes suit la largeur EN CONTINU, sans
+   palier. `min(100%,32rem)` évite le débordement sous 32rem — la colonne s'y
+   réduit à la largeur disponible au lieu d'imposer son minimum. */
+.grille-cartes{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,32rem),1fr));gap:10px;align-items:start}
+.grille-cartes>.carte{margin-bottom:0}
+/* En-têtes, titres de bloc et messages occupent toute la largeur : ce sont des
+   séparateurs de lecture, pas des fiches à mettre en colonne. */
+.grille-cartes>.hero,.grille-cartes>.bloc-titre,.grille-cartes>.tres-petit,.grille-cartes>.vide,.grille-cartes>.note{grid-column:1/-1}
 </style>
 </head>
 <body>
@@ -320,9 +347,9 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
       <div id="v-hero"></div><div id="v-maj"></div><div id="v-actions"></div><div id="v-avalider"></div>
       <div id="v-cal"></div><div id="v-chips"></div><div id="v-timeline"></div><div id="v-form"></div><div id="v-regles"></div>
     </section>
-    <section id="onglet-cours" class="onglet"><div id="c-contenu"></div></section>
-    <section id="onglet-discipline" class="onglet"><div id="d-contenu"></div></section>
-    <section id="onglet-opportunites" class="onglet"><div id="o-contenu"></div></section>
+    <section id="onglet-cours" class="onglet"><div id="c-contenu" class="grille-cartes"></div></section>
+    <section id="onglet-discipline" class="onglet"><div id="d-contenu" class="grille-cartes"></div></section>
+    <section id="onglet-opportunites" class="onglet"><div id="o-contenu" class="grille-cartes"></div></section>
     <section id="onglet-parametres" class="onglet"><div id="p-contenu"></div></section>
   </main>
 </div>
@@ -2410,7 +2437,7 @@ function Fn_HtmlEvCarte(ev, opts) {
     }
   });
   if (!uneLigne) h += '<div class="ligne-svap muted tres-petit">Surveiller / Arbitrage / Pratique : à compléter par une consolidation (événement ajouté manuellement).</div>';
-  if (ev.src) h += '<div class="tres-petit muted">Source : ' + Fn_Gloss(Fn_Esc(ev.src)) + '</div>';
+  if (ev.src) h += '<div class="src">Source : ' + Fn_Gloss(Fn_Esc(ev.src)) + '</div>';
   if (!opts.apercu) {
     const arme = !!Var_State._runtime.armes['ev-' + ev.id];
     h += '<div class="ev-actions">'
@@ -2519,22 +2546,29 @@ function Fn_HtmlInstrumentCarte(inst) {
   if (pos && Fn_Num(pos.valeurEur) != null) {
     h += '<div class="tres-petit muted mono">Position : ' + Fn_Esc(Fn_FmtEur(pos.valeurEur)) + (Fn_Num(pos.pctVN) != null ? ' · ' + Fn_Esc(Fn_FmtPct(pos.pctVN)) + ' de la VN' : '') + (pos.sens === 'short' ? ' · short' : '') + ' [relevé]</div>';
   }
-  // Cours : pré-ouverture / séance / après-clôture + horodatage + source [consolidation]
-  h += '<div class="cours-ligne"><span class="lib">Cours</span> <span class="mono">'
+  // Cours : pré-ouverture / séance / après-clôture. Les trois valeurs restent sur
+  // une ligne (elles se lisent ensemble), l'horodatage et la source passent en
+  // retrait — c'est leur longueur qui noyait la donnée.
+  h += '<div class="cours-ligne"><span class="lib">Cours</span><span class="mono">'
     + 'pré ' + Fn_Esc(Fn_FmtNb(q && q.pre, 2)) + ' · séance ' + Fn_Esc(Fn_FmtNb(q && q.last, 2))
     + (q && Fn_Num(q.chgPct) != null ? ' (<span style="color:var(' + (Fn_Num(q.chgPct) >= 0 ? '--ok' : '--crit') + ')">' + Fn_Esc(Fn_FmtPct(q.chgPct, 2, true)) + '</span>)' : '')
     + ' · post ' + Fn_Esc(Fn_FmtNb(q && q.post, 2)) + '</span>'
-    + (q && (q.asOf || q.src) ? ' <span class="tres-petit muted">' + Fn_Esc([q.asOf, q.src].filter(Boolean).join(' · ')) + ' [consolidation]</span>' : ' <span class="tres-petit muted">non consolidé — lancer une MAJ</span>')
+    + (q && (q.asOf || q.src) ? '<span class="src">' + Fn_Esc([q.asOf, q.src].filter(Boolean).join(' · ')) + ' [consolidation]</span>' : '<span class="src">non consolidé — lancer une MAJ</span>')
     + '</div>';
-  // Tendance fondamentale
-  h += '<div class="cours-ligne"><span class="lib">Fondamentaux</span> ';
+  // Fondamentaux : quatre faits distincts, chacun sur sa ligne avec son étiquette.
+  // En phrase à séparateurs « · », le consensus, l'objectif, les révisions et la
+  // date de publication formaient un paragraphe où plus rien ne se repérait.
+  h += '<div class="cours-ligne"><span class="lib">Fondamentaux</span>';
   if (f) {
-    h += Fn_Gloss(Fn_Esc(f.consensus || 'consensus —'))
-      + ' · objectif <span class="mono">' + Fn_Esc(Fn_FmtNb(f.targetMean, 2)) + '</span>'
-      + (Fn_Num(f.targetGapPct) != null ? ' (<span class="mono">' + Fn_Esc(Fn_FmtPct(f.targetGapPct, 1, true)) + '</span> vs dernier cours)' : '')
-      + ' · révisions ' + Fn_Gloss(Fn_Esc(f.revisionTrend || '—'))
-      + ' · prochaine publication : ' + Fn_Gloss(Fn_Esc(f.nextReport || '—'))
-      + (f.src ? ' <span class="tres-petit muted">' + Fn_Esc(f.src) + ' [consolidation]</span>' : '');
+    const faits = [
+      ['consensus', Fn_Gloss(Fn_Esc(f.consensus || '—'))],
+      ['objectif', '<span class="mono">' + Fn_Esc(Fn_FmtNb(f.targetMean, 2)) + '</span>'
+        + (Fn_Num(f.targetGapPct) != null ? ' <span class="mono">' + Fn_Esc(Fn_FmtPct(f.targetGapPct, 1, true)) + '</span> vs dernier cours' : '')],
+      ['révisions', Fn_Gloss(Fn_Esc(f.revisionTrend || '—'))],
+      ['publication', Fn_Gloss(Fn_Esc(f.nextReport || '—'))]
+    ];
+    h += '<dl class="faits">' + faits.map(p => '<dt>' + p[0] + '</dt><dd>' + p[1] + '</dd>').join('') + '</dl>'
+      + (f.src ? '<span class="src">' + Fn_Esc(f.src) + ' [consolidation]</span>' : '');
   } else {
     h += '<span class="muted">— (consensus, objectif, révisions BNA, prochaine publication : à consolider via MAJ)</span>';
   }
@@ -2554,8 +2588,8 @@ function Fn_HtmlInstrumentCarte(inst) {
     }
     if (v.valoTendue === true) h += '<span class="badge badge-warn">valorisation tendue vs référentiel</span> ';
     else if (v.valoTendue === false) h += '<span class="badge badge-ok">valorisation non tendue vs référentiel</span> ';
-    if (v.note) h += '<div class="tres-petit muted">' + Fn_Gloss(Fn_Esc(v.note)) + '</div>';
-    if (v.src) h += '<div class="tres-petit muted">' + Fn_Esc(v.src) + ' [consolidation]</div>';
+    if (v.note) h += '<div class="tres-petit muted" style="margin-top:3px">' + Fn_Gloss(Fn_Esc(v.note)) + '</div>';
+    if (v.src) h += '<span class="src">' + Fn_Esc(v.src) + ' [consolidation]</span>';
   } else {
     h += '<span class="muted">— (PER courant et prévisionnels, VE/CA, VE/EBITDA, P/B, rendement, PEG et référentiels : à consolider via MAJ, page « Valorisation » de Zone Bourse)</span>';
   }
@@ -2569,7 +2603,7 @@ function Fn_HtmlInstrumentCarte(inst) {
       + (x.revueResultats ? '<div class="petit" style="margin-top:3px"><span class="badge badge-info">revue de résultats</span> ' + Fn_Gloss(Fn_Esc(x.revueResultats)) + '</div>' : '')
       + (x.valorisationVsRef ? '<div class="petit">Valorisation vs référentiel : ' + Fn_Gloss(Fn_Esc(x.valorisationVsRef)) + '</div>' : '')
       + (x.risques ? '<div class="petit">Risques : ' + Fn_Gloss(Fn_Esc(x.risques)) + '</div>' : '')
-      + (x.src ? '<div class="tres-petit muted">' + Fn_Esc(x.src) + ' [consolidation]</div>' : '')
+      + (x.src ? '<span class="src">' + Fn_Esc(x.src) + ' [consolidation]</span>' : '')
       + '</div>';
   }
   // Thèse (check-list persistée localement — alimente l'indicateur « fraîcheur des thèses »)
