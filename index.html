@@ -264,9 +264,15 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent);vertical-
    (« Recherche web n° 3 : « … » ») : sans troncature, chaque message repoussait
    verticalement toute la suite de la page. Le texte entier reste lisible en
    infobulle et dans le journal « Requêtes web » ci-dessous. */
-.maj-phases li{display:flex;gap:8px;align-items:center;font-size:12.5px;padding:3px 0;min-height:22px}
-.maj-phases .ph-ico{font-family:var(--mono);width:16px;flex:none}
-.maj-phases .ph-txt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.maj-phases li{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;padding:3px 0}
+.maj-phases .ph-ico{font-family:var(--mono);width:16px;flex:none;line-height:1.4}
+/* DEUX lignes réservées par phase, toujours — pas une, pas trois. Une seule ligne
+   tronquait les messages utiles (« Recherche web n° 3 : « … » ») au tiers ; une
+   hauteur libre faisait sauter la page à chaque message plus long. Deux lignes de
+   hauteur FIXE donnent la place de lire sans jamais déplacer ce qui suit. Le
+   message intégral reste en infobulle. */
+.maj-phases .ph-txt{flex:1;min-width:0;line-height:1.4;height:2.8em;overflow:hidden;
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2}
 .ph-ok .ph-ico{color:var(--ok)}
 .ph-encours .ph-ico{color:var(--warn)}
 .ph-echec .ph-ico{color:var(--crit)}
@@ -287,8 +293,13 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent);vertical-
 .maj-sante{min-height:34px;margin:2px 0 6px}
 .maj-sante .badge{white-space:normal;line-height:1.5}
 /* Journal des requêtes web : hauteur figée dès le lancement, défilement interne
-   calé sur la dernière ligne — la liste s'allonge sans pousser la page. */
-.maj-requetes{height:46px;overflow-y:auto;overscroll-behavior:contain}
+   calé sur la dernière ligne — la liste s'allonge sans pousser la page.
+   46 px ne montraient qu'une requête et demie, coupée en plein milieu : c'est
+   pourtant LE détail qui dit ce que la MAJ est en train de chercher. Une requête
+   par ligne, et la hauteur d'environ six lignes — toujours constante. */
+.maj-requetes{height:132px;overflow-y:auto;overscroll-behavior:contain}
+.maj-req-l{line-height:1.5;padding:1px 0;overflow-wrap:anywhere}
+.maj-req-l b{color:var(--txt)}
 /* Ligne de résumé et ligne d'état de l'export : deux à trois lignes réservées,
    leur texte étant remplacé par un autre de longueur très différente. */
 .maj-resume{min-height:32px}
@@ -546,6 +557,11 @@ const Var_State = {
   aValider: [],      // {id,type:'ecart'|'evenement',kind,summary,evidence,proposal,payload,event,source,statut,dateDecision}
   theses: {},        // par ticker : {ecrite,invalidation,objectif,derniereRevue}
   sitesRecherche: [], // domaines autorisés pour la recherche web ; vide = recherche libre
+  // Domaines que l'outil de recherche de l'API REFUSE (leur éditeur bloque les
+  // agents automatiques). Appris des erreurs 400, mémorisé pour ne pas refaire
+  // échouer la MAJ suivante, et affiché dans Paramètres. Jamais codé en dur : la
+  // liste de l'API change sans préavis.
+  sitesBloques: [],
   seuils: Object.assign({}, Cst_SeuilsDefaut),
   tarifs: Object.assign({}, Cst_TarifsDefaut),
   cumulApi: { appels: 0, jetonsEntree: 0, jetonsSortie: 0, recherches: 0, coutUsd: 0 },
@@ -611,7 +627,7 @@ async function Fn_Load() {
       // Fusion : la sauvegarde locale est prioritaire (coches, décisions, réglages).
       ['onglet', 'events', 'instruments', 'positions', 'orders', 'trades', 'margin', 'releveAsOf',
        'derniereConsolidation', 'actions', 'opportunites', 'filtreOpportunites', 'aValider', 'majJournaux', 'filtreTag', 'filtreJour',
-       'zbId', 'freqRappel', 'sitesRecherche'].forEach(c => { if (s[c] !== undefined) Var_State[c] = s[c]; });
+       'zbId', 'freqRappel', 'sitesRecherche', 'sitesBloques'].forEach(c => { if (s[c] !== undefined) Var_State[c] = s[c]; });
       ['quotes', 'fundamentals', 'valuation', 'expertise', 'theses'].forEach(c => {
         if (s[c] && typeof s[c] === 'object') Var_State[c] = s[c];
       });
@@ -787,7 +803,7 @@ function Fn_SerialiserEtat() {
 function Fn_AdopterEtat(s) {
   ['onglet', 'events', 'instruments', 'positions', 'orders', 'trades', 'margin', 'releveAsOf',
    'derniereConsolidation', 'actions', 'opportunites', 'filtreOpportunites', 'aValider', 'majJournaux', 'filtreTag', 'filtreJour',
-   'zbId', 'freqRappel', 'sitesRecherche', 'etatTs'].forEach(c => { if (s[c] !== undefined) Var_State[c] = s[c]; });
+   'zbId', 'freqRappel', 'sitesRecherche', 'sitesBloques', 'etatTs'].forEach(c => { if (s[c] !== undefined) Var_State[c] = s[c]; });
   ['quotes', 'fundamentals', 'valuation', 'expertise', 'theses'].forEach(c => { if (s[c] && typeof s[c] === 'object') Var_State[c] = s[c]; });
   ['seuils', 'tarifs', 'cumulApi', 'panneaux'].forEach(c => { if (s[c] && typeof s[c] === 'object') Var_State[c] = Object.assign({}, Var_State[c], s[c]); });
   // L'état adopté peut contenir un journal « en cours » d'un autre appareil ou
@@ -1342,7 +1358,8 @@ const Cst_AideActions = {
   'zb': { t: 'Identifiant Zone Bourse', d: 'Transmis au modèle pour qu’il cite les pages correspondantes. Ce n’est pas un identifiant de courtier : aucun n’est demandé, stocké ni transmis, jamais.' },
   'site-recherche': { t: 'Autoriser ce site', d: 'Attention : dès qu’un seul site est coché, les recherches se limitent aux sites cochés et tout le reste du web devient inatteignable pour la mise à jour — sites d’émetteurs et communiqués compris. Aucun site coché = recherche libre.' },
   'sites-tous': { t: 'Tout cocher', d: 'Coche l’ensemble de la liste. La recherche sera donc limitée à ces sites, à l’exclusion de tout autre.' },
-  'sites-aucun': { t: 'Tout décocher', d: 'Vide la liste et rend la recherche libre sur tout le web — le réglage par défaut, le plus large.' }
+  'sites-aucun': { t: 'Tout décocher', d: 'Vide la liste et rend la recherche libre sur tout le web — le réglage par défaut, le plus large.' },
+  'sites-debloquer': { t: 'Réessayer les sites refusés', d: 'Oublie la liste des sites que l’outil de recherche a refusés : ils repartiront dans la prochaine mise à jour. Utile si l’éditeur a rouvert l’accès. S’ils sont toujours refusés, ils seront de nouveau écartés automatiquement, sans faire échouer la consolidation.' }
 };
 // Aide applicable à un élément : les commandes contextuelles (onglet, panneau,
 // case de thèse) se résolvent sur leur data-id / data-champ.
@@ -1509,7 +1526,23 @@ function Fn_ListeInstruments() {
 function Fn_SitesAutorises() {
   const connus = {};
   Cst_SitesRecherche.forEach(g => g.sites.forEach(s => { connus[s.d] = 1; }));
-  return (Var_State.sitesRecherche || []).filter(d => connus[d]);
+  const bloques = Var_State.sitesBloques || [];
+  // Un domaine que l'API a déjà refusé est retiré AVANT l'envoi : le laisser
+  // repartir ferait échouer toute la MAJ en 400, sans qu'aucune recherche
+  // n'ait lieu — une case cochée dans Paramètres suffisait à tout bloquer.
+  return (Var_State.sitesRecherche || []).filter(d => connus[d] && bloques.indexOf(d) < 0);
+}
+// Domaines nommés par un refus de l'API (« the following domains are not
+// accessible with our user agent: … »). On ne retient que ceux qui figurent
+// dans la liste des sources proposées : ce sont les seuls qu'on ait pu envoyer,
+// et cela évite de prendre api.anthropic.com ou un mot du message pour un domaine.
+function Fn_DomainesRefuses(message) {
+  const m = String(message || '');
+  if (!/domain/i.test(m)) return [];
+  const connus = [];
+  Cst_SitesRecherche.forEach(g => g.sites.forEach(s => connus.push(s.d)));
+  const bas = m.toLowerCase();
+  return connus.filter(d => bas.indexOf(d) >= 0);
 }
 function Fn_TagsDisponibles() {
   const set = {};
@@ -2545,8 +2578,17 @@ function Fn_RenderMajPanel() {
       h += '<div class="carte-titre" style="margin-top:10px">Collecte documentaire</div>'
         + Fn_DocSlotHtml('positions', 'PDF des positions ouvertes', true, 'application/pdf', null)
         + Fn_DocSlotHtml('ordres', 'Capture des ordres en cours', true, 'image/*', null)
-        + Fn_DocSlotHtml('executes', 'Capture des derniers ordres exécutés', false, 'image/*', null)
+        // « Aucune transaction récente » REMPLACE la capture des ordres exécutés :
+        // tant que la case est cochée, le sélecteur disparaît (rien à fournir) et
+        // la pièce éventuellement déjà jointe n'est PAS transmise. Laisser les deux
+        // coexister envoyait une image payée pour rien, que le prompt déclare
+        // pourtant ignorer — et exposait le modèle à en tirer des transactions
+        // contredisant la déclaration de l'utilisateur.
+        + (rt.aucuneTransac ? '' : Fn_DocSlotHtml('executes', 'Capture des derniers ordres exécutés', false, 'image/*', null))
         + '<div class="tres-petit" style="padding:4px 0 6px"><label><input type="checkbox" data-action="maj-notrans"' + (rt.aucuneTransac ? ' checked' : '') + '> aucune transaction récente (remplace la capture des ordres exécutés)</label></div>'
+        + (rt.aucuneTransac && rt.docs.executes
+          ? '<div class="note note-info tres-petit">Une capture d’ordres exécutés (' + Fn_Esc(rt.docs.executes.nom) + ') reste enregistrée sur cet appareil mais <b>ne sera pas envoyée</b> : la case ci-dessus la remplace. Décochez-la pour la joindre de nouveau, ou retirez les pièces jointes pour l’effacer.</div>'
+          : '')
         + Fn_DocSlotHtml('marge', 'Capture de l’aperçu de marge', false, 'image/*',
           'FORTEMENT recommandée : l’écran « Espace libre » (DEGIRO) fournit les cinq grandeurs de marge — valeur des titres, liquidités, valeur liquidative, risque du portefeuille, marge disponible — qui rendent EXACTS le coussin de marge, le levier et la distance à l’appel de marge. Sans elle, ces indicateurs restent « — ».');
       const pdfOk = !!rt.docs.positions;
@@ -2612,8 +2654,13 @@ function Fn_RenderMajPanel() {
       // le bloc reprend sa hauteur naturelle et se lit d'un seul tenant.
       const requetes = journal.listeRecherches || [];
       if (majEnCours || requetes.length) {
-        h += '<div class="tres-petit muted' + (majEnCours ? ' maj-requetes' : '') + '" style="margin:2px 0 6px">Requêtes web : '
-          + (requetes.length ? requetes.map((q, i) => (i + 1) + '. « ' + Fn_Esc(q) + ' »').join(' · ') : '—')
+        // Une requête PAR LIGNE : en paragraphe continu, la dernière — la seule
+        // qui renseigne sur ce qui se passe maintenant — était noyée au milieu.
+        h += '<div class="tres-petit muted' + (majEnCours ? ' maj-requetes' : '') + '" style="margin:2px 0 6px">'
+          + '<div class="maj-req-l"><b>Requêtes web (' + requetes.length + ')</b></div>'
+          + (requetes.length
+            ? requetes.map((q, i) => '<div class="maj-req-l">' + (i + 1) + '. « ' + Fn_Esc(q) + ' »</div>').join('')
+            : '<div class="maj-req-l">— aucune recherche lancée pour l’instant</div>')
           + '</div>';
       }
       if (journal.message && journal.statut !== 'en cours') {
@@ -3623,6 +3670,7 @@ function Fn_RenderParametres() {
   // Sources de recherche web de la MAJ
   const oSites = !!Var_State.panneaux.sitesParam;
   const sitesOk = Fn_SitesAutorises();
+  const bloques = Var_State.sitesBloques || [];
   const totalSites = Cst_SitesRecherche.reduce((a, g) => a + g.sites.length, 0);
   h += '<div class="carte"><button type="button" class="panneau-tete' + (oSites ? ' ouvert' : '') + '" data-action="toggle" data-id="sitesParam">'
     + '<span>Sources de recherche web — ' + (sitesOk.length ? sitesOk.length + ' site(s) autorisé(s) sur ' + totalSites : 'tout le web') + '</span><span class="chevron">▶</span></button>';
@@ -3635,15 +3683,26 @@ function Fn_RenderParametres() {
       + '<div class="rang-btn">'
       + '<button type="button" class="btn" data-action="sites-tous">Tout cocher</button>'
       + '<button type="button" class="btn" data-action="sites-aucun">Tout décocher (web libre)</button>'
+      + (bloques.length ? '<button type="button" class="btn" data-action="sites-debloquer">Réessayer les ' + bloques.length + ' site(s) refusé(s)</button>' : '')
       + '</div>';
+    // Un site REFUSÉ par l'outil de recherche reste coché (c'est le choix de
+    // l'utilisateur) mais porte son badge et n'est plus envoyé : sans cela, une
+    // seule case suffisait à faire échouer toute la MAJ en erreur 400.
+    if (bloques.length) {
+      h += '<div class="note note-warn tres-petit">' + bloques.length + ' site(s) refusé(s) par l’outil de recherche de l’API — leur éditeur bloque les agents automatiques : <b class="mono">' + Fn_Esc(bloques.join(', ')) + '</b>. Ils sont automatiquement retirés de chaque requête (la MAJ ne s’interrompt plus). Les sites sur abonnement sont les plus souvent concernés.</div>';
+    }
     Cst_SitesRecherche.forEach(g => {
       h += '<div class="bloc-titre" style="margin-top:8px">' + Fn_Esc(g.cat) + '</div>';
       g.sites.forEach(s => {
-        const coche = sitesOk.indexOf(s.d) >= 0;
+        // L'état de la case reflète le CHOIX de l'utilisateur, pas le filtrage :
+        // décocher tout seul un site refusé lui ferait croire à un bug.
+        const coche = (Var_State.sitesRecherche || []).indexOf(s.d) >= 0;
+        const bloque = bloques.indexOf(s.d) >= 0;
         h += '<div class="tres-petit" style="padding:3px 0">'
           + '<label><input type="checkbox" data-action="site-recherche" data-id="' + Fn_Esc(s.d) + '"' + (coche ? ' checked' : '') + '> '
           + '<b class="mono">' + Fn_Esc(s.d) + '</b> — ' + Fn_Esc(s.n)
           + (s.abo ? ' <span class="badge badge-neutre">abonnement</span>' : '')
+          + (bloque ? ' <span class="badge badge-crit">refusé par la recherche</span>' : '')
           + '</label></div>';
       });
     });
@@ -3793,6 +3852,12 @@ function Fn_BuildPromptMAJ(ctx) {
   L.push('=== TES 8 MISSIONS, DANS L’ORDRE ===');
   L.push('MISSION 1 — EXTRACTION des documents joints : positions, ordres en attente, transactions récentes, bloc de marge. Restitue-les dans les blocs positions / orders / trades / margin du schéma final, avec pour chaque position sa CLASSIFICATION (voir taxonomie ci-dessous), sa devise, son % de la valeur nette (pctVN, calculé sur la valeur liquidative si l’aperçu de marge est fourni, sinon sur la somme des positions en le marquant), et pour les produits dérivés : sous-jacent, sens, levier, barrière, strike, ratio/parité, delta en €, portage mensuel estimé (fiche émetteur), facteurs de risque, liqFaible (capacité de sortie en 1-2 séances au regard de l’ADV). Le champ releve reprend l’horodatage imprimé sur le relevé.');
   L.push('MISSION 2 — COLLECTE ET CONSOLIDATION des données de marché pour CHAQUE instrument du bloc inst (positions, sous-jacents, instruments suivis). Source privilégiée : les pages publiques Zone Bourse (zonebourse.com). EXHAUSTIVITÉ EXIGÉE : chaque champ listé ci-dessous est à chercher explicitement — un champ omis sera lu comme « introuvable », il ne se rattrape pas au tour suivant. Une valeur non trouvée s’omet (voir ÉCONOMIE) ; elle ne s’invente jamais.');
+  L.push('  PROTOCOLE DE COLLECTE (à appliquer instrument par instrument, sans exception) :');
+  L.push('   1. LE RELEVÉ N’EST PAS UNE COTATION. Le prix imprimé sur le relevé du courtier est une valorisation d’inventaire, pas un cours de marché : il ne porte ni variation, ni ouverture, ni volume, ni horodatage de séance. Le reprendre en last est une NON-COLLECTE. Le cours de séance se lit sur une page de cotation, et l’écart éventuel avec le relevé se signale dans analysis (mission 3).');
+  L.push('   2. Pour chaque instrument, DEUX recherches distinctes au minimum : (a) sa page de COTATION — cours, variation, ouverture, haut, bas, clôture précédente, volume, ADV, 52 semaines, et la cotation hors séance si la place est fermée ; (b) sa page de VALORISATION — les multiples, le BPA et les agrégats de la liste (e). Une seule requête générale du type « X cours action » ne rapporte ni multiples, ni BPA, ni volumes : elle ne suffit pas. Une troisième requête est due pour l’agenda et le consensus s’ils ne figurent pas sur les deux premières.');
+  L.push('   3. Un produit à levier compte pour SON SOUS-JACENT : ses multiples sont ceux du sous-jacent, sa fiche émetteur fournit barrière, parité, delta et portage. Ne consomme pas de recherche pour chercher un PER au turbo lui-même.');
+  L.push('   4. Si la page de valorisation reste introuvable ou illisible APRÈS l’avoir cherchée, dis-le dans note en nommant ce qui a été tenté. Une note de ce type sans recherche correspondante dans le journal est une faute : l’omission n’est légitime qu’après avoir réellement cherché.');
+  L.push('   5. Ordre de priorité si le temps manque : cotations complètes de toutes les lignes détenues D’ABORD, puis valorisation des lignes les plus lourdes en % de la valeur nette, puis le reste. Ne sacrifie jamais les cotations pour produire davantage de texte.');
   L.push('  (a) COTATIONS (bloc quotes) — pré-ouverture (pre), variation de la pré-ouverture en % (preVar) et son heure (preAs) ; dernier cours de séance (last) et sa variation en % (var) ; ouverture (ouv), plus haut (haut) et plus bas (bas) de la séance, clôture de la veille (clotPrec) ; après-clôture (post), sa variation en % (postVar) et son heure (postAs) ; volume du jour (vol) et volume moyen quotidien sur 3 mois (adv, en TITRES — il dimensionne la capacité de sortie) ; plus haut et plus bas de 52 semaines (h52, b52) ; devise de cotation (dev) et place (place). La RÈGLE HORS-HORAIRES ci-dessus s’applique : si la place est fermée, la valeur pertinente du moment (pré-ouverture ou après-clôture) est OBLIGATOIRE en plus du dernier cours de séance — « dernier cours de clôture » seul est une réponse incomplète.');
   L.push('  (b) AGENDA de la société (bloc fundamentals) — prochaine publication en clair (pub) ET sa date en ISO AAAA-MM-JJ (pubDate) quand elle est connue.');
   L.push('  (c) CONSENSUS (bloc fundamentals) — recommandation agrégée avec sa répartition (conso), nombre d’analystes (nbA), objectif de cours moyen (obj), écart en % au dernier cours (objEcart), objectifs le plus haut et le plus bas (objHaut, objBas).');
@@ -3857,6 +3922,7 @@ function Fn_BuildPromptMAJ(ctx) {
   L.push('- Horodatages de cotation (as des quotes, preAs, postAs) : JJ/MM/AA HH:MM, heure de Paris. Exception : margin.as reprend l’heure LUE sur la capture du courtier, telle quelle.');
   L.push('');
   L.push('=== ÉCONOMIE DE LA RÉPONSE (règles strictes — cet appel est facturé au jeton) ===');
+  L.push('0. PORTÉE : ces règles concernent la FORME de la réponse — jamais l’effort de collecte. Elles n’autorisent à chercher ni moins de pages, ni moins d’instruments, ni moins de chiffres. Économiser des jetons en rendant des blocs vides serait exactement l’inverse du but : un champ chiffré coûte quelques jetons, la prose qui explique son absence en coûte dix fois plus.');
   L.push('1. AUCUN texte hors du JSON : ni préambule, ni balise de code, ni commentaire, ni conclusion. Premier caractère « { », dernier caractère « } ».');
   L.push('2. OMETS toute clé dont la valeur est inconnue, non trouvée ou vide. N’écris JAMAIS "champ": null, ni "", ni "—", ni "n. d." : l’absence dit déjà « non trouvé » et ne coûte rien. N’émets pas non plus d’entrée vide ni de tableau vide (sauf ceux explicitement exigés en mode « cours seuls »). UNIQUE EXCEPTION : la valeur v d’une métrique d’événement, où « — (donnée manquante : X) » reste EXIGÉ — l’utilisateur doit lire ce qui manque et comment l’obtenir, jamais une case vide.');
   L.push('3. Emploie les clés COURTES du schéma ci-dessous À LA LETTRE. Une clé rallongée, traduite ou inventée n’est pas lue.');
@@ -3973,8 +4039,8 @@ const Cst_ErreursAPI = [
     pourquoi: 'Les pièces jointes dépassent la limite de l’API (32 Mo par requête, tout compris).',
     faire: 'Réduire le poids : relevé PDF en qualité normale, captures en PNG compressé ou JPEG plutôt qu’en pleine résolution.' },
   { code: 'invalid_request_error', http: 400, retard: false, quoi: 'Requête refusée',
-    pourquoi: 'Paramètre invalide ou pièce jointe illisible par l’API (format non reconnu, fichier corrompu).',
-    faire: 'Vérifier que le PDF s’ouvre et que les captures sont bien des images. Le message brut de l’API précise le champ en cause.' },
+    pourquoi: 'Paramètre invalide, pièce jointe illisible (format non reconnu, fichier corrompu), ou site coché dans Paramètres que l’outil de recherche n’a pas le droit d’atteindre — « the following domains are not accessible with our user agent » : leur éditeur bloque les agents automatiques, cas fréquent des sources sur abonnement.',
+    faire: 'Le cas des domaines est désormais traité tout seul : ils sont retirés, mémorisés et la requête repart (voir le journal et le badge « refusé par la recherche » dans Paramètres → Sources de recherche web). Pour les autres cas, vérifier que le PDF s’ouvre et que les captures sont bien des images ; le message brut de l’API nomme le champ en cause.' },
   { code: 'rate_limit_error', http: 429, retard: true, quoi: 'Débit dépassé',
     pourquoi: 'Trop de requêtes ou de jetons sur une courte période.',
     faire: 'Patienter une à deux minutes puis relancer. Ce n’est pas un problème de solde.' },
@@ -4194,6 +4260,12 @@ async function Fn_LancerConsolidation() {
   if (mode.mode === 'aucun') { Fn_RenderMajPanel(); return; } // aucune requête vouée à l'échec
   const docs = rt.docs;
   const coursSeuls = !docs.positions;
+  // Pièces réellement transmises. La capture des ordres exécutés est EXCLUE dès
+  // que « aucune transaction récente » est cochée : la case la remplace, et une
+  // image jointe malgré tout serait payée pour rien — avec le risque que le modèle
+  // en tire des transactions contredisant la déclaration de l'utilisateur.
+  const docsEnvoyes = ['ordres', 'executes', 'marge'].filter(k => docs[k] && !(k === 'executes' && rt.aucuneTransac));
+  const nbEnvoyes = (docs.positions ? 1 : 0) + docsEnvoyes.length;
   const instruments = Fn_ListeInstruments();
   if (coursSeuls && !instruments.length) { Fn_RenderMajPanel(); return; }
   rt.enCours = true;
@@ -4225,7 +4297,10 @@ async function Fn_LancerConsolidation() {
   const journal = Fn_NouveauJournal(mode.mode, coursSeuls);
   journal.listeRecherches = [];
   Cst_PhasesMAJ.forEach(p => journal.phases.push({ cle: p[0], statut: 'attente', message: p[1], ts: Date.now() }));
-  Fn_Phase(journal, 'collecte', 'ok', 'Collecte documentaire : ' + (coursSeuls ? 'aucun document — MAJ partielle « cours seuls » sur ' + instruments.length + ' instrument(s)' : ['positions', 'ordres', 'executes', 'marge'].filter(k => docs[k]).length + ' pièce(s) jointe(s)' + (rt.aucuneTransac ? ' + « aucune transaction récente »' : '')));
+  Fn_Phase(journal, 'collecte', 'ok', 'Collecte documentaire : ' + (coursSeuls
+    ? 'aucun document — MAJ partielle « cours seuls » sur ' + instruments.length + ' instrument(s)'
+    : nbEnvoyes + ' pièce(s) jointe(s) transmise(s)'
+      + (rt.aucuneTransac ? ' + « aucune transaction récente »' + (docs.executes ? ' (capture des ordres exécutés conservée mais NON transmise)' : '') : '')));
   // Chrono + chien de garde du flux (1 tick/s — clearInterval systématique dans finally)
   rt.timers.chrono = setInterval(() => {
     const el = document.getElementById('maj-chrono');
@@ -4252,16 +4327,28 @@ async function Fn_LancerConsolidation() {
     const sitesAutorises = Fn_SitesAutorises();
     const contenus = [];
     if (docs.positions) contenus.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: docs.positions.b64 } });
-    ['ordres', 'executes', 'marge'].forEach(k => {
-      if (docs[k]) contenus.push({ type: 'image', source: { type: 'base64', media_type: docs[k].media || 'image/png', data: docs[k].b64 } });
+    docsEnvoyes.forEach(k => {
+      contenus.push({ type: 'image', source: { type: 'base64', media_type: docs[k].media || 'image/png', data: docs[k].b64 } });
     });
-    contenus.push({
-      type: 'text',
-      text: Fn_BuildPromptMAJ({
-        coursSeuls, instruments, aucuneTransac: rt.aucuneTransac, sitesAutorises,
-        docNoms: { positions: docs.positions && docs.positions.nom, ordres: docs.ordres && docs.ordres.nom, executes: docs.executes && docs.executes.nom, marge: docs.marge && docs.marge.nom }
-      })
-    });
+    const ctxTexte = {
+      coursSeuls, instruments, aucuneTransac: rt.aucuneTransac, sitesAutorises,
+      // Le texte ne doit annoncer que les pièces RÉELLEMENT jointes : nommer une
+      // capture absente ferait chercher au modèle une image qui n'est pas là.
+      docNoms: {
+        positions: docs.positions && docs.positions.nom,
+        ordres: docs.ordres && docs.ordres.nom,
+        executes: (docsEnvoyes.indexOf('executes') >= 0) ? docs.executes.nom : null,
+        marge: docs.marge && docs.marge.nom
+      }
+    };
+    contenus.push({ type: 'text', text: Fn_BuildPromptMAJ(ctxTexte) });
+    // Le périmètre de recherche est ANNONCÉ au modèle : s'il change au cours des
+    // replis, le texte doit changer avec lui — sinon le modèle croirait toujours
+    // la recherche bridée et rendrait des « donnée hors périmètre » à tort.
+    const reecrireTexte = sites => {
+      ctxTexte.sitesAutorises = sites;
+      contenus[contenus.length - 1].text = Fn_BuildPromptMAJ(ctxTexte);
+    };
     const messagesApi = [{ role: 'user', content: contenus }];
     const entetes = { 'Content-Type': 'application/json' };
     if (mode.mode === 'byok') {
@@ -4270,12 +4357,13 @@ async function Fn_LancerConsolidation() {
       entetes['anthropic-dangerous-direct-browser-access'] = 'true';
     }
     const outilRecherche = { type: 'web_search_20250305', name: 'web_search' };
-    if (sitesAutorises.length) outilRecherche.allowed_domains = sitesAutorises;
-    Fn_Phase(journal, 'envoi', 'ok', 'Requête envoyée (' + Cst_ModeleMAJ + ', effort ' + Cst_EffortMAJ + ', plafond ' + Fn_FmtNb(Cst_MaxTokens, 0) + ' jetons' + (mode.mode === 'byok' ? ', flux SSE' : ', pont d’artefact') + (sitesAutorises.length ? ', recherche limitée à ' + sitesAutorises.length + ' site(s)' : ', recherche libre') + ')');
+    let domaines = sitesAutorises.slice();
+    if (domaines.length) outilRecherche.allowed_domains = domaines;
+    Fn_Phase(journal, 'envoi', 'ok', 'Requête envoyée (' + Cst_ModeleMAJ + ', effort ' + Cst_EffortMAJ + ', plafond ' + Fn_FmtNb(Cst_MaxTokens, 0) + ' jetons' + (mode.mode === 'byok' ? ', flux SSE' : ', pont d’artefact') + (domaines.length ? ', recherche limitée à ' + domaines.length + ' site(s)' : ', recherche libre') + ')');
     let texte = '', totalEntree = 0, totalSortie = 0, totalRech = 0, stopReason = null, continuations = 0;
     // Repli automatique et TRACÉ (jamais un abaissement choisi) : le plafond de sortie et le
     // paramètre d'effort varient d'un modèle à l'autre — plutôt qu'échouer, on réessaie une fois.
-    let plafond = Cst_MaxTokens, effort = Cst_EffortMAJ, repliPlafond = false, repliEffort = false;
+    let plafond = Cst_MaxTokens, effort = Cst_EffortMAJ, repliPlafond = false, repliEffort = false, repliDomaines = 0;
     for (;;) {
       const corps = {
         model: Cst_ModeleMAJ,
@@ -4302,6 +4390,30 @@ async function Fn_LancerConsolidation() {
         if (!repliPlafond && plafond > Cst_MaxTokensRepli && /max_tokens/i.test(msgP)) {
           repliPlafond = true; plafond = Cst_MaxTokensRepli;
           Fn_Phase(journal, 'envoi', 'en cours', 'Plafond de sortie refusé par l’API (' + Cst_ModeleMAJ + ') — nouvelle tentative à ' + Fn_FmtNb(plafond, 0) + ' jetons');
+          continue;
+        }
+        // Domaines refusés par l'outil de recherche : l'API rejette la requête en
+        // 400 AVANT toute recherche — une seule case cochée dans Paramètres faisait
+        // donc échouer la MAJ entière. On retire les domaines nommés, on les
+        // mémorise pour les appels suivants, et on relance. Deuxième échec :
+        // recherche libre, dite explicitement — mieux vaut chercher partout que
+        // ne rien chercher, mais l'utilisateur doit le lire dans le journal.
+        if (repliDomaines < 2 && domaines.length && /domain/i.test(msgP)) {
+          const refuses = Fn_DomainesRefuses(msgP);
+          repliDomaines++;
+          if (refuses.length && refuses.length < domaines.length) {
+            Var_State.sitesBloques = (Var_State.sitesBloques || []).concat(refuses.filter(d => (Var_State.sitesBloques || []).indexOf(d) < 0));
+            domaines = domaines.filter(d => refuses.indexOf(d) < 0);
+            outilRecherche.allowed_domains = domaines;
+            reecrireTexte(domaines);
+            Fn_Phase(journal, 'envoi', 'en cours', 'Domaine(s) refusé(s) par l’outil de recherche (leur éditeur bloque les agents automatiques) : ' + refuses.join(', ') + ' — retirés et mémorisés, nouvelle tentative sur ' + domaines.length + ' site(s)');
+          } else {
+            if (refuses.length) Var_State.sitesBloques = (Var_State.sitesBloques || []).concat(refuses.filter(d => (Var_State.sitesBloques || []).indexOf(d) < 0));
+            domaines = [];
+            delete outilRecherche.allowed_domains;
+            reecrireTexte([]);
+            Fn_Phase(journal, 'envoi', 'en cours', 'Tous les sites cochés sont refusés par l’outil de recherche' + (refuses.length ? ' (' + refuses.join(', ') + ')' : ' (l’API ne les nomme pas)') + ' — nouvelle tentative en RECHERCHE LIBRE sur tout le web');
+          }
           continue;
         }
         throw errParam;
@@ -4674,6 +4786,11 @@ function Fn_OnAction(e) {
     }
     case 'sites-aucun': {
       Var_State.sitesRecherche = [];
+      Fn_Save(); Fn_RenderParametres();
+      break;
+    }
+    case 'sites-debloquer': {
+      Var_State.sitesBloques = [];
       Fn_Save(); Fn_RenderParametres();
       break;
     }
