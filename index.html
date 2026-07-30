@@ -152,14 +152,53 @@ hr.sep{border:none;border-top:1px solid var(--line);margin:10px 0}
 .met.z-ok,.met.z-ok b{border-color:var(--ok);color:var(--ok)}
 .met.z-warn,.met.z-warn b{border-color:var(--warn);color:var(--warn)}
 .met.z-crit,.met.z-crit b{border-color:var(--crit);color:var(--crit)}
-/* Surveiller / Arbitrage / Pratique : trois paragraphes d'analyse, souvent longs.
-   Interligne ouvert et mesure plafonnée, sinon la ligne court sur toute la dalle
-   et l'œil se perd en revenant à la marge. */
-.ligne-svap{font-size:12.5px;line-height:1.6;margin:7px 0;max-width:92ch}
-.ligne-svap .svap-lib{font-weight:700;letter-spacing:.3px;font-size:11px;text-transform:uppercase}
-.svap-surv .svap-lib{color:var(--accent)}
-.svap-arb .svap-lib{color:var(--warn)}
-.svap-prat .svap-lib{color:var(--ok)}
+/* Surveiller / Arbitrage / Pratique — les trois registres de décision.
+   Ce sont trois choses de nature différente : un indicateur à LIRE, une décision à
+   TRANCHER, une règle de métier à APPLIQUER. Empilés en paragraphes séparés d'un
+   simple tiret, ils se lisaient comme un seul bloc et l'œil ne savait plus lequel
+   il parcourait. Chacun devient donc une carte à liseré coloré, avec sa vignette
+   et son étiquette en tête, et un texte aéré (interligne 1,65, mesure plafonnée à
+   92 caractères — au-delà, l'œil perd la ligne suivante en revenant à la marge).
+   Présentation SEULE : aucun texte n'est réécrit, la logique de fond est intacte. */
+.svap{display:flex;flex-direction:column;gap:6px;margin:9px 0 4px}
+.svap-carte{background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--muted);border-radius:9px;padding:8px 11px}
+.svap-tete{display:flex;align-items:center;gap:6px;margin-bottom:2px}
+.svap-ico{font-family:var(--mono);font-size:12px;line-height:1.2;width:14px;text-align:center;flex:none}
+.svap-lib{font-weight:700;letter-spacing:.45px;font-size:10.5px;text-transform:uppercase;color:var(--muted)}
+.svap-txt{font-size:12.5px;line-height:1.65;max-width:92ch}
+/* Un arbitrage porte souvent deux ou trois alternatives (« si X → A ; si Y → B ») :
+   en puces, la comparaison se fait d'un coup d'œil au lieu de se lire en phrase. */
+.svap-liste{margin:2px 0 0;padding-left:16px;font-size:12.5px;line-height:1.6;max-width:92ch}
+.svap-liste li{margin:3px 0;padding-left:2px}
+.svap-liste li::marker{color:var(--muted)}
+.svap-surv{border-left-color:var(--accent)}
+.svap-surv .svap-ico,.svap-surv .svap-lib{color:var(--accent)}
+.svap-arb{border-left-color:var(--warn)}
+.svap-arb .svap-ico,.svap-arb .svap-lib{color:var(--warn)}
+.svap-prat{border-left-color:var(--ok)}
+.svap-prat .svap-ico,.svap-prat .svap-lib{color:var(--ok)}
+.svap-crit{border-left-color:var(--crit)}
+.svap-crit .svap-ico,.svap-crit .svap-lib{color:var(--crit)}
+/* Cotation : pré-ouverture / séance / après-clôture se lisent ENSEMBLE, chacune
+   avec sa variation et son heure. Blocs de largeur libre qui se replient sur
+   mobile plutôt qu'une ligne unique tronquée. */
+.cote-rang{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0}
+.cote-bloc{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:4px 10px;min-width:0}
+.cote-lib{display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);line-height:1.4}
+.cote-val{font-family:var(--mono);font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
+.cote-h{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.cote-bloc.cote-vide .cote-val{color:var(--muted);font-weight:400}
+.v-pos{color:var(--ok)}
+.v-neg{color:var(--crit)}
+/* Valorisation : une grille de couples étiquette/valeur, colonnes suivant la
+   largeur. En rangée inline, les huit multiples formaient un pavé illisible. */
+.valo-grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(8.5rem,1fr));gap:5px;margin:5px 0}
+.valo-grille .met{display:flex;justify-content:space-between;gap:6px;min-width:0}
+.valo-grille .met b{font-variant-numeric:tabular-nums;white-space:nowrap}
+/* Lien vers la page réellement consultée par la consolidation. L'URL brute est
+   validée en JS (http/https seulement) avant d'atteindre l'attribut. */
+.lien{color:var(--accent);text-decoration:underline;text-underline-offset:2px;overflow-wrap:anywhere}
+.lien::after{content:" ↗";font-size:.85em;text-decoration:none}
 .ev-actions{display:flex;gap:8px;margin-top:8px}
 .ev-actions .btn{padding:6px 11px;min-height:34px;font-size:12px}
 /* ---- notes ---- */
@@ -188,8 +227,6 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent);vertical-
 .jauge-marq{position:absolute;top:-4px;width:3px;height:16px;background:var(--txt);border-radius:2px;box-shadow:0 0 4px var(--ombre)}
 .ind-valeur{font-family:var(--mono);font-size:19px;font-weight:700}
 .ind-seuils{font-size:11px;color:var(--muted);font-family:var(--mono)}
-.ind-pratique{font-size:12px;margin-top:6px;color:var(--muted)}
-.ind-pratique b{color:var(--ok)}
 .score-rang{display:flex;align-items:center;gap:14px}
 .score-val{font-family:var(--mono);font-size:34px;font-weight:800}
 .bloc-titre{font-size:12px;font-weight:800;letter-spacing:.6px;color:var(--accent);margin:16px 0 8px;text-transform:uppercase}
@@ -492,10 +529,14 @@ const Var_State = {
   positions: [],     // extraction validée : {ticker,isin,libelle,quantite,cours,devise,valeurEur,pctVN,categorie,sousJacent,sens,levier,barriere,strike,ratioParite,deltaEur,portageMensuelEur,facteurs[],liquiditeFaible,src}
   orders: [],        // {id,ticker,sens,type,quantite,limite,montantEur,validite,effetSiExecute,categorie,src}
   trades: [],        // {ticker,sens,quantite,cours,montantEur,date,src}
-  quotes: {},        // par ticker : {pre,last,post,chgPct,asOf,src}
-  fundamentals: {},  // par ticker : {consensus,targetMean,targetGapPct,revisionTrend,nextReport,synth,src}
-  valuation: {},     // par ticker : {perTtm,perFwd1,perFwd2,evSales,evEbitda,pb,divYield,peg,refHist,refPeers,valoTendue,note,src}
-  expertise: {},     // par ticker : {tendance,expositionEur,expositionPctVN,lectureDesk,revueResultats,valorisationVsRef,risques,src,dateMaj}
+  // Blocs de marché, par ticker. Les noms sont ceux du MÉTIER, stables : le schéma
+  // d'échange avec le modèle, lui, emploie des clés courtes (économie de jetons) et
+  // Fn_Ch fait la conversion à l'intégration, dans les deux sens de compatibilité.
+  // `dateMaj` est estampillé par l'application pour afficher l'âge de la donnée.
+  quotes: {},        // {pre,preVar,preAs,last,chgPct,ouv,haut,bas,clotPrec,post,postVar,postAs,vol,adv,h52,b52,devise,place,asOf,url,src,dateMaj}
+  fundamentals: {},  // {consensus,nbAnalystes,targetMean,targetGapPct,targetHigh,targetLow,revisionTrend,nextReport,nextReportDate,synth,url,src,dateMaj}
+  valuation: {},     // {perTtm,perFwd1,perFwd2,bpa,bpaFwd1,bpaFwd2,evSales,evEbitda,pb,peg,divYield,divParAction,exDiv,capi,capiDevise,detteNette,dnEbitda,roe,margeOp,croisCa,croisBpa,refHist,refPeers,valoTendue,note,url,src,dateMaj}
+  expertise: {},     // {tendance,expositionEur,expositionPctVN,lectureDesk,revueResultats,valorisationVsRef,risques,url,src,dateMaj}
   margin: null,      // {securitiesValue,cash,liquidationValue,portfolioRisk,freeMargin,asOf}
   releveAsOf: null,
   derniereConsolidation: null,
@@ -593,6 +634,7 @@ async function Fn_Load() {
   if (!Var_State.margin && Cst_SeedEtat.margin) Var_State.margin = JSON.parse(JSON.stringify(Cst_SeedEtat.margin));
   if (!Var_State.releveAsOf && Cst_SeedEtat.releveAsOf) Var_State.releveAsOf = Cst_SeedEtat.releveAsOf;
   Fn_ReparerJournauxOrphelins();
+  Fn_ElaguerEtat(); // borne les cartes déjà décidées héritées des versions précédentes
   Fn_PersisterSansHorodatage(); // persister SANS tamponner etatTs : charger n'est pas modifier
 }
 // Un journal « en cours » n'est PAS une preuve qu'une MAJ tourne : le statut est
@@ -995,6 +1037,102 @@ function Fn_FmtUsd(v, dec) {
   try {
     return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'USD', minimumFractionDigits: dec == null ? 2 : dec, maximumFractionDigits: 4 }).format(n);
   } catch (e) { return n.toFixed(2) + ' $'; }
+}
+// Grands nombres (capitalisation, volumes) : « 12,4 Md » se lit, « 12 400 000 000 » non.
+function Fn_FmtGros(v, devise) {
+  const n = Fn_Num(v);
+  if (n == null) return '—';
+  const a = Math.abs(n), suf = devise ? ' ' + devise : '';
+  if (a >= 1e9) return Fn_FmtNb(n / 1e9, 2) + ' Md' + suf;
+  if (a >= 1e6) return Fn_FmtNb(n / 1e6, 2) + ' M' + suf;
+  if (a >= 1e3) return Fn_FmtNb(n / 1e3, 1) + ' k' + suf;
+  return Fn_FmtNb(n, 0) + suf;
+}
+// LECTURE TOLÉRANTE D'UN CHAMP — pierre angulaire de la rétrocompatibilité.
+// Le schéma d'échange avec le modèle utilise des clés COURTES (le poids des clés
+// est multiplié par le nombre de lignes : c'est là que partent les jetons), mais
+// une consolidation ancienne, une réponse tronquée réparée, ou un modèle qui
+// retombe sur l'ancien schéma emploient les clés longues. Les deux sont acceptées,
+// toujours, sans quoi une seule MAJ au mauvais format viderait l'écran.
+function Fn_Ch(o, alias) {
+  if (!o) return null;
+  for (let i = 0; i < alias.length; i++) {
+    const v = o[alias[i]];
+    if (v !== undefined && v !== null && v !== '') return v;
+  }
+  return null;
+}
+// Sérialisation compacte pour ce qui PART vers le modèle : une clé à null coûte
+// des jetons et n'apprend rien (l'absence dit déjà « inconnu »).
+function Fn_JsonCompact(o) {
+  return JSON.stringify(o, (cle, v) => (v === null || v === '' ? undefined : v));
+}
+// URL fournie par le modèle : validée ICI et nulle part ailleurs. Une chaîne
+// « javascript: » placée dans un href s'exécuterait au clic — seuls http et https
+// passent, et l'attribut est ensuite échappé comme toute donnée variable.
+function Fn_UrlSure(u) {
+  if (!u) return null;
+  const s = String(u).trim();
+  return /^https?:\/\/[^\s"'<>]{3,}$/i.test(s) ? s : null;
+}
+function Fn_UrlDomaine(u) {
+  const m = /^https?:\/\/([^/?#]+)/i.exec(String(u || ''));
+  return m ? m[1].replace(/^www\./i, '') : 'source';
+}
+// Lien vers la page réellement consultée (fiche instrument, fiche émetteur, page
+// IR). Nouvel onglet + rel=noopener : la PWA ne doit jamais être remplacée par la
+// page ouverte, ni lui donner la main sur son contexte.
+function Fn_Lien(u, libelle) {
+  const s = Fn_UrlSure(u);
+  if (!s) return '';
+  return '<a class="lien" target="_blank" rel="noopener noreferrer" href="' + Fn_Esc(s) + '">'
+    + Fn_Esc(libelle || Fn_UrlDomaine(s)) + '</a>';
+}
+// Âge d'une donnée consolidée. Un cours vieux de trois jours affiché sans mention
+// se lit comme le cours du jour : l'âge accompagne donc toujours la donnée.
+function Fn_Age(ts) {
+  const t = Fn_Num(ts);
+  if (t == null) return null;
+  const j = Math.floor((Date.now() - t) / 86400000);
+  if (j <= 0) return { j: 0, txt: 'du jour', cls: 'neutre' };
+  if (j === 1) return { j: 1, txt: 'hier', cls: 'neutre' };
+  return { j, txt: 'il y a ' + j + ' j', cls: j > 7 ? 'crit' : (j > 2 ? 'warn' : 'neutre') };
+}
+function Fn_BadgeAge(ts) {
+  const a = Fn_Age(ts);
+  return a ? '<span class="badge badge-' + a.cls + '">' + Fn_Esc(a.txt) + '</span>' : '';
+}
+// Mise en puces d'un texte à alternatives (« si X → A ; si Y → B »). PRÉSENTATION
+// SEULE : le texte stocké n'est jamais modifié, et un texte qui ne s'y prête pas
+// (une seule proposition, ou des fragments trop courts pour être des alternatives)
+// reste un paragraphe.
+function Fn_TexteOuListe(txt) {
+  const brut = String(txt == null ? '' : txt);
+  const bouts = brut.split(/\s;\s+/).map(s => s.trim()).filter(Boolean);
+  if (bouts.length < 2 || bouts.length > 4 || bouts.some(m => m.length < 20)) {
+    return '<div class="svap-txt">' + Fn_Gloss(Fn_Esc(brut)) + '</div>';
+  }
+  return '<ul class="svap-liste">' + bouts.map(m => '<li>' + Fn_Gloss(Fn_Esc(m)) + '</li>').join('') + '</ul>';
+}
+// Carte de recommandation. `role` porte la couleur et la vignette ; le libellé
+// reste écrit en toutes lettres — la couleur ne doit jamais être le seul porteur
+// de sens (écran en plein soleil, daltonisme).
+const Cst_RolesSvap = {
+  surv: { cls: 'svap-surv', ico: '◎', lib: 'Surveiller' },
+  arb: { cls: 'svap-arb', ico: '⇄', lib: 'Arbitrage' },
+  prat: { cls: 'svap-prat', ico: '⚑', lib: 'Pratique' },
+  decl: { cls: 'svap-surv', ico: '◎', lib: 'Déclencheur' },
+  cout: { cls: 'svap-arb', ico: '⇄', lib: 'Coût / bénéfice' },
+  inval: { cls: 'svap-crit', ico: '✕', lib: 'Invalidation' },
+  propo: { cls: 'svap-prat', ico: '→', lib: 'Proposition' }
+};
+function Fn_HtmlSvap(role, texte, libelleForce) {
+  if (!texte) return '';
+  const r = Cst_RolesSvap[role] || Cst_RolesSvap.prat;
+  return '<div class="svap-carte ' + r.cls + '">'
+    + '<div class="svap-tete"><span class="svap-ico">' + r.ico + '</span>'
+    + '<span class="svap-lib">' + Fn_Esc(libelleForce || r.lib) + '</span></div>'
+    + Fn_TexteOuListe(texte) + '</div>';
 }
 
 /* ================================================================
@@ -1616,6 +1754,51 @@ function Fn_FusionnerEcarts(cartesModele, cartesLocales) {
   });
   return resultat;
 }
+// Normalisation d'une ligne extraite des documents. Le reste de l'application
+// (contrôle de cohérence, application des cartes, indicateurs de discipline,
+// règles permanentes) travaille sur les noms métier : la conversion depuis les
+// clés courtes de l'échange se fait ICI, une seule fois, et nulle part ailleurs.
+function Fn_NormaliserPosition(p) {
+  const fact = Fn_Ch(p, ['fact', 'facteurs']);
+  return {
+    ticker: Fn_Ch(p, ['t', 'ticker']), isin: Fn_Ch(p, ['isin']), libelle: Fn_Ch(p, ['lib', 'libelle']),
+    quantite: Fn_Ch(p, ['qte', 'quantite']), cours: Fn_Ch(p, ['cours']), devise: Fn_Ch(p, ['dev', 'devise']),
+    valeurEur: Fn_Ch(p, ['valEur', 'valeurEur']), pctVN: Fn_Ch(p, ['pctVN']), categorie: Fn_Ch(p, ['cat', 'categorie']),
+    sousJacent: Fn_Ch(p, ['sj', 'sousJacent']), sens: Fn_Ch(p, ['sens']), levier: Fn_Ch(p, ['lev', 'levier']),
+    barriere: Fn_Ch(p, ['bar', 'barriere']), strike: Fn_Ch(p, ['strike']), ratioParite: Fn_Ch(p, ['parite', 'ratioParite']),
+    deltaEur: Fn_Ch(p, ['deltaEur']), portageMensuelEur: Fn_Ch(p, ['portMens', 'portageMensuelEur']),
+    facteurs: Array.isArray(fact) ? fact.filter(Boolean) : [],
+    liquiditeFaible: Fn_Ch(p, ['liqFaible', 'liquiditeFaible']),
+    url: Fn_UrlSure(Fn_Ch(p, ['u', 'url'])), src: Fn_Ch(p, ['s', 'src'])
+  };
+}
+function Fn_NormaliserOrdre(o) {
+  return {
+    id: Fn_Ch(o, ['id']), ticker: Fn_Ch(o, ['t', 'ticker']), sens: Fn_Ch(o, ['sens']), type: Fn_Ch(o, ['type']),
+    quantite: Fn_Ch(o, ['qte', 'quantite']), limite: Fn_Ch(o, ['lim', 'limite']),
+    montantEur: Fn_Ch(o, ['montEur', 'montantEur']), validite: Fn_Ch(o, ['validite']),
+    effetSiExecute: Fn_Ch(o, ['effet', 'effetSiExecute']), categorie: Fn_Ch(o, ['cat', 'categorie']),
+    src: Fn_Ch(o, ['s', 'src'])
+  };
+}
+// ÉLAGAGE DE L'ÉTAT — une carte décidée n'est plus affichée nulle part (les rendus
+// filtrent sur « a_valider ») et le dédoublonnage ne consulte que les cartes en
+// attente. Sans plafond, elles s'accumulaient sans fin : 51 cartes et 48 actions
+// toutes décidées pesaient 170 Ko sur 427, poussés au dépôt à CHAQUE sauvegarde.
+// On conserve les plus récentes pour l'audit, et les rejets alimentent la liste
+// « refuse » du snapshot pour que le modèle ne les repropose pas.
+const Cst_MaxDecidees = 20;
+const Cst_MaxTrades = 60;
+function Fn_ElaguerEtat() {
+  const borner = (liste, plafond) => {
+    const attente = liste.filter(x => x && x.statut === 'a_valider');
+    const decidees = liste.filter(x => x && x.statut !== 'a_valider').slice(-plafond);
+    return attente.concat(decidees);
+  };
+  Var_State.aValider = borner(Var_State.aValider || [], Cst_MaxDecidees);
+  Var_State.actions = borner(Var_State.actions || [], Cst_MaxDecidees);
+  if (Var_State.trades.length > Cst_MaxTrades) Var_State.trades = Var_State.trades.slice(-Cst_MaxTrades);
+}
 function Fn_AssurerInstrument(pos) {
   if (!pos || !pos.ticker) return;
   if (!Var_State.instruments.some(i => i.ticker === pos.ticker)) {
@@ -1693,30 +1876,113 @@ function Fn_IntegrerConsolidation(data, journal) {
   const det = { quotes: 0, fondamentaux: 0, valorisations: 0, expertise: 0,
     evNouveaux: 0, evConnus: 0, ecarts: 0, oppNouvelles: 0, oppConnues: 0 };
   if (journal) journal.detail = det;
-  (data.quotes || []).forEach(q => { if (q && q.ticker) { det.quotes++; Var_State.quotes[q.ticker] = { pre: q.pre, last: q.last, post: q.post, chgPct: q.chgPct, asOf: q.asOf || null, src: q.src || null }; } });
-  (data.fundamentals || []).forEach(f => { if (f && f.ticker) { det.fondamentaux++; Var_State.fundamentals[f.ticker] = { consensus: f.consensus, targetMean: f.targetMean, targetGapPct: f.targetGapPct, revisionTrend: f.revisionTrend, nextReport: f.nextReport, synth: f.synth, src: f.src || null }; } });
-  (data.valuation || []).forEach(v => { if (v && v.ticker) { det.valorisations++; Var_State.valuation[v.ticker] = { perTtm: v.perTtm, perFwd1: v.perFwd1, perFwd2: v.perFwd2, evSales: v.evSales, evEbitda: v.evEbitda, pb: v.pb, divYield: v.divYield, peg: v.peg, refHist: v.refHist, refPeers: v.refPeers, valoTendue: (v.valoTendue === true || v.valoTendue === false) ? v.valoTendue : null, note: v.note, src: v.src || null }; } });
-  (data.expertise || []).forEach(x => { if (x && x.ticker) { det.expertise++; Var_State.expertise[x.ticker] = { tendance: x.tendance, expositionEur: x.expositionEur, expositionPctVN: x.expositionPctVN, lectureDesk: x.lectureDesk, revueResultats: x.revueResultats, valorisationVsRef: x.valorisationVsRef, risques: x.risques, src: x.src || null, dateMaj: ts }; } });
-  if (data.margin && Fn_Num(data.margin.liquidationValue) != null) {
+  // LECTURE PAR ALIAS (Fn_Ch) : clé courte du schéma d'échange d'abord, clé longue
+  // de l'ancien schéma ensuite. Une consolidation au format précédent, une réponse
+  // tronquée puis réparée, ou un modèle qui retombe sur les anciens noms s'intègrent
+  // exactement comme avant — le stockage, lui, garde ses noms métier explicites.
+  // `dateMaj` est estampillé ICI : le modèle peut omettre son horodatage, l'âge de
+  // la donnée reste calculable et affichable.
+  // Un bloc ABSENT de la réponse ne vide jamais l'existant : on conserve la version
+  // précédente et l'écran en montre l'âge, plutôt que d'effacer une donnée payée.
+  (data.quotes || []).forEach(q => {
+    const t = Fn_Ch(q, ['t', 'ticker']);
+    if (!t) return;
+    det.quotes++;
+    Var_State.quotes[t] = {
+      pre: Fn_Ch(q, ['pre']), preVar: Fn_Ch(q, ['preVar']), preAs: Fn_Ch(q, ['preAs']),
+      last: Fn_Ch(q, ['last']), chgPct: Fn_Ch(q, ['var', 'chgPct']),
+      ouv: Fn_Ch(q, ['ouv']), haut: Fn_Ch(q, ['haut']), bas: Fn_Ch(q, ['bas']), clotPrec: Fn_Ch(q, ['clotPrec']),
+      post: Fn_Ch(q, ['post']), postVar: Fn_Ch(q, ['postVar']), postAs: Fn_Ch(q, ['postAs']),
+      vol: Fn_Ch(q, ['vol']), adv: Fn_Ch(q, ['adv']), h52: Fn_Ch(q, ['h52']), b52: Fn_Ch(q, ['b52']),
+      devise: Fn_Ch(q, ['dev', 'devise']), place: Fn_Ch(q, ['place']),
+      asOf: Fn_Ch(q, ['as', 'asOf']), url: Fn_UrlSure(Fn_Ch(q, ['u', 'url'])),
+      src: Fn_Ch(q, ['s', 'src']), dateMaj: ts
+    };
+  });
+  (data.fundamentals || []).forEach(f => {
+    const t = Fn_Ch(f, ['t', 'ticker']);
+    if (!t) return;
+    det.fondamentaux++;
+    Var_State.fundamentals[t] = {
+      consensus: Fn_Ch(f, ['conso', 'consensus']), nbAnalystes: Fn_Ch(f, ['nbA']),
+      targetMean: Fn_Ch(f, ['obj', 'targetMean']), targetGapPct: Fn_Ch(f, ['objEcart', 'targetGapPct']),
+      targetHigh: Fn_Ch(f, ['objHaut']), targetLow: Fn_Ch(f, ['objBas']),
+      revisionTrend: Fn_Ch(f, ['revi', 'revisionTrend']),
+      nextReport: Fn_Ch(f, ['pub', 'nextReport']), nextReportDate: Fn_Ch(f, ['pubDate']),
+      synth: Fn_Ch(f, ['synth']), url: Fn_UrlSure(Fn_Ch(f, ['u', 'url'])),
+      src: Fn_Ch(f, ['s', 'src']), dateMaj: ts
+    };
+  });
+  (data.valuation || []).forEach(v => {
+    const t = Fn_Ch(v, ['t', 'ticker']);
+    if (!t) return;
+    det.valorisations++;
+    // « tendue » reste un booléen à TROIS états : true, false, ou null quand aucun
+    // référentiel n'a été trouvé. Un multiple sans référence n'est pas interprétable :
+    // il ne doit surtout pas basculer en « non tendue » par défaut.
+    const tendue = Fn_Ch(v, ['tendue', 'valoTendue']);
+    Var_State.valuation[t] = {
+      perTtm: Fn_Ch(v, ['per', 'perTtm']), perFwd1: Fn_Ch(v, ['perN', 'perFwd1']), perFwd2: Fn_Ch(v, ['perN1', 'perFwd2']),
+      bpa: Fn_Ch(v, ['bpa']), bpaFwd1: Fn_Ch(v, ['bpaN']), bpaFwd2: Fn_Ch(v, ['bpaN1']),
+      evSales: Fn_Ch(v, ['veCa', 'evSales']), evEbitda: Fn_Ch(v, ['veEbitda', 'evEbitda']),
+      pb: Fn_Ch(v, ['pb']), peg: Fn_Ch(v, ['peg']),
+      divYield: Fn_Ch(v, ['rdt', 'divYield']), divParAction: Fn_Ch(v, ['divAct']), exDiv: Fn_Ch(v, ['exDiv']),
+      capi: Fn_Ch(v, ['capi']), capiDevise: Fn_Ch(v, ['capiDev']),
+      detteNette: Fn_Ch(v, ['detteNette']), dnEbitda: Fn_Ch(v, ['dnEbitda']),
+      roe: Fn_Ch(v, ['roe']), margeOp: Fn_Ch(v, ['margeOp']),
+      croisCa: Fn_Ch(v, ['croisCa']), croisBpa: Fn_Ch(v, ['croisBpa']),
+      refHist: Fn_Ch(v, ['refHist']), refPeers: Fn_Ch(v, ['refPairs', 'refPeers']),
+      valoTendue: (tendue === true || tendue === false) ? tendue : null,
+      note: Fn_Ch(v, ['note']), url: Fn_UrlSure(Fn_Ch(v, ['u', 'url'])),
+      src: Fn_Ch(v, ['s', 'src']), dateMaj: ts
+    };
+  });
+  (data.expertise || []).forEach(x => {
+    const t = Fn_Ch(x, ['t', 'ticker']);
+    if (!t) return;
+    det.expertise++;
+    Var_State.expertise[t] = {
+      tendance: Fn_Ch(x, ['tend', 'tendance']), expositionEur: Fn_Ch(x, ['expoEur', 'expositionEur']),
+      expositionPctVN: Fn_Ch(x, ['expoPct', 'expositionPctVN']), lectureDesk: Fn_Ch(x, ['desk', 'lectureDesk']),
+      revueResultats: Fn_Ch(x, ['revue', 'revueResultats']), valorisationVsRef: Fn_Ch(x, ['valoRef', 'valorisationVsRef']),
+      risques: Fn_Ch(x, ['risques']), url: Fn_UrlSure(Fn_Ch(x, ['u', 'url'])),
+      src: Fn_Ch(x, ['s', 'src']), dateMaj: ts
+    };
+  });
+  const mg = data.margin;
+  if (mg && Fn_Num(Fn_Ch(mg, ['vl', 'liquidationValue'])) != null) {
     Var_State.margin = {
-      securitiesValue: data.margin.securitiesValue, cash: data.margin.cash,
-      liquidationValue: data.margin.liquidationValue, portfolioRisk: data.margin.portfolioRisk,
-      freeMargin: data.margin.freeMargin, asOf: data.margin.asOf || null
+      securitiesValue: Fn_Ch(mg, ['titres', 'securitiesValue']), cash: Fn_Ch(mg, ['cash']),
+      liquidationValue: Fn_Ch(mg, ['vl', 'liquidationValue']), portfolioRisk: Fn_Ch(mg, ['risque', 'portfolioRisk']),
+      freeMargin: Fn_Ch(mg, ['libre', 'freeMargin']), asOf: Fn_Ch(mg, ['as', 'asOf'])
     };
   }
-  if (data.releveAsOf) Var_State.releveAsOf = data.releveAsOf;
-  (data.trades || []).forEach(t => {
-    if (!t) return;
+  const releve = Fn_Ch(data, ['releve', 'releveAsOf']);
+  if (releve) Var_State.releveAsOf = releve;
+  (data.trades || []).forEach(tr => {
+    if (!tr) return;
+    const n = {
+      ticker: Fn_Ch(tr, ['t', 'ticker']), sens: Fn_Ch(tr, ['sens']), quantite: Fn_Ch(tr, ['qte', 'quantite']),
+      cours: Fn_Ch(tr, ['cours']), montantEur: Fn_Ch(tr, ['montEur', 'montantEur']),
+      date: Fn_Ch(tr, ['d', 'date']), src: Fn_Ch(tr, ['s', 'src'])
+    };
     const cle = x => [x.ticker, x.date, x.montantEur, x.quantite].map(v => v == null ? '' : String(v)).join('|');
-    if (!Var_State.trades.some(x => cle(x) === cle(t))) Var_State.trades.push(t);
+    if (!Var_State.trades.some(x => cle(x) === cle(n))) Var_State.trades.push(n);
   });
   // Écarts : bloc `analysis` du modèle + contrôle déterministe JS, fusionnés sans doublon.
-  const cartesModele = (data.analysis || []).filter(a => a && (a.summary || a.proposal)).map(a => ({
-    kind: a.kind || 'reclassification', ticker: a.ticker || null, payload: a.payload || null,
-    summary: a.summary || '', evidence: a.evidence || '', proposal: a.proposal || ''
-  }));
+  const cartesModele = (data.analysis || []).map(a => ({
+    kind: Fn_Ch(a, ['kind']) || 'reclassification', ticker: Fn_Ch(a, ['t', 'ticker']),
+    payload: (a && a.payload) ? Fn_NormaliserPosition(a.payload) : null,
+    summary: Fn_Ch(a, ['resume', 'summary']) || '', evidence: Fn_Ch(a, ['preuve', 'evidence']) || '',
+    proposal: Fn_Ch(a, ['propo', 'proposal']) || ''
+  })).filter(a => a.summary || a.proposal);
   const majComplete = journal && !journal.coursSeuls;
-  const cartesLocales = majComplete ? Fn_ComparerSnapshot(data.positions, data.orders) : [];
+  // Les lignes extraites sont normalisées AVANT toute comparaison : le contrôle
+  // déterministe, l'application des cartes et les calculs de discipline travaillent
+  // tous sur les noms métier. La conversion se fait ici, une seule fois.
+  const posExtr = (data.positions || []).map(p => Fn_NormaliserPosition(p)).filter(p => p.ticker);
+  const ordExtr = (data.orders || []).map(o => Fn_NormaliserOrdre(o)).filter(o => o.ticker);
+  const cartesLocales = majComplete ? Fn_ComparerSnapshot(posExtr, ordExtr) : [];
   Fn_FusionnerEcarts(cartesModele, cartesLocales).forEach(c => {
     const cle = c.kind + '|' + (c.ticker || '') + '|' + (c.summary || '').slice(0, 60);
     const existe = Var_State.aValider.some(x => x.type === 'ecart' && x.statut === 'a_valider' && (x.kind + '|' + (x.ticker || '') + '|' + (x.summary || '').slice(0, 60)) === cle);
@@ -1728,42 +1994,59 @@ function Fn_IntegrerConsolidation(data, journal) {
   });
   // Événements proposés : cartes « à valider » complètes, dédupliquées par id stable.
   (data.events || []).forEach(ev => {
-    if (!ev || !ev.date || !ev.label) return;
-    const id = Fn_Slug((ev.ticker ? ev.ticker + '-' : '') + ev.label) + '-' + ev.date;
+    const date = Fn_Ch(ev, ['d', 'date']);
+    const label = Fn_Ch(ev, ['lib', 'label']);
+    const ticker = Fn_Ch(ev, ['t', 'ticker']);
+    if (!date || !label) return;
+    const id = Fn_Slug((ticker ? ticker + '-' : '') + label) + '-' + date;
     // Déjà au calendrier ou déjà en attente de validation : compté comme connu,
     // pas ignoré en silence — c'est une information utile (« rien de neuf »).
     if (Var_State.events.some(e => e.id === id)) { det.evConnus++; return; }
     if (Var_State.aValider.some(c => c.type === 'evenement' && c.statut === 'a_valider' && c.event && c.event.id === id)) { det.evConnus++; return; }
     det.evNouveaux++;
-    const pos = ev.ticker ? Fn_PosDe(ev.ticker) : null;
+    const pos = ticker ? Fn_PosDe(ticker) : null;
     const tags = [];
-    if (ev.ticker) tags.push(ev.ticker);
+    if (ticker) tags.push(ticker);
     if (pos && pos.categorie) tags.push(pos.categorie);
-    if (!ev.ticker) tags.push('MACRO');
-    const metrics = Array.isArray(ev.metrics) ? ev.metrics.filter(m => m && m.label != null && m.value != null) : [];
+    if (!ticker) tags.push('MACRO');
+    const brutM = Fn_Ch(ev, ['m', 'metrics']);
+    const metrics = Array.isArray(brutM)
+      ? brutM.map(m => ({ label: Fn_Ch(m, ['l', 'label']), value: Fn_Ch(m, ['v', 'value']) }))
+        .filter(m => m.label != null && m.value != null)
+      : [];
+    const sev = Fn_Ch(ev, ['sev']);
+    const court = Fn_Ch(ev, ['court', 'labelCourt']);
+    const src = Fn_Ch(ev, ['s', 'src']);
     Var_State.aValider.push({
       id: Fn_Uid('evp'), type: 'evenement', source: 'consolidation', statut: 'a_valider',
-      kind: 'evenement_propose', summary: ev.note || '', evidence: ev.src || '', proposal: '',
+      kind: 'evenement_propose', summary: Fn_Ch(ev, ['note']) || '', evidence: src || '', proposal: '',
       event: {
-        id, date: ev.date, titre: ev.label, sev: (ev.sev === 'Crit' || ev.sev === 'Warn' || ev.sev === 'Info') ? ev.sev : 'Info',
-        court: ev.labelCourt ? String(ev.labelCourt).slice(0, 32) : null,
-        tags, unc: ev.confirmed === true ? false : true, metrics,
-        surveiller: ev.surveiller || '', arbitrage: ev.arbitrage || '', pratique: ev.pratique || '',
-        src: ev.src || '', traite: false, ajoutManuel: false
+        id, date, titre: label, sev: (sev === 'Crit' || sev === 'Warn' || sev === 'Info') ? sev : 'Info',
+        court: court ? String(court).slice(0, 32) : null,
+        // Le doute est le défaut : sans confirmation explicite sur source primaire,
+        // la carte porte le badge « à confirmer ».
+        tags, unc: Fn_Ch(ev, ['conf', 'confirmed']) === true ? false : true, metrics,
+        surveiller: Fn_Ch(ev, ['surv', 'surveiller']) || '', arbitrage: Fn_Ch(ev, ['arb', 'arbitrage']) || '',
+        pratique: Fn_Ch(ev, ['prat', 'pratique']) || '',
+        src: src || '', url: Fn_UrlSure(Fn_Ch(ev, ['u', 'url'])), traite: false, ajoutManuel: false
       }
     });
     cartes++;
   });
   // Actions proposées (livrable central) — panneau dédié en tête de Vigie.
   (data.actions || []).forEach(a => {
-    if (!a || !a.proposition) return;
-    const doublon = Var_State.actions.some(x => x.statut === 'a_valider' && x.ticker === (a.ticker || null) && x.proposition === a.proposition);
+    const proposition = Fn_Ch(a, ['propo', 'proposition']);
+    if (!proposition) return;
+    const ticker = Fn_Ch(a, ['t', 'ticker']);
+    const prio = Fn_Num(Fn_Ch(a, ['prio', 'priorite']));
+    const doublon = Var_State.actions.some(x => x.statut === 'a_valider' && x.ticker === ticker && x.proposition === proposition);
     if (doublon) return;
     Var_State.actions.push({
-      id: Fn_Uid('act'), ticker: a.ticker || null,
-      priorite: (a.priorite === 1 || a.priorite === 2 || a.priorite === 3) ? a.priorite : 3,
-      proposition: a.proposition, declencheur: a.declencheur || '', coutBenefice: a.coutBenefice || '',
-      horizon: a.horizon || '', invalidation: a.invalidation || '', statut: 'a_valider', dateProposition: Fn_AujISO()
+      id: Fn_Uid('act'), ticker: ticker,
+      priorite: (prio === 1 || prio === 2 || prio === 3) ? prio : 3,
+      proposition, declencheur: Fn_Ch(a, ['decl', 'declencheur']) || '',
+      coutBenefice: Fn_Ch(a, ['cb', 'coutBenefice']) || '', horizon: Fn_Ch(a, ['hor', 'horizon']) || '',
+      invalidation: Fn_Ch(a, ['inval', 'invalidation']) || '', statut: 'a_valider', dateProposition: Fn_AujISO()
     });
     cartes++;
   });
@@ -1773,21 +2056,34 @@ function Fn_IntegrerConsolidation(data, journal) {
   // une nouvelle version du modèle reste disponible sans écraser le travail local.
   let nbOpportunites = 0;
   (data.opportunities || []).forEach(o => {
-    if (!o || !(o.ticker || o.libelle)) return;
-    const ticker = String(o.ticker || '').trim().toUpperCase();
-    const cle = ticker || Fn_Slug(o.libelle || 'opportunite');
+    const libelle = Fn_Ch(o, ['lib', 'libelle']);
+    const ticker = String(Fn_Ch(o, ['t', 'ticker']) || '').trim().toUpperCase();
+    if (!ticker && !libelle) return;
+    // Clé de rapprochement : celle renvoyée par le modèle (fiche déjà ouverte)
+    // sinon le ticker, sinon le libellé — pour mettre à jour au lieu de dupliquer.
+    const cle = Fn_Ch(o, ['k', 'cleModele']) || ticker || Fn_Slug(libelle || 'opportunite');
+    const verdict = Fn_Ch(o, ['verdict', 'verdictCoherence']);
+    const facteurs = Fn_Ch(o, ['fact', 'facteurs']);
+    const score = Fn_Num(Fn_Ch(o, ['score']));
     const incoming = {
-      ticker, isin: o.isin || '', place: o.place || '', libelle: o.libelle || ticker || 'Opportunité',
-      type: o.type || 'watchlist', these: o.these || '', coherencePortefeuille: o.coherencePortefeuille || '',
-      verdictCoherence: (o.verdictCoherence === 'cohérente' || o.verdictCoherence === 'sous conditions' || o.verdictCoherence === 'incohérente') ? o.verdictCoherence : 'sous conditions',
-      financement: o.financement || '', dateCatalyseur: o.dateCatalyseur || null, tailleEur: Fn_Num(o.tailleEur),
-      facteurs: Array.isArray(o.facteurs) ? o.facteurs.filter(Boolean) : [], devise: o.devise || null,
-      score: Math.max(0, Math.min(100, Fn_Num(o.score) == null ? 50 : Fn_Num(o.score))),
-      conviction: o.conviction || 'moyenne', prixReference: o.prixReference == null ? null : o.prixReference,
-      asOf: o.asOf || null, valorisation: o.valorisation || '', catalyseurs: o.catalyseurs || '',
-      declencheur: o.declencheur || '', invalidation: o.invalidation || '', risques: o.risques || '',
-      horizon: o.horizon || '', allocationCiblePctVN: Fn_Num(o.allocationCiblePctVN),
-      liquidite: o.liquidite || '', src: o.src || '', dateMaj: ts, modele: (journal && journal.modele) || Cst_ModeleMAJ
+      ticker, isin: Fn_Ch(o, ['isin']) || '', place: Fn_Ch(o, ['place']) || '',
+      libelle: libelle || ticker || 'Opportunité',
+      type: Fn_Ch(o, ['type']) || 'watchlist', these: Fn_Ch(o, ['these']) || '',
+      coherencePortefeuille: Fn_Ch(o, ['coh', 'coherencePortefeuille']) || '',
+      verdictCoherence: (verdict === 'cohérente' || verdict === 'sous conditions' || verdict === 'incohérente') ? verdict : 'sous conditions',
+      financement: Fn_Ch(o, ['fin', 'financement']) || '', dateCatalyseur: Fn_Ch(o, ['cataDate', 'dateCatalyseur']),
+      tailleEur: Fn_Num(Fn_Ch(o, ['tailleEur'])),
+      facteurs: Array.isArray(facteurs) ? facteurs.filter(Boolean) : [], devise: Fn_Ch(o, ['dev', 'devise']),
+      score: Math.max(0, Math.min(100, score == null ? 50 : score)),
+      conviction: Fn_Ch(o, ['conv', 'conviction']) || 'moyenne', prixReference: Fn_Ch(o, ['prixRef', 'prixReference']),
+      asOf: Fn_Ch(o, ['as', 'asOf']), valorisation: Fn_Ch(o, ['valo', 'valorisation']) || '',
+      catalyseurs: Fn_Ch(o, ['cata', 'catalyseurs']) || '',
+      declencheur: Fn_Ch(o, ['decl', 'declencheur']) || '', invalidation: Fn_Ch(o, ['inval', 'invalidation']) || '',
+      risques: Fn_Ch(o, ['risques']) || '', horizon: Fn_Ch(o, ['hor', 'horizon']) || '',
+      allocationCiblePctVN: Fn_Num(Fn_Ch(o, ['allocPct', 'allocationCiblePctVN'])),
+      liquidite: Fn_Ch(o, ['liq', 'liquidite']) || '', src: Fn_Ch(o, ['s', 'src']) || '',
+      url: Fn_UrlSure(Fn_Ch(o, ['u', 'url'])),
+      dateMaj: ts, modele: (journal && journal.modele) || Cst_ModeleMAJ
     };
     let existante = Var_State.opportunites.find(x => (x.cleModele || x.ticker || '') === cle && x.statut !== 'supprimee');
     if (!existante) det.oppNouvelles++; else det.oppConnues++;
@@ -1807,6 +2103,7 @@ function Fn_IntegrerConsolidation(data, journal) {
   });
   if (journal) journal.opportunitesProduites = nbOpportunites;
   Var_State.derniereConsolidation = ts;
+  Fn_ElaguerEtat(); // borne l'état AVANT la sauvegarde qui suit, donc avant la poussée au dépôt
   return cartes;
 }
 
@@ -2024,7 +2321,10 @@ function Fn_RenderOpportunites() {
       + (o.prixReference != null ? '<span class="met">réf. <b>' + Fn_Esc(String(o.prixReference)) + (o.devise ? ' ' + Fn_Esc(o.devise) : '') + '</b></span>' : '')
       + (o.asOf ? '<span class="met">données <b>' + Fn_Esc(o.asOf) + '</b></span>' : '') + '</div>';
     if (o.noteUtilisateur) h += '<div class="note note-info"><b>Note personnelle</b> — ' + Fn_Esc(o.noteUtilisateur) + '</div>';
-    if (o.src) h += '<div class="opp-source">Sources : ' + Fn_Esc(o.src) + '</div>';
+    // Le lien direct vers la fiche de l'instrument est ce qui permet de rouvrir le
+    // dossier des jours plus tard sans le rechercher : il est conservé en champ
+    // dédié, et non noyé dans le texte de provenance.
+    if (o.src || o.url) h += '<div class="opp-source">Sources : ' + Fn_Esc(o.src || '—') + (o.url ? ' · ' + Fn_Lien(o.url) : '') + '</div>';
     if (edition) {
       h += '<div class="opp-edition"><div class="form-grille">'
         + '<div><label class="champ">Ticker</label><input id="o-ticker" type="text" value="' + Fn_Esc(o.ticker || '') + '"></div>'
@@ -2091,9 +2391,7 @@ function Fn_RenderActions() {
       + (a.ticker ? '<b>' + Fn_Esc(a.ticker) + '</b>' : '<span class="muted">portefeuille</span>') + '</span>'
       + (a.horizon ? '<span class="ev-date">' + Fn_Gloss(Fn_Esc(a.horizon)) + '</span>' : '') + '</div>'
       + '<div class="ev-titre" style="font-size:13.5px">' + Fn_Gloss(Fn_Esc(a.proposition)) + '</div>'
-      + (a.declencheur ? '<div class="ligne-svap"><span class="svap-lib" style="color:var(--accent)">Déclencheur</span> — ' + Fn_Gloss(Fn_Esc(a.declencheur)) + '</div>' : '')
-      + (a.coutBenefice ? '<div class="ligne-svap"><span class="svap-lib" style="color:var(--warn)">Coût / bénéfice</span> — ' + Fn_Gloss(Fn_Esc(a.coutBenefice)) + '</div>' : '')
-      + (a.invalidation ? '<div class="ligne-svap"><span class="svap-lib" style="color:var(--crit)">Invalidation</span> — ' + Fn_Gloss(Fn_Esc(a.invalidation)) + '</div>' : '')
+      + '<div class="svap">' + Fn_HtmlSvap('decl', a.declencheur) + Fn_HtmlSvap('cout', a.coutBenefice) + Fn_HtmlSvap('inval', a.invalidation) + '</div>'
       + '<div class="ev-actions">'
       + '<button class="btn btn-ok" data-action="act-accepter" data-id="' + Fn_Esc(a.id) + '">Accepter</button>'
       + '<button class="btn" data-action="act-rejeter" data-id="' + Fn_Esc(a.id) + '">Rejeter</button>'
@@ -2118,9 +2416,9 @@ function Fn_RenderAValider() {
     h += '<div class="ev avalider"><div class="ev-haut">'
       + '<span class="badge badge-warn">' + Fn_Esc(Cst_KindLabels[c.kind] || c.kind) + '</span>'
       + '<span class="ev-date tres-petit">' + Fn_Esc(c.source === 'analyse' ? 'analyse de cohérence' : 'contrôle déterministe') + '</span></div>'
-      + '<div class="ligne-svap">' + Fn_Gloss(Fn_Esc(c.summary)) + '</div>'
+      + '<div class="svap-txt" style="margin:6px 0">' + Fn_Gloss(Fn_Esc(c.summary)) + '</div>'
       + (c.evidence ? '<div class="petit muted">' + Fn_Gloss(Fn_Esc(c.evidence)) + '</div>' : '')
-      + (c.proposal ? '<div class="petit" style="margin-top:3px"><span class="svap-lib" style="color:var(--ok)">Proposition</span> — ' + Fn_Gloss(Fn_Esc(c.proposal)) + '</div>' : '')
+      + (c.proposal ? '<div class="svap">' + Fn_HtmlSvap('propo', c.proposal) + '</div>' : '')
       + '<div class="ev-actions">'
       + '<button class="btn btn-ok" data-action="av-accepter" data-id="' + Fn_Esc(c.id) + '">Accepter</button>'
       + '<button class="btn" data-action="av-rejeter" data-id="' + Fn_Esc(c.id) + '">Rejeter</button>'
@@ -2499,16 +2797,13 @@ function Fn_HtmlEvCarte(ev, opts) {
   } else {
     h += '<div class="mets"><span class="met">— <span class="muted">métriques non chiffrées (donnée manquante : relevé + consolidation MAJ)</span></span></div>';
   }
-  const lignes = [['Surveiller', 'svap-surv', ev.surveiller], ['Arbitrage', 'svap-arb', ev.arbitrage], ['Pratique', 'svap-prat', ev.pratique]];
-  let uneLigne = false;
-  lignes.forEach(l => {
-    if (l[2]) {
-      uneLigne = true;
-      h += '<div class="ligne-svap ' + l[1] + '"><span class="svap-lib">' + l[0] + '</span> — ' + Fn_Gloss(Fn_Esc(l[2])) + '</div>';
-    }
-  });
-  if (!uneLigne) h += '<div class="ligne-svap muted tres-petit">Surveiller / Arbitrage / Pratique : à compléter par une consolidation (événement ajouté manuellement).</div>';
-  if (ev.src) h += '<div class="src">Source : ' + Fn_Gloss(Fn_Esc(ev.src)) + '</div>';
+  // Les trois registres de décision, en cartes distinctes : ce qu'il faut LIRE,
+  // ce qu'il faut TRANCHER, la règle de métier à APPLIQUER.
+  const blocs = Fn_HtmlSvap('surv', ev.surveiller) + Fn_HtmlSvap('arb', ev.arbitrage) + Fn_HtmlSvap('prat', ev.pratique);
+  h += blocs
+    ? '<div class="svap">' + blocs + '</div>'
+    : '<div class="svap"><div class="svap-carte"><div class="svap-txt muted tres-petit">Surveiller / Arbitrage / Pratique : à compléter par une consolidation (événement ajouté manuellement).</div></div></div>';
+  if (ev.src || ev.url) h += '<div class="src">Source : ' + Fn_Gloss(Fn_Esc(ev.src || '')) + (ev.url ? ' · ' + Fn_Lien(ev.url) : '') + '</div>';
   if (!opts.apercu) {
     const arme = !!Var_State._runtime.armes['ev-' + ev.id];
     h += '<div class="ev-actions">'
@@ -2599,6 +2894,135 @@ function Fn_PastilleSynth(synth) {
   if (s.indexOf('stable') >= 0) return { cls: 'p-info', lib: synth };
   return { cls: 'p-neutre', lib: synth };
 }
+// Un moment de cotation : libellé, valeur, variation colorée, heure. Un bloc dont
+// la valeur manque reste AFFICHÉ, en gris, avec « — » : l'absence de pré-ouverture
+// est une information (place fermée, produit non coté hors séance), pas un vide à
+// masquer — c'est ce qui permet de voir qu'une consolidation n'a pas fait son travail.
+function Fn_HtmlMomentCotation(lib, valeur, variation, heure) {
+  const v = Fn_Num(valeur), pct = Fn_Num(variation);
+  return '<span class="cote-bloc' + (v == null ? ' cote-vide' : '') + '">'
+    + '<span class="cote-lib">' + Fn_Esc(lib) + '</span>'
+    + '<span class="cote-val">' + Fn_Esc(Fn_FmtNb(v, 2)) + '</span>'
+    + (pct != null ? ' <span class="cote-val ' + (pct >= 0 ? 'v-pos' : 'v-neg') + '">' + Fn_Esc(Fn_FmtPct(pct, 2, true)) + '</span>' : '')
+    + (heure ? ' <span class="cote-h">' + Fn_Esc(heure) + '</span>' : '')
+    + '</span>';
+}
+function Fn_HtmlCotation(q) {
+  if (!q) {
+    return '<div class="cote-rang">' + Fn_HtmlMomentCotation('pré-ouverture', null, null, null)
+      + Fn_HtmlMomentCotation('séance', null, null, null)
+      + Fn_HtmlMomentCotation('après-clôture', null, null, null) + '</div>';
+  }
+  let h = '<div class="cote-rang">'
+    + Fn_HtmlMomentCotation('pré-ouverture', q.pre, q.preVar, q.preAs)
+    + Fn_HtmlMomentCotation('séance', q.last, q.chgPct, q.asOf)
+    + Fn_HtmlMomentCotation('après-clôture', q.post, q.postVar, q.postAs)
+    + '</div>';
+  // Bornes de séance et repères de profondeur : secondaires, donc en rangée
+  // compacte sous les trois cours — mais présents, car ils dimensionnent le risque
+  // d'exécution (ADV) et situent le cours dans son année (52 semaines).
+  const secondaires = [];
+  const ajouter = (lib, txt) => { if (txt && txt !== '—') secondaires.push([lib, txt]); };
+  ajouter('ouverture', Fn_FmtNb(q.ouv, 2));
+  ajouter('haut', Fn_FmtNb(q.haut, 2));
+  ajouter('bas', Fn_FmtNb(q.bas, 2));
+  ajouter('clôture préc.', Fn_FmtNb(q.clotPrec, 2));
+  ajouter('volume', Fn_FmtGros(q.vol));
+  ajouter('ADV 3 mois', Fn_FmtGros(q.adv));
+  if (Fn_Num(q.b52) != null || Fn_Num(q.h52) != null) ajouter('52 semaines', Fn_FmtNb(q.b52, 2) + ' – ' + Fn_FmtNb(q.h52, 2));
+  ajouter('devise', q.devise);
+  ajouter('place', q.place);
+  if (secondaires.length) {
+    h += '<div class="mets">' + secondaires.map(p => '<span class="met">' + Fn_Gloss(Fn_Esc(p[0])) + ' <b>' + Fn_Esc(p[1]) + '</b></span>').join('') + '</div>';
+  }
+  return h;
+}
+// Grille de valorisation. Tous les multiples collectés y figurent — y compris pour
+// un produit à levier, dont le bloc porte les multiples de son SOUS-JACENT (c'est
+// ce que la consolidation est chargée de remplir). L'ancienne version remplaçait
+// tout le bloc par un message pour ces produits : la donnée était cherchée, payée,
+// stockée, et jamais montrée.
+function Fn_HtmlValorisation(v, estLevier, pos) {
+  let h = '';
+  if (estLevier) {
+    h += '<div class="note note-info tres-petit">Produit à levier : pas de multiples propres. Les multiples ci-dessous sont ceux du sous-jacent '
+      + (pos && pos.sousJacent ? '<b>' + Fn_Esc(pos.sousJacent) + '</b>' : '(à identifier via MAJ)') + '.</div>';
+  }
+  if (!v) {
+    return h + '<span class="muted">— (PER courant et prévisionnels, BPA, VE/CA, VE/EBITDA, P/B, rendement, PEG, capitalisation, dette nette, ROE, marge et référentiels : à consolider via MAJ, page « Valorisation » de Zone Bourse)</span>';
+  }
+  // Chaque couple n'est affiché que s'il a une valeur : une grille de vingt « — »
+  // noierait les trois chiffres réellement récupérés.
+  const couples = [];
+  const add = (lib, txt) => { if (txt && txt !== '—') couples.push([lib, txt]); };
+  add('PER TTM', Fn_FmtX(v.perTtm));
+  add('PER N', Fn_FmtX(v.perFwd1));
+  add('PER N+1', Fn_FmtX(v.perFwd2));
+  add('BPA', Fn_FmtNb(v.bpa, 2));
+  add('BPA N', Fn_FmtNb(v.bpaFwd1, 2));
+  add('BPA N+1', Fn_FmtNb(v.bpaFwd2, 2));
+  add('VE/CA', Fn_FmtX(v.evSales));
+  add('VE/EBITDA', Fn_FmtX(v.evEbitda));
+  add('P/B', Fn_FmtX(v.pb));
+  add('PEG', Fn_FmtNb(v.peg, 2));
+  add('rendement', Fn_FmtPct(v.divYield));
+  add('dividende', Fn_FmtNb(v.divParAction, 2));
+  add('détachement', v.exDiv ? Fn_FmtDateCourt(v.exDiv) : null);
+  add('capitalisation', Fn_Num(v.capi) != null ? Fn_FmtGros(v.capi, v.capiDevise) : null);
+  add('dette nette', Fn_Num(v.detteNette) != null ? Fn_FmtGros(v.detteNette, v.capiDevise) : null);
+  add('dette nette/EBITDA', Fn_FmtX(v.dnEbitda));
+  add('ROE', Fn_FmtPct(v.roe));
+  add('marge opérationnelle', Fn_FmtPct(v.margeOp));
+  add('croissance CA', Fn_FmtPct(v.croisCa, 1, true));
+  add('croissance BPA', Fn_FmtPct(v.croisBpa, 1, true));
+  h += couples.length
+    ? '<div class="valo-grille">' + couples.map(p => '<span class="met">' + Fn_Gloss(Fn_Esc(p[0])) + ' <b>' + Fn_Esc(p[1]) + '</b></span>').join('') + '</div>'
+    : '<div class="tres-petit muted">Aucun multiple récupéré lors de la dernière consolidation.</div>';
+  // Un multiple isolé n'est pas interprétable : le référentiel est affiché juste
+  // en dessous, ou son absence est dite explicitement.
+  if (v.refHist || v.refPeers) {
+    h += '<div class="tres-petit">' + (v.refHist ? 'Réf. historique : ' + Fn_Gloss(Fn_Esc(v.refHist)) + (v.refPeers ? ' · ' : '') : '')
+      + (v.refPeers ? 'Réf. pairs/secteur : ' + Fn_Gloss(Fn_Esc(v.refPeers)) : '') + '</div>';
+  } else {
+    h += '<div class="tres-petit muted">Sans référentiel (historique ou pairs) — un multiple isolé n’est pas interprétable.</div>';
+  }
+  if (v.valoTendue === true) h += '<span class="badge badge-warn">valorisation tendue vs référentiel</span> ';
+  else if (v.valoTendue === false) h += '<span class="badge badge-ok">valorisation non tendue vs référentiel</span> ';
+  if (v.note) h += '<div class="tres-petit muted" style="margin-top:3px">' + Fn_Gloss(Fn_Esc(v.note)) + '</div>';
+  if (v.src || v.url) h += '<span class="src">' + Fn_Esc(v.src || '') + (v.src ? ' [consolidation]' : '') + (v.url ? ' · ' + Fn_Lien(v.url) : '') + '</span>';
+  return h;
+}
+// Caractéristiques d'un produit à levier : elles conditionnent tout le reste
+// (distance au knock-out, exposition réelle, coût de détention) et n'étaient
+// visibles que dans les « Règles permanentes », loin de la fiche de l'instrument.
+function Fn_HtmlProduitLevier(pos) {
+  if (!pos) return '';
+  const champs = [];
+  const add = (lib, txt) => { if (txt && txt !== '—') champs.push([lib, txt]); };
+  add('sens', pos.sens === 'short' ? 'short (vendeur)' : (pos.sens === 'long' ? 'long (acheteur)' : null));
+  add('levier', Fn_FmtX(pos.levier));
+  add('barrière', Fn_FmtNb(pos.barriere, 2));
+  // Distance à la barrière : calculée localement depuis le cours du sous-jacent,
+  // jamais reprise du modèle — même formule que les règles permanentes.
+  const qs = Fn_QuoteDe(pos.sousJacent);
+  const cours = qs ? Fn_Num(qs.last) : null;
+  const bar = Fn_Num(pos.barriere);
+  if (cours != null && bar != null && cours !== 0) {
+    const d = (pos.sens === 'short' ? (bar - cours) : (cours - bar)) / cours * 100;
+    const z = Fn_ZoneSeuil(d, Var_State.seuils.barriereVert, Var_State.seuils.barriereRouge, 'bas');
+    champs.push(['distance à la barrière', Fn_FmtPct(d) + ' [calcul]', z]);
+  }
+  add('strike', Fn_FmtNb(pos.strike, 2));
+  add('ratio/parité', pos.ratioParite == null ? null : String(pos.ratioParite));
+  add('delta', Fn_FmtEur(pos.deltaEur, 0));
+  add('portage mensuel', Fn_FmtEur(pos.portageMensuelEur, 0));
+  if (pos.liquiditeFaible === true) add('liquidité', 'faible — sortie > 2 séances');
+  if (!champs.length) return '';
+  return '<hr class="sep"><div class="cours-ligne"><span class="lib">Produit à levier</span>'
+    + '<div class="mets">' + champs.map(p => '<span class="met' + (p[2] ? ' z-' + p[2] : '') + '">'
+      + Fn_Gloss(Fn_Esc(p[0])) + ' <b>' + Fn_Esc(p[1]) + '</b></span>').join('') + '</div>'
+    + '<span class="src">Fiche émetteur [consolidation] · distance recalculée localement [calcul]</span></div>';
+}
 function Fn_HtmlInstrumentCarte(inst) {
   const t = inst.ticker;
   const pos = Fn_PosDe(t);
@@ -2617,14 +3041,15 @@ function Fn_HtmlInstrumentCarte(inst) {
   if (pos && Fn_Num(pos.valeurEur) != null) {
     h += '<div class="tres-petit muted mono">Position : ' + Fn_Esc(Fn_FmtEur(pos.valeurEur)) + (Fn_Num(pos.pctVN) != null ? ' · ' + Fn_Esc(Fn_FmtPct(pos.pctVN)) + ' de la VN' : '') + (pos.sens === 'short' ? ' · short' : '') + ' [relevé]</div>';
   }
-  // Cours : pré-ouverture / séance / après-clôture. Les trois valeurs restent sur
-  // une ligne (elles se lisent ensemble), l'horodatage et la source passent en
-  // retrait — c'est leur longueur qui noyait la donnée.
-  h += '<div class="cours-ligne"><span class="lib">Cours</span><span class="mono">'
-    + 'pré ' + Fn_Esc(Fn_FmtNb(q && q.pre, 2)) + ' · séance ' + Fn_Esc(Fn_FmtNb(q && q.last, 2))
-    + (q && Fn_Num(q.chgPct) != null ? ' (<span style="color:var(' + (Fn_Num(q.chgPct) >= 0 ? '--ok' : '--crit') + ')">' + Fn_Esc(Fn_FmtPct(q.chgPct, 2, true)) + '</span>)' : '')
-    + ' · post ' + Fn_Esc(Fn_FmtNb(q && q.post, 2)) + '</span>'
-    + (q && (q.asOf || q.src) ? '<span class="src">' + Fn_Esc([q.asOf, q.src].filter(Boolean).join(' · ')) + ' [consolidation]</span>' : '<span class="src">non consolidé — lancer une MAJ</span>')
+  // Cotation : les trois moments de la journée boursière se lisent ENSEMBLE, chacun
+  // avec sa variation propre et son heure. Un cours de pré-ouverture sans horodatage
+  // ne se distingue pas de celui de la veille — l'heure fait partie de la donnée.
+  h += '<div class="cours-ligne"><span class="lib">Cotation ' + Fn_BadgeAge(q && q.dateMaj) + '</span>'
+    + Fn_HtmlCotation(q)
+    + (q && (q.asOf || q.src || q.url)
+      ? '<span class="src">' + Fn_Esc([q.asOf, q.src].filter(Boolean).join(' · ')) + ' [consolidation]'
+        + (q.url ? ' · ' + Fn_Lien(q.url) : '') + '</span>'
+      : '<span class="src">non consolidé — lancer une MAJ</span>')
     + '</div>';
   // Fondamentaux : quatre faits distincts, chacun sur sa ligne avec son étiquette.
   // En phrase à séparateurs « · », le consensus, l'objectif, les révisions et la
@@ -2632,39 +3057,26 @@ function Fn_HtmlInstrumentCarte(inst) {
   h += '<div class="cours-ligne"><span class="lib">Fondamentaux</span>';
   if (f) {
     const faits = [
-      ['consensus', Fn_Gloss(Fn_Esc(f.consensus || '—'))],
+      ['consensus', Fn_Gloss(Fn_Esc(f.consensus || '—'))
+        + (Fn_Num(f.nbAnalystes) != null ? ' <span class="mono muted">(' + Fn_Esc(Fn_FmtNb(f.nbAnalystes, 0)) + ' analystes)</span>' : '')],
       ['objectif', '<span class="mono">' + Fn_Esc(Fn_FmtNb(f.targetMean, 2)) + '</span>'
-        + (Fn_Num(f.targetGapPct) != null ? ' <span class="mono">' + Fn_Esc(Fn_FmtPct(f.targetGapPct, 1, true)) + '</span> vs dernier cours' : '')],
+        + (Fn_Num(f.targetGapPct) != null ? ' <span class="mono ' + (Fn_Num(f.targetGapPct) >= 0 ? 'v-pos' : 'v-neg') + '">' + Fn_Esc(Fn_FmtPct(f.targetGapPct, 1, true)) + '</span> vs dernier cours' : '')
+        + (Fn_Num(f.targetLow) != null || Fn_Num(f.targetHigh) != null
+          ? ' <span class="mono muted">[' + Fn_Esc(Fn_FmtNb(f.targetLow, 2)) + ' – ' + Fn_Esc(Fn_FmtNb(f.targetHigh, 2)) + ']</span>' : '')],
       ['révisions', Fn_Gloss(Fn_Esc(f.revisionTrend || '—'))],
-      ['publication', Fn_Gloss(Fn_Esc(f.nextReport || '—'))]
+      ['publication', Fn_Gloss(Fn_Esc(f.nextReport || '—'))
+        + (f.nextReportDate ? ' <span class="mono muted">(' + Fn_Esc(Fn_FmtDateCourt(f.nextReportDate)) + ')</span>' : '')]
     ];
     h += '<dl class="faits">' + faits.map(p => '<dt>' + p[0] + '</dt><dd>' + p[1] + '</dd>').join('') + '</dl>'
-      + (f.src ? '<span class="src">' + Fn_Esc(f.src) + ' [consolidation]</span>' : '');
+      + (f.src || f.url ? '<span class="src">' + Fn_Esc(f.src || '') + (f.src ? ' [consolidation]' : '') + (f.url ? ' · ' + Fn_Lien(f.url) : '') + '</span>' : '');
   } else {
-    h += '<span class="muted">— (consensus, objectif, révisions BNA, prochaine publication : à consolider via MAJ)</span>';
+    h += '<span class="muted">— (consensus, nombre d’analystes, objectif et fourchette, révisions BNA, prochaine publication : à consolider via MAJ)</span>';
   }
   h += '</div>';
-  // Valorisation (obligatoire) — multiples + mise en perspective
-  h += '<div class="cours-ligne"><span class="lib">Valorisation</span> ';
-  if (estLevier) {
-    h += '<span class="muted">produit à levier : pas de multiples propres — la valorisation porte sur son sous-jacent '
-      + (pos && pos.sousJacent ? '<b>' + Fn_Esc(pos.sousJacent) + '</b> (voir sa fiche ci-' + (Fn_ListeInstruments().some(i => i.ticker === (pos && pos.sousJacent)) ? 'contre' : 'après ajout aux instruments suivis') + ')' : '(sous-jacent à identifier via MAJ)') + '.</span>';
-  } else if (v) {
-    const paires = [['PER TTM', Fn_FmtX(v.perTtm)], ['PER N', Fn_FmtX(v.perFwd1)], ['PER N+1', Fn_FmtX(v.perFwd2)], ['VE/CA', Fn_FmtX(v.evSales)], ['VE/EBITDA', Fn_FmtX(v.evEbitda)], ['P/B', Fn_FmtX(v.pb)], ['rendement', Fn_FmtPct(v.divYield)], ['PEG', Fn_FmtNb(v.peg, 2)]];
-    h += '<span class="mets" style="display:inline-flex;margin:2px 0">' + paires.map(p => '<span class="met">' + Fn_Gloss(Fn_Esc(p[0])) + ' <b>' + Fn_Esc(p[1]) + '</b></span>').join('') + '</span>';
-    if (v.refHist || v.refPeers) {
-      h += '<div class="tres-petit">' + (v.refHist ? 'Réf. historique : ' + Fn_Gloss(Fn_Esc(v.refHist)) + ' · ' : '') + (v.refPeers ? 'Réf. pairs/secteur : ' + Fn_Gloss(Fn_Esc(v.refPeers)) : '') + '</div>';
-    } else {
-      h += '<div class="tres-petit muted">Sans référentiel (historique ou pairs) — un multiple isolé n’est pas interprétable.</div>';
-    }
-    if (v.valoTendue === true) h += '<span class="badge badge-warn">valorisation tendue vs référentiel</span> ';
-    else if (v.valoTendue === false) h += '<span class="badge badge-ok">valorisation non tendue vs référentiel</span> ';
-    if (v.note) h += '<div class="tres-petit muted" style="margin-top:3px">' + Fn_Gloss(Fn_Esc(v.note)) + '</div>';
-    if (v.src) h += '<span class="src">' + Fn_Esc(v.src) + ' [consolidation]</span>';
-  } else {
-    h += '<span class="muted">— (PER courant et prévisionnels, VE/CA, VE/EBITDA, P/B, rendement, PEG et référentiels : à consolider via MAJ, page « Valorisation » de Zone Bourse)</span>';
-  }
-  h += '</div>';
+  // Valorisation (obligatoire) — multiples, agrégats de bilan et mise en perspective
+  h += '<div class="cours-ligne"><span class="lib">Valorisation ' + Fn_BadgeAge(v && v.dateMaj) + '</span>'
+    + Fn_HtmlValorisation(v, estLevier, pos) + '</div>';
+  if (estLevier) h += Fn_HtmlProduitLevier(pos);
   // Notes d'expertise (bloc `expertise` de la consolidation)
   if (x) {
     h += '<hr class="sep"><div class="cours-ligne"><span class="lib">Expertise du ' + Fn_Esc(Fn_FmtHeure(x.dateMaj)) + '</span>'
@@ -2674,7 +3086,7 @@ function Fn_HtmlInstrumentCarte(inst) {
       + (x.revueResultats ? '<div class="petit" style="margin-top:3px"><span class="badge badge-info">revue de résultats</span> ' + Fn_Gloss(Fn_Esc(x.revueResultats)) + '</div>' : '')
       + (x.valorisationVsRef ? '<div class="petit">Valorisation vs référentiel : ' + Fn_Gloss(Fn_Esc(x.valorisationVsRef)) + '</div>' : '')
       + (x.risques ? '<div class="petit">Risques : ' + Fn_Gloss(Fn_Esc(x.risques)) + '</div>' : '')
-      + (x.src ? '<span class="src">' + Fn_Esc(x.src) + ' [consolidation]</span>' : '')
+      + (x.src || x.url ? '<span class="src">' + Fn_Esc(x.src || '') + (x.src ? ' [consolidation]' : '') + (x.url ? ' · ' + Fn_Lien(x.url) : '') + '</span>' : '')
       + '</div>';
   }
   // Thèse (check-list persistée localement — alimente l'indicateur « fraîcheur des thèses »)
@@ -3096,7 +3508,7 @@ function Fn_RenderDiscipline() {
         + '<div class="ind-seuils">' + Fn_Esc(i.seuils) + '</div>'
         + (i.manquant ? '<div class="petit muted" style="margin-top:4px">Donnée manquante : ' + Fn_Gloss(Fn_Esc(i.manquant)) + ' — indicateur exclu du score.</div>' : '')
         + (i.extra ? '<div class="petit" style="margin-top:4px">' + Fn_Gloss(i.extra) + '</div>' : '')
-        + '<div class="ind-pratique"><b>Pratique</b> — ' + Fn_Gloss(Fn_Esc(i.pratique)) + '</div>'
+        + '<div class="svap">' + Fn_HtmlSvap('prat', i.pratique) + '</div>'
         + '</div>';
     });
   });
@@ -3285,21 +3697,54 @@ function Fn_LireFichier(fichier) {
     lecteur.readAsDataURL(fichier);
   });
 }
-// Snapshot compact de l'état courant, joint à chaque appel (contrôle de cohérence).
+// SNAPSHOT DE L'ÉTAT COURANT — joint à chaque appel (contrôle de cohérence et
+// dédoublonnage). C'est LUI qui faisait boule de neige : il repartait entier à
+// chaque MAJ et grossissait avec l'historique (mesuré : 28 Ko, dont 19 Ko
+// d'événements — 65 sur 79 déjà passés — et 6 Ko de prose d'opportunités que le
+// modèle avait lui-même écrite au tour précédent). Trois règles depuis :
+//   1. BORNER — on n'envoie que ce qui sert encore à décider (événements à venir).
+//   2. NE PAS RENVOYER LA PROSE DU MODÈLE — un identifiant suffit à dédoublonner.
+//   3. CLÉS COURTES — leur poids est multiplié par le nombre de lignes ; la
+//      légende figure dans le texte envoyé, pour trois lignes de coût, une fois.
+// Piège corrigé au passage : l'ancien `events.slice(0, 80)` coupait dans l'ORDRE
+// D'INSERTION. À 79 événements, les suivants sortaient de la liste et le modèle
+// recommençait à proposer des doublons — déjà payés, à revalider un par un.
 function Fn_BuildSnapshot() {
+  const m = Var_State.margin;
+  // Horizon de dédoublonnage : le modèle propose des catalyseurs À VENIR. J-7
+  // couvre en plus les publications qui viennent de tomber (revue de résultats).
+  const borne = Fn_DateISO(new Date(Date.now() - 7 * 86400000));
   const theses = {};
-  Object.keys(Var_State.theses).forEach(t => { theses[t] = Var_State.theses[t].derniereRevue || null; });
+  Object.keys(Var_State.theses).forEach(t => {
+    if (Var_State.theses[t] && Var_State.theses[t].derniereRevue) theses[t] = Var_State.theses[t].derniereRevue;
+  });
+  const evFuturs = Var_State.events
+    .filter(e => e && e.date && e.date >= borne)
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+    .slice(0, 60)
+    .map(e => ({ d: e.date, t: (e.tags || [])[0] || null, c: String(e.court || Fn_AbregerTitre(e.titre) || '').slice(0, 44) }));
+  // Propositions déjà écartées : deux lignes qui évitent de les voir revenir à
+  // chaque consolidation — et d'être payées une deuxième fois.
+  const refuse = [];
+  Var_State.actions.filter(a => a && a.statut === 'rejetee').slice(-12)
+    .forEach(a => refuse.push({ t: a.ticker || null, quoi: String(a.proposition || '').slice(0, 90) }));
+  (Var_State.opportunites || []).filter(o => o && o.statut === 'archivee').slice(-8)
+    .forEach(o => refuse.push({ t: o.ticker || null, quoi: 'opportunité archivée : ' + String(o.libelle || '').slice(0, 70) }));
   return {
-    horodatageAppel: new Date().toISOString(),
-    derniereConsolidation: Var_State.derniereConsolidation ? new Date(Var_State.derniereConsolidation).toISOString() : null,
-    releveConnuDu: Var_State.releveAsOf || null,
-    margeConnue: Var_State.margin || null,
-    positions: Var_State.positions.map(p => ({ ticker: p.ticker, libelle: p.libelle, quantite: p.quantite, categorie: p.categorie, valeurEur: p.valeurEur, pctVN: p.pctVN, devise: p.devise, sousJacent: p.sousJacent, sens: p.sens, barriere: p.barriere })),
-    ordres: Var_State.orders.map(o => ({ ticker: o.ticker, sens: o.sens, type: o.type, quantite: o.quantite, limite: o.limite, montantEur: o.montantEur })),
-    instrumentsSuivis: Fn_ListeInstruments().map(i => ({ ticker: i.ticker, isin: i.isin, place: i.place, libelle: i.libelle, categorie: i.categorie })),
-    evenementsExistants: Var_State.events.slice(0, 80).map(e => ({ id: e.id, date: e.date, titre: e.titre, traite: !!e.traite })),
-    opportunitesExistantes: (Var_State.opportunites || []).filter(o => o.statut !== 'supprimee').slice(0, 30).map(o => ({ ticker: o.ticker, libelle: o.libelle, score: o.score, statut: o.statut, facteurs: o.facteurs, coherencePortefeuille: o.coherencePortefeuille, dateMaj: o.dateMaj })),
-    dernieresRevuesDeTheses: theses
+    ts: new Date().toISOString(),
+    majPrec: Var_State.derniereConsolidation ? new Date(Var_State.derniereConsolidation).toISOString() : null,
+    releve: Var_State.releveAsOf || null,
+    marge: m ? { titres: m.securitiesValue, cash: m.cash, vl: m.liquidationValue, risque: m.portfolioRisk, libre: m.freeMargin, as: m.asOf } : null,
+    pos: Var_State.positions.map(p => ({ t: p.ticker, lib: p.libelle, qte: p.quantite, cat: p.categorie, valEur: p.valeurEur, pctVN: p.pctVN, dev: p.devise, sj: p.sousJacent, sens: p.sens, bar: p.barriere })),
+    ord: Var_State.orders.map(o => ({ t: o.ticker, sens: o.sens, type: o.type, qte: o.quantite, lim: o.limite, montEur: o.montantEur })),
+    // Liste unique : elle tenait AUSSI dans un second bloc du texte envoyé, donc
+    // deux fois dans la même requête. Une seule fois désormais.
+    inst: Fn_ListeInstruments().map(i => ({ t: i.ticker, isin: i.isin, place: i.place, lib: i.libelle, cat: i.categorie })),
+    evFuturs,
+    opp: (Var_State.opportunites || []).filter(o => o && o.statut !== 'supprimee' && o.statut !== 'archivee').slice(0, 20)
+      .map(o => ({ k: o.cleModele || o.ticker || null, t: o.ticker, lib: String(o.libelle || '').slice(0, 40), score: o.score, statut: o.statut, maj: o.dateMaj ? Fn_DateISO(new Date(o.dateMaj)) : null })),
+    refuse,
+    theses
   };
 }
 /* ----------------------------------------------------------------
@@ -3327,55 +3772,64 @@ function Fn_BuildPromptMAJ(ctx) {
   L.push('- Date et heure de l’appel : ' + horodatage + '.');
   L.push('- RÈGLE HORS-HORAIRES (obligatoire) : pour chaque instrument, si sa place de cotation est fermée au moment de l’appel, récupère la valeur pertinente du moment — pré-ouverture la plus récente si la place n’a pas encore ouvert, après-clôture le plus récent si elle a fermé — avec son horodatage, EN PLUS du dernier cours de séance. « Dernier cours de clôture » seul est insuffisant quand une cotation étendue existe.');
   if (ctx.coursSeuls) {
-    L.push('- MODE : MAJ PARTIELLE « COURS SEULS ». Aucun relevé PDF n’est joint. Consolide UNIQUEMENT les données de marché (missions 2, 4, 5-6 et 8 sur la base du snapshot). Renvoie positions: [], orders: [], trades: [], margin: null, releveAsOf: null. Le bloc analysis ne porte que sur les incohérences internes du snapshot, s’il y en a. Signale dans chaque texte concerné que l’exposition n’a pas pu être actualisée (relevé non fourni).');
+    L.push('- MODE : MAJ PARTIELLE « COURS SEULS ». Aucun relevé PDF n’est joint. Consolide UNIQUEMENT les données de marché (missions 2, 4, 5-6 et 8 sur la base du snapshot). Renvoie positions: [], orders: [], trades: [] et omets entièrement les clés margin et releve. Le bloc analysis ne porte que sur les incohérences internes du snapshot, s’il y en a. Signale dans chaque texte concerné que l’exposition n’a pas pu être actualisée (relevé non fourni).');
   } else {
     L.push('- MODE : MAJ COMPLÈTE. Documents joints à ce message :');
     L.push('  1. Relevé PDF des positions ouvertes' + (ctx.docNoms.positions ? ' (' + ctx.docNoms.positions + ')' : '') + ' — source [relevé] ; son horodatage/date imprimé est à restituer dans releveAsOf.');
     L.push('  2. ' + (ctx.docNoms.ordres ? 'Capture des ordres en cours (' + ctx.docNoms.ordres + ').' : 'AUCUNE capture d’ordres en cours fournie : suppose zéro ordre en attente et signale-le dans analysis.'));
     L.push('  3. ' + (ctx.aucuneTransac ? 'Aucune transaction récente (case cochée par l’utilisateur) : trades = [] sauf déduction contraire du contrôle de cohérence.' : (ctx.docNoms.executes ? 'Capture des derniers ordres exécutés (' + ctx.docNoms.executes + ').' : 'AUCUNE capture d’ordres exécutés et case « aucune transaction récente » non cochée : considère les transactions comme inconnues.')));
-    L.push('  4. ' + (ctx.docNoms.marge ? 'Capture de l’aperçu de marge (' + ctx.docNoms.marge + ') — écran « Espace libre » du courtier : extrais-en valeur des titres, liquidités, valeur liquidative, risque du portefeuille, marge disponible, et l’heure de mise à jour AFFICHÉE SUR la capture (champ margin.asOf — jamais l’heure de l’appel).' : 'AUCUNE capture d’aperçu de marge : margin = null intégralement (ne reconstruis pas ces grandeurs).'));
+    L.push('  4. ' + (ctx.docNoms.marge ? 'Capture de l’aperçu de marge (' + ctx.docNoms.marge + ') — écran « Espace libre » du courtier : extrais-en valeur des titres, liquidités, valeur liquidative, risque du portefeuille, marge disponible, et l’heure de mise à jour AFFICHÉE SUR la capture (champ margin.as — jamais l’heure de l’appel).' : 'AUCUNE capture d’aperçu de marge : margin = null intégralement (ne reconstruis pas ces grandeurs).'));
   }
   if (ctx.sitesAutorises && ctx.sitesAutorises.length) {
     L.push('- RESTRICTION DE RECHERCHE (choisie par l’utilisateur) : l’outil de recherche web n’atteint QUE ces domaines — ' + ctx.sitesAutorises.join(', ') + '. Aucune autre source n’est accessible, y compris les sites investisseurs des émetteurs et les communiqués. Conséquences à respecter : une donnée introuvable depuis ces domaines vaut null et le dit (« — (donnée manquante : source hors périmètre autorisé) ») ; une date non vérifiable sur source primaire garde confirmed=false ; le croisement à deux sources se fait DANS ce périmètre, et son impossibilité est signalée plutôt que contournée. N’invente jamais pour compenser le périmètre restreint.');
   }
-  L.push('- SNAPSHOT de l’état courant de l’application (positions, ordres, marge, événements déjà suivis, horodatages) — base du contrôle de cohérence :');
-  L.push(JSON.stringify(Fn_BuildSnapshot()));
+  L.push('- SNAPSHOT de l’état courant — base du contrôle de cohérence ET du dédoublonnage. Clés abrégées (économie de jetons). LÉGENDE : t=ticker · lib=libellé · qte=quantité · cat=catégorie · valEur=valeur en € · pctVN=% de la valeur nette · dev=devise · sj=sous-jacent · sens=long/short · bar=barrière · lim=limite · montEur=montant en € · vl=valeur liquidative · libre=marge disponible · as=horodatage · d=date ISO · c=libellé court · k=clé de fiche. BLOCS : marge (aperçu du courtier connu) · pos (positions détenues) · ord (ordres en attente) · inst (LES INSTRUMENTS À CONSOLIDER : c’est la liste de la mission 2, ' + instruments.length + ' entrée(s)) · evFuturs (événements DÉJÀ au calendrier, de J-7 au futur — ne les propose pas une seconde fois) · opp (fiches d’opportunités déjà ouvertes : les mettre à jour par leur clé k, jamais les dupliquer) · refuse (propositions déjà écartées par l’utilisateur : ne les repropose pas) · theses (date de dernière revue par ticker) :');
+  L.push(Fn_JsonCompact(Fn_BuildSnapshot()));
+  L.push('  Une clé ABSENTE du snapshot vaut « inconnu » — elle a été omise pour ne pas consommer de jetons, jamais parce qu’elle vaut zéro.');
+  if (!instruments.length) L.push('- Le bloc inst est VIDE : dérive la liste à consolider du relevé joint — chaque ligne et chaque sous-jacent de produit dérivé devient un instrument à consolider.');
   L.push('- PROFIL D’EXPOSITION consolidé (delta agrégé par ligne, facteur, devise et catégorie ; grandeurs de marge ; garde-fous chiffrés en vigueur) — base OBLIGATOIRE et CHIFFRÉE du jugement de cohérence de la mission 8 :');
-  L.push(JSON.stringify(Fn_ProfilExposition()));
-  L.push('- INSTRUMENTS À CONSOLIDER (liste construite dynamiquement depuis l’onglet Paramètres au moment de l’appel' + (instruments.length ? ', ' + instruments.length + ' instruments) :' : ') : AUCUN — dérive la liste du relevé joint : chaque ligne et chaque sous-jacent de produit dérivé devient un instrument à consolider.'));
-  if (instruments.length) L.push(JSON.stringify(instruments.map(i => ({ ticker: i.ticker, isin: i.isin || null, place: i.place || null, libelle: i.libelle || null }))));
+  L.push(Fn_JsonCompact(Fn_ProfilExposition()));
   L.push('');
   L.push('=== TES 8 MISSIONS, DANS L’ORDRE ===');
-  L.push('MISSION 1 — EXTRACTION des documents joints : positions, ordres en attente, transactions récentes, bloc de marge. Restitue-les dans les blocs positions / orders / trades / margin du schéma final, avec pour chaque position sa CLASSIFICATION (voir taxonomie ci-dessous), sa devise, son % de la valeur nette (pctVN, calculé sur la valeur liquidative si l’aperçu de marge est fourni, sinon sur la somme des positions en le marquant), et pour les produits dérivés : sous-jacent, sens, levier, barrière, strike, ratio/parité, delta en €, portage mensuel estimé (fiche émetteur), facteurs de risque, liquiditeFaible (capacité de sortie en 1-2 séances au regard de l’ADV).');
-  L.push('MISSION 2 — COLLECTE ET CONSOLIDATION des données de marché pour CHAQUE instrument de la liste (positions, sous-jacents, instruments suivis). Source privilégiée : les pages publiques Zone Bourse (zonebourse.com). Extrais-en : (a) les cotations — pré-ouverture / séance / après-clôture selon la place, avec la règle hors-horaires ci-dessus ; (b) l’agenda de la société — prochaines publications confirmées ; (c) le consensus — recommandation agrégée, objectif de cours moyen, nombre d’analystes ; (d) les révisions — direction récente des révisions de BNA/CA ; (e) la VALORISATION (page « Valorisation ») — PER courant (TTM) et prévisionnels (exercice en cours et suivant), VE/CA, VE/EBITDA, P/B, rendement du dividende, PEG si croissance disponible, capitalisation, ET les points de comparaison historiques (médiane 5 ou 10 ans) ou sectoriels quand la page les fournit ; (f) les actualités marquantes récentes ; (g) pour les produits à levier : la fiche émetteur (sens, ratio/parité, barrière, distance à la barrière, coût de portage). CROISE avec les sources primaires : sites relations investisseurs (IR) des émetteurs pour les dates officielles, calendriers des banques centrales, communiqués. Chaque donnée restituée porte src + horodatage.');
+  L.push('MISSION 1 — EXTRACTION des documents joints : positions, ordres en attente, transactions récentes, bloc de marge. Restitue-les dans les blocs positions / orders / trades / margin du schéma final, avec pour chaque position sa CLASSIFICATION (voir taxonomie ci-dessous), sa devise, son % de la valeur nette (pctVN, calculé sur la valeur liquidative si l’aperçu de marge est fourni, sinon sur la somme des positions en le marquant), et pour les produits dérivés : sous-jacent, sens, levier, barrière, strike, ratio/parité, delta en €, portage mensuel estimé (fiche émetteur), facteurs de risque, liqFaible (capacité de sortie en 1-2 séances au regard de l’ADV). Le champ releve reprend l’horodatage imprimé sur le relevé.');
+  L.push('MISSION 2 — COLLECTE ET CONSOLIDATION des données de marché pour CHAQUE instrument du bloc inst (positions, sous-jacents, instruments suivis). Source privilégiée : les pages publiques Zone Bourse (zonebourse.com). EXHAUSTIVITÉ EXIGÉE : chaque champ listé ci-dessous est à chercher explicitement — un champ omis sera lu comme « introuvable », il ne se rattrape pas au tour suivant. Une valeur non trouvée s’omet (voir ÉCONOMIE) ; elle ne s’invente jamais.');
+  L.push('  (a) COTATIONS (bloc quotes) — pré-ouverture (pre), variation de la pré-ouverture en % (preVar) et son heure (preAs) ; dernier cours de séance (last) et sa variation en % (var) ; ouverture (ouv), plus haut (haut) et plus bas (bas) de la séance, clôture de la veille (clotPrec) ; après-clôture (post), sa variation en % (postVar) et son heure (postAs) ; volume du jour (vol) et volume moyen quotidien sur 3 mois (adv, en TITRES — il dimensionne la capacité de sortie) ; plus haut et plus bas de 52 semaines (h52, b52) ; devise de cotation (dev) et place (place). La RÈGLE HORS-HORAIRES ci-dessus s’applique : si la place est fermée, la valeur pertinente du moment (pré-ouverture ou après-clôture) est OBLIGATOIRE en plus du dernier cours de séance — « dernier cours de clôture » seul est une réponse incomplète.');
+  L.push('  (b) AGENDA de la société (bloc fundamentals) — prochaine publication en clair (pub) ET sa date en ISO AAAA-MM-JJ (pubDate) quand elle est connue.');
+  L.push('  (c) CONSENSUS (bloc fundamentals) — recommandation agrégée avec sa répartition (conso), nombre d’analystes (nbA), objectif de cours moyen (obj), écart en % au dernier cours (objEcart), objectifs le plus haut et le plus bas (objHaut, objBas).');
+  L.push('  (d) RÉVISIONS (bloc fundamentals) — direction récente des révisions de BNA/CA (revi) et synthèse de tendance (synth).');
+  L.push('  (e) VALORISATION (bloc valuation, page « Valorisation ») — PER courant TTM (per) et prévisionnels exercice en cours et suivant (perN, perN1) ; BÉNÉFICE PAR ACTION publié et prévisionnels (bpa, bpaN, bpaN1) — le BPA est OBLIGATOIRE dès que la page le publie, c’est lui qui rend le PER interprétable ; VE/CA (veCa), VE/EBITDA (veEbitda), P/B (pb), PEG (peg) ; rendement du dividende en % (rdt), dividende par action (divAct) et prochaine date de détachement en ISO (exDiv) ; CAPITALISATION boursière (capi) avec sa devise (capiDev) ; dette nette (detteNette) et dette nette/EBITDA (dnEbitda) ; ROE en % (roe), marge opérationnelle en % (margeOp), croissance attendue du CA et du BPA en % (croisCa, croisBpa) ; ET les points de comparaison — médiane historique 5 ou 10 ans du titre (refHist) et médiane des pairs/du secteur (refPairs) — sans lesquels un multiple reste brut et tendue vaut null.');
+  L.push('  (f) ACTUALITÉS marquantes récentes → elles alimentent l’expertise (mission 5), pas un bloc dédié.');
+  L.push('  (g) PRODUITS À LEVIER — fiche émetteur : sens, ratio/parité, barrière, distance à la barrière, strike, delta, coût de portage mensuel → bloc positions.');
+  L.push('  (h) LIEN DIRECT (champ u, sur quotes, fundamentals, valuation, expertise, events, positions et opportunities) : l’URL EXACTE de la page consultée pour ce bloc et cet instrument — fiche Zone Bourse de l’instrument, page « Valorisation », fiche produit de l’émetteur, page IR, communiqué. Une URL http(s) complète et directement ouvrable, jamais une page d’accueil ni une recherche. C’est ce lien qui permet de revérifier un chiffre des jours plus tard : il fait partie de la donnée, pas de l’habillage.');
+  L.push('  CROISE avec les sources primaires : sites relations investisseurs (IR) des émetteurs pour les dates officielles, calendriers des banques centrales, communiqués. Chaque donnée restituée porte s (source nommée) + as (horodatage) + u (lien).');
   L.push('MISSION 3 — CONTRÔLE DE COHÉRENCE : les documents entre eux ET les documents vs le snapshot ci-dessus. Une divergence est un SIGNAL, pas une erreur : les liquidités du relevé PDF et celles de l’aperçu de marge sont comparées ; un écart trahit des mouvements entre les deux horodatages (ordre exécuté, dépôt/retrait, frais). Tente le rapprochement CHIFFRÉ de chaque écart (ex. « écart de 12 010,00 € = somme exacte des 2 ordres d’achat en attente sur le relevé → probablement exécutés depuis ») et produis une entrée analysis par écart : kind parmi position_soldee / ordre_execute / nouvelle_ligne / divergence_liquidites / reclassification ; summary décrit l’écart, evidence le rapprochement chiffré, proposal le traitement proposé, ticker si identifiable. Signale aussi tout ordre qui, exécuté, transformerait une poche (ex. bascule en delta-neutre) : à classer reclassification.');
-  L.push('MISSION 4 — REVUE DES AGENDAS ET ÉVÉNEMENTS CLÉS PAR TITRE : pour chaque position et sous-jacent, vérifie les prochaines dates (résultats et guidances, journées investisseurs, détachements de dividende avec ajustement barrière/strike des dérivés, échéances/exercices des produits, catalyseurs macro pertinents pour les expositions — banques centrales avec mention des projections/dot plot, publications macro majeures, catalyseurs sectoriels des facteurs dominants, indicateurs avancés type donneurs d’ordre/clients/pairs d’un facteur concentré). Confirme sur source primaire quand c’est possible (confirmed=true seulement dans ce cas). Qualifie l’importance pour LA position détenue (taille, sens, levier). Ajoute un événement récurrent de revue du bien-fondé de CHAQUE couverture (« le catalyseur qui justifie cette couverture est-il passé ? »), un point de vigilance pour chaque ordre en attente dont un catalyseur du sous-jacent précède la probable exécution (risque de gap à travers la limite) et un point de vérification d’exécution. Si le coussin de marge ressort sous le seuil professionnel (< 10 %), événement immédiat de sévérité Crit avec plan de réduction chiffré. NE DUPLIQUE PAS les événements déjà suivis (liste evenementsExistants du snapshot) : ne propose que les nouveaux ou les dates corrigées. → bloc events, textes complets (mission 7).');
-  L.push('MISSION 5 — EXPERTISE PAR POSITION : pour chaque ligne, une lecture de desk — tendance (technique et fondamentale), exposition effective (€, % VN, effet levier), valorisation vs référentiel, risques spécifiques. Quand une publication de résultats est intervenue depuis la dernière consolidation (' + (Var_State.derniereConsolidation ? 'le ' + Fn_FmtHeure(Var_State.derniereConsolidation) : 'jamais réalisée : traite les dernières publications de chaque ligne') + '), ajoute une REVUE D’ANALYSTE-COMPTABLE : CA / marges / BPA vs consensus, guidance relevée / confirmée / abaissée, qualité du résultat (éléments exceptionnels, cash-flow vs résultat comptable, variation de BFR), et ce que cela change à la thèse. Sinon revueResultats = null. → bloc expertise.');
+  L.push('MISSION 4 — REVUE DES AGENDAS ET ÉVÉNEMENTS CLÉS PAR TITRE : pour chaque position et sous-jacent, vérifie les prochaines dates (résultats et guidances, journées investisseurs, détachements de dividende avec ajustement barrière/strike des dérivés, échéances/exercices des produits, catalyseurs macro pertinents pour les expositions — banques centrales avec mention des projections/dot plot, publications macro majeures, catalyseurs sectoriels des facteurs dominants, indicateurs avancés type donneurs d’ordre/clients/pairs d’un facteur concentré). Confirme sur source primaire quand c’est possible (confirmed=true seulement dans ce cas). Qualifie l’importance pour LA position détenue (taille, sens, levier). Ajoute un événement récurrent de revue du bien-fondé de CHAQUE couverture (« le catalyseur qui justifie cette couverture est-il passé ? »), un point de vigilance pour chaque ordre en attente dont un catalyseur du sous-jacent précède la probable exécution (risque de gap à travers la limite) et un point de vérification d’exécution. Si le coussin de marge ressort sous le seuil professionnel (< 10 %), événement immédiat de sévérité Crit avec plan de réduction chiffré. NE DUPLIQUE PAS les événements déjà suivis (bloc evFuturs du snapshot) : ne propose que les nouveaux ou les dates corrigées. → bloc events, textes complets (mission 7).');
+  L.push('MISSION 5 — EXPERTISE PAR POSITION : pour chaque ligne, une lecture de desk — tendance (technique et fondamentale), exposition effective (€, % VN, effet levier), valorisation vs référentiel, risques spécifiques. Quand une publication de résultats est intervenue depuis la dernière consolidation (' + (Var_State.derniereConsolidation ? 'le ' + Fn_FmtHeure(Var_State.derniereConsolidation) : 'jamais réalisée : traite les dernières publications de chaque ligne') + '), ajoute une REVUE D’ANALYSTE-COMPTABLE : CA / marges / BPA vs consensus, guidance relevée / confirmée / abaissée, qualité du résultat (éléments exceptionnels, cash-flow vs résultat comptable, variation de BFR), et ce que cela change à la thèse. Sinon, omets simplement la clé revue. → bloc expertise.');
   L.push('MISSION 6 — ACTIONS PROPOSÉES SUR LES POSITIONS (le livrable central) : pour chaque position qui le justifie au regard des missions 3-5, la ou les meilleures actions envisageables, HIÉRARCHISÉES (priorite 1 = urgent à 3), chacune formulée comme sur un desk : proposition concrète, déclencheur conditionnel (« si X → A ; si Y → B »), coût/bénéfice chiffré, horizon, condition d’invalidation. Une action sans déclencheur ni ordre de grandeur chiffré est à reformuler avant livraison. Les positions sans action nécessaire le disent EXPLICITEMENT (« conserver, prochain point de décision : résultats du JJ/MM/AA ») — une entrée « conserver » vaut mieux qu’une ligne absente. → bloc actions.');
-  L.push('MISSION 7 — TEXTES D’ÉVÉNEMENTS COMPLETS : chaque événement du bloc events porte ses trois textes — surveiller (l’indicateur concret à lire ce jour-là), arbitrage (la décision formulée en alternatives : « si X → A ; si Y → B », avec coût/bénéfice chiffré, en RÉUTILISANT les métriques de la carte : « l’exécution porterait le levier de 1,53 à 1,78 » plutôt qu’une formule vague), pratique (voir l’EXIGENCE D’EXPERTISE ci-dessous : règle professionnelle SPÉCIFIQUE à l’événement et à la position, avec action corrective — jamais de généralité creuse). Et sa rangée metrics, NON VIDE, chiffrée depuis le relevé et les données consolidées, choisie selon la catégorie :');
+  L.push('MISSION 7 — TEXTES D’ÉVÉNEMENTS COMPLETS : chaque événement du bloc events porte ses trois textes — surv (l’indicateur concret à lire ce jour-là), arb (la décision formulée en alternatives : « si X → A ; si Y → B », avec coût/bénéfice chiffré, en RÉUTILISANT les métriques de la carte : « l’exécution porterait le levier de 1,53 à 1,78 » plutôt qu’une formule vague ; sépare les alternatives par un point-virgule, l’application les met en puces), prat (voir l’EXIGENCE D’EXPERTISE ci-dessous : règle professionnelle SPÉCIFIQUE à l’événement et à la position, avec action corrective — jamais de généralité creuse). Et sa rangée m, NON VIDE, chiffrée depuis le relevé et les données consolidées, choisie selon la catégorie :');
   L.push('  - publication d’une ligne détenue : exposition en jeu (€ et % VN), amplitude de gap de référence (mouvement type post-résultats du titre, à défaut ±10 % en le signalant comme hypothèse), impact du gap sur la VN en € dans les deux sens, effet levier inclus ;');
   L.push('  - ORDRES : montant de l’ordre (€), écart limite vs dernier cours (%), effet sur la dette/levier si exécuté (avant → après) ;');
   L.push('  - COUVERTURE : delta couvert vs delta de la poche (€ et %), état effectif/théorique, distance à la barrière (%), portage couru estimé (€) ;');
   L.push('  - MACRO : exposition du facteur concerné (€ et % VN), sensibilité approximative (ex. « ±1 % EUR/USD ≈ ±X € ») ;');
   L.push('  - MARGE : dette actuelle, levier avant/après les ordres en attente, montant libérable par le plan de réduction (€).');
-  L.push('  Toute métrique non calculable faute de donnée : value = « — (donnée manquante : X) » — jamais de valeur inventée.');
-  L.push('  EXIGENCE D’EXPERTISE SUR LA LIGNE pratique (niveau attendu : gérant de desk + analyste expert-comptable). Chaque ligne pratique énonce une règle de gestion RECONNUE, choisie dans le registre le PLUS PERTINENT pour ce type d’événement et cette position, avec son action corrective chiffrée quand la carte le permet. Registres à mobiliser :');
+  L.push('  Toute métrique non calculable faute de donnée : v = « — (donnée manquante : X) » — jamais de valeur inventée.');
+  L.push('  EXIGENCE D’EXPERTISE SUR LA LIGNE prat (niveau attendu : gérant de desk + analyste expert-comptable). Chaque ligne pratique énonce une règle de gestion RECONNUE, choisie dans le registre le PLUS PERTINENT pour ce type d’événement et cette position, avec son action corrective chiffrée quand la carte le permet. Registres à mobiliser :');
   L.push('  - desk / risque : taille et couverture s’ajustent AVANT le binaire ; une couverture d’événement se déboucle APRÈS le catalyseur ; delta effectif vs théorique ; le coussin de marge et le levier priment sur toute opportunité ;');
   L.push('  - microstructure / exécution : gap d’ouverture à travers une limite ; profondeur (ADV) → sorties en plusieurs séances sur les small caps ; revoir chaque ordre en attente LA VEILLE d’une publication du titre ; fenêtres d’exécution (ouverture, clôture, fixings) ;');
   L.push('  - valorisation : un multiple tendu vs référentiel se re-price plus violemment sur déception (asymétrie du re-rating) ; PEG vs croissance guidée ; changement de multiple pertinent quand le résultat change de signe (PER → VE/CA) ; l’écart à l’objectif du consensus n’est pas un potentiel, c’est une opinion moyenne ;');
   L.push('  - analyse financière / comptable : lire la guidance et son pont (bridge) AVANT le BPA ; qualité du résultat — éléments exceptionnels, cash-flow vs résultat comptable, variation de BFR, reconnaissance du revenu ; book-to-bill et carnet pour les équipementiers ; distinguer l’effet de change sur les comptes de l’effet de change sur le titre ;');
   L.push('  - structuration produit : ajustement des barrières/strikes aux détachements ; portage couru d’un produit sans échéance ; valeur résiduelle au knock-out selon le type (turbo BEST : nulle ; mini-future : résiduelle) ; parité/ratio avant tout calcul d’exposition.');
-  L.push('  INTERDIT : deux événements différents partageant la même ligne pratique générique — chacune est spécifique au type d’événement, à la catégorie de la position et à sa taille.');
-  L.push('  LIBELLÉ COURT (labelCourt, obligatoire sur chaque événement) : un libellé compact de 28 caractères MAXIMUM pour la case du calendrier — l’essentiel en abréviations usuelles (« Rés. T3 fisc. 2026 », « CA S1 avant Bourse », « Déc. FOMC 20 h », « Ex-div — ajust. barrière »), SANS le ticker (l’application le préfixe), compréhensible seul. Si le libellé dépasse 28 caractères, abréger davantage plutôt que tronquer.');
+  L.push('  INTERDIT : deux événements différents partageant la même ligne prat générique — chacune est spécifique au type d’événement, à la catégorie de la position et à sa taille.');
+  L.push('  LIBELLÉ COURT (court, obligatoire sur chaque événement) : un libellé compact de 28 caractères MAXIMUM pour la case du calendrier — l’essentiel en abréviations usuelles (« Rés. T3 fisc. 2026 », « CA S1 avant Bourse », « Déc. FOMC 20 h », « Ex-div — ajust. barrière »), SANS le ticker (l’application le préfixe), compréhensible seul. Si le libellé dépasse 28 caractères, abréger davantage plutôt que tronquer.');
   L.push('MISSION 8 — DÉCOUVERTE D’OPPORTUNITÉS (bloc opportunities) : à partir de la photographie COMPLÈTE du portefeuille et d’une recherche web large, réalise d’abord la concentration de la masse d’informations puis le picking. Ne livre que 3 à 7 dossiers réellement discriminants, récents au moment de la FIN de cet appel. Écarte le bruit, les reprises de dépêches et les idées redondantes. Chaque opportunité doit expliciter sa COHÉRENCE avec l’exposition actuelle : facteurs déjà dominants, corrélation avec les lignes détenues, devise, liquidité, levier et coussin de marge. Une idée qui renforce une concentration déjà excessive est rejetée ou classée watchlist avec allocationCiblePctVN = 0 tant que le risque n’est pas réduit. Privilégie les compléments de portefeuille, les asymétries documentées, les catalyseurs datés et les valorisations comparées à un référentiel. Exclue par défaut les titres déjà détenus, sauf renforcement/paire/couverture explicitement justifié. Croise les données décisionnelles avec une source primaire et une seconde source fiable ; chaque dossier porte un horodatage asOf et des sources. Le score 0-100 agrège qualité de la thèse, adéquation portefeuille, valorisation, catalyseurs, liquidité et risque. Ce sont des CANDIDATS À ÉTUDIER, jamais des ordres ni des recommandations personnalisées.');
-  L.push('  Pour chaque opportunité : thèse concise mais complète ; coherencePortefeuille chiffrée et spécifique ; facteurs ; prixReference et devise avec asOf ; valorisation vs historique/pairs ; catalyseurs datés ; déclencheur observable ; invalidation ; principaux risques ; horizon ; allocationCiblePctVN compatible avec la marge et les seuils de concentration ; liquidité ; src. Si aucune idée ne passe le filtre, renvoie opportunities: [] plutôt que de remplir artificiellement.');
+  L.push('  Pour chaque opportunité : these concise mais complète ; coh chiffrée et spécifique ; fact ; prixRef et dev avec as ; valo vs historique/pairs ; cata datés ; decl observable ; inval ; risques principaux ; hor ; allocPct compatible avec la marge et les seuils de concentration ; liq ; s ; u (lien direct vers la fiche de l’instrument ou le communiqué qui fonde la thèse — indispensable pour rouvrir le dossier des jours plus tard). Une fiche qui reprend une idée déjà ouverte porte sa clé k. Si aucune idée ne passe le filtre, renvoie opportunities: [] plutôt que de remplir artificiellement.');
   L.push('  FILTRE DE COHÉRENCE — appliqué dans cet ordre sur le PROFIL D’EXPOSITION fourni ci-dessus, jamais « en général » :');
-  L.push('   1. PLAFONDS : une idée qui porterait une ligne au-delà du plafond rouge de concentration par ligne, un facteur au-delà du plafond par facteur, ou une devise au-delà du plafond de devise → verdictCoherence = "incohérente", allocationCiblePctVN = 0, et elle n’est conservée QUE si elle RÉDUIT une concentration existante (diversification, jambe opposée, couverture). Le calcul figure en clair dans coherencePortefeuille (ex. « porterait le facteur X de 82,2 % à 85,4 % de la VN, plafond rouge 40 % »).');
-  L.push('   2. MARGE ET LEVIER : si le coussin de marge est sous son seuil rouge ou le levier brut au-dessus du sien, AUCUNE augmentation du brut n’est recevable — l’idée doit être AUTO-FINANCÉE et le champ financement nomme la ligne à alléger et le montant (« vendre ~1 800 € de la ligne Y, satellite la plus liquide, avant d’engager »). verdictCoherence = "sous conditions" au mieux. Le coussin et le levier priment sur toute opportunité.');
-  L.push('   3. DIMENSIONNEMENT : allocationCiblePctVN et tailleEur compatibles avec la marge disponible ET les plafonds, cohérents avec la catégorie visée (une idée satellite ne se dimensionne pas comme une conviction). Sans valeur nette connue : null, et le dire.');
-  L.push('   4. RÉCENCE : ne retenir que des éléments PUBLIÉS dans la fenêtre ci-dessus ; asOf = date et heure d’arrêté (jour de cet appel, heure de Paris) ; dateCatalyseur, quand elle existe, est une date FUTURE ou du jour au format ISO AAAA-MM-JJ — jamais un catalyseur déjà passé.');
+  L.push('   1. PLAFONDS : une idée qui porterait une ligne au-delà du plafond rouge de concentration par ligne, un facteur au-delà du plafond par facteur, ou une devise au-delà du plafond de devise → verdict = "incohérente", allocPct = 0, et elle n’est conservée QUE si elle RÉDUIT une concentration existante (diversification, jambe opposée, couverture). Le calcul figure en clair dans coh (ex. « porterait le facteur X de 82,2 % à 85,4 % de la VN, plafond rouge 40 % »).');
+  L.push('   2. MARGE ET LEVIER : si le coussin de marge est sous son seuil rouge ou le levier brut au-dessus du sien, AUCUNE augmentation du brut n’est recevable — l’idée doit être AUTO-FINANCÉE et le champ fin nomme la ligne à alléger et le montant (« vendre ~1 800 € de la ligne Y, satellite la plus liquide, avant d’engager »). verdict = "sous conditions" au mieux. Le coussin et le levier priment sur toute opportunité.');
+  L.push('   3. DIMENSIONNEMENT : allocPct et tailleEur compatibles avec la marge disponible ET les plafonds, cohérents avec la catégorie visée (une idée satellite ne se dimensionne pas comme une conviction). Sans valeur nette connue : clés omises, et le dire dans coh.');
+  L.push('   4. RÉCENCE : ne retenir que des éléments PUBLIÉS dans la fenêtre ci-dessus ; as = date et heure d’arrêté (jour de cet appel, heure de Paris) ; cataDate, quand elle existe, est une date FUTURE ou du jour au format ISO AAAA-MM-JJ — jamais un catalyseur déjà passé.');
   L.push('   5. ACCESSIBILITÉ : instrument coté et négociable depuis un compte-titres européen (place et ISIN quand ils sont trouvés) ; signaler toute faible profondeur (sortie impossible en 1-2 séances) et, pour un produit à barrière, la distance au knock-out. Accessibilité non vérifiable → le dire dans risques, jamais la supposer.');
-  if (ctx.coursSeuls) L.push('  MODE « COURS SEULS » : le balayage reste dû, mais sans relevé du jour l’exposition n’est pas actualisée — dimensionner sur le profil fourni EN LE SIGNALANT et abaisser d’un cran chaque verdictCoherence (aucune idée "cohérente" sans exposition à jour).');
+  if (ctx.coursSeuls) L.push('  MODE « COURS SEULS » : le balayage reste dû, mais sans relevé du jour l’exposition n’est pas actualisée — dimensionner sur le profil fourni EN LE SIGNALANT et abaisser d’un cran chaque verdict (aucune idée "cohérente" sans exposition à jour).');
   L.push('');
   L.push('=== TAXONOMIE DE CLASSIFICATION (expertise, jamais de liste codée en dur) ===');
   L.push('- CŒUR : supports diversifiés de détention longue (ETF larges, fonds).');
@@ -3387,7 +3841,7 @@ function Fn_BuildPromptMAJ(ctx) {
   L.push('- FACTEURS : regroupements par facteur de risque commun (secteur, thème, devise, sensibilité taux) — des lignes corrélées constituent UNE exposition ; renseigne positions[].facteurs.');
   L.push('');
   L.push('=== VALORISATION — CAS PARTICULIERS (dictés par l’analyse) ===');
-  L.push('Ligne en pertes : PER « n. s. (résultat négatif) » dans note et bascule sur VE/CA. Banque/assurance : privilégier P/B. Foncière : P/ANR. ETF : frais courants et PER moyen du panier si disponibles (note). Produit à levier : PAS de multiples propres — le bloc valuation porte sur son SOUS-JACENT et note le dit explicitement (« multiples du sous-jacent X pour le turbo Y »). Chaque multiple est mis en perspective avec AU MOINS une référence (médiane historique du titre 5-10 ans et/ou médiane des pairs/du secteur) dans refHist/refPeers ; sinon il reste brut et valoTendue = null (« sans référentiel » : un PER isolé n’est pas interprétable). valoTendue = true si les multiples ressortent AU-DESSUS de leur référentiel, false sinon, null sans référentiel.');
+  L.push('Ligne en pertes : PER « n. s. (résultat négatif) » dans note et bascule sur VE/CA. Banque/assurance : privilégier P/B. Foncière : P/ANR. ETF : frais courants et PER moyen du panier si disponibles (note). Produit à levier : PAS de multiples propres — le bloc valuation porte sur son SOUS-JACENT et note le dit explicitement (« multiples du sous-jacent X pour le turbo Y »). Chaque multiple est mis en perspective avec AU MOINS une référence (médiane historique du titre 5-10 ans et/ou médiane des pairs/du secteur) dans refHist/refPairs ; sinon il reste brut et la clé tendue est OMISE (« sans référentiel » : un PER isolé n’est pas interprétable). tendue = true si les multiples ressortent AU-DESSUS de leur référentiel, false sinon.');
   L.push('');
   L.push('=== TRAÇABILITÉ (obligatoire sur TOUT texte livré — l’utilisateur lit chaque carte SEULE, sur mobile, des jours plus tard) ===');
   L.push('1. Références croisées NOMMÉES : jamais « avant l’événement binaire (13/08/26) » mais « avant les résultats trimestriels de la société X du 13/08/26 (60,7 % de la VN) » — toujours QUI + QUOI + QUAND.');
@@ -3397,26 +3851,47 @@ function Fn_BuildPromptMAJ(ctx) {
   L.push('5. Avant de livrer, relis chaque texte comme s’il était affiché SEUL et corrige toute référence qui ne s’y suffit pas.');
   L.push('');
   L.push('=== NORMALISATION DES DATES ET DES HEURES (obligatoire, aucune exception) ===');
-  L.push('- Champs `date` du schéma : ISO AAAA-MM-JJ (format machine, jamais affiché tel quel dans un texte).');
-  L.push('- Toute date ÉCRITE dans un texte (label, note, metrics, surveiller/arbitrage/pratique, src, releveAsOf, nextReport) : format JJ/MM/AA (ex. 13/08/26) — jour PUIS mois, JAMAIS MM/JJ. Piège : les sources américaines affichent MM/JJ (« 08/13 » = 13 août) — convertir SYSTÉMATIQUEMENT ; en cas de doute sur l’ordre jour/mois, re-vérifier sur une source où le mois est écrit en toutes lettres.');
+  L.push('- Champs de date du schéma (d, pubDate, exDiv, cataDate) : ISO AAAA-MM-JJ (format machine, jamais affiché tel quel dans un texte).');
+  L.push('- Toute date ÉCRITE dans un texte (lib, note, métriques, surv/arb/prat, s, releve, pub) : format JJ/MM/AA (ex. 13/08/26) — jour PUIS mois, JAMAIS MM/JJ. Piège : les sources américaines affichent MM/JJ (« 08/13 » = 13 août) — convertir SYSTÉMATIQUEMENT ; en cas de doute sur l’ordre jour/mois, re-vérifier sur une source où le mois est écrit en toutes lettres.');
   L.push('- Toute heure : HEURE DE PARIS (Europe/Paris), notée « HH h MM heure de Paris » à la première mention de chaque carte, avec l’heure locale de la place entre parenthèses quand elle éclaire (ex. « 22 h 05 heure de Paris (16 h 05 ET) »). Conversions à vérifier selon l’heure d’été en vigueur à la DATE de l’événement : ET = Paris − 6 h, Londres = Paris − 1 h, Tokyo = Paris + 7 h.');
-  L.push('- Horodatages de cotation (asOf des quotes) : JJ/MM/AA HH:MM, heure de Paris. Exception : margin.asOf reprend l’heure LUE sur la capture du courtier, telle quelle.');
+  L.push('- Horodatages de cotation (as des quotes, preAs, postAs) : JJ/MM/AA HH:MM, heure de Paris. Exception : margin.as reprend l’heure LUE sur la capture du courtier, telle quelle.');
+  L.push('');
+  L.push('=== ÉCONOMIE DE LA RÉPONSE (règles strictes — cet appel est facturé au jeton) ===');
+  L.push('1. AUCUN texte hors du JSON : ni préambule, ni balise de code, ni commentaire, ni conclusion. Premier caractère « { », dernier caractère « } ».');
+  L.push('2. OMETS toute clé dont la valeur est inconnue, non trouvée ou vide. N’écris JAMAIS "champ": null, ni "", ni "—", ni "n. d." : l’absence dit déjà « non trouvé » et ne coûte rien. N’émets pas non plus d’entrée vide ni de tableau vide (sauf ceux explicitement exigés en mode « cours seuls »). UNIQUE EXCEPTION : la valeur v d’une métrique d’événement, où « — (donnée manquante : X) » reste EXIGÉ — l’utilisateur doit lire ce qui manque et comment l’obtenir, jamais une case vide.');
+  L.push('3. Emploie les clés COURTES du schéma ci-dessous À LA LETTRE. Une clé rallongée, traduite ou inventée n’est pas lue.');
+  L.push('4. PAS DE REDITE : un chiffre porté par un champ dédié ne se répète pas en prose ; un texte ne récapitule pas les champs voisins ; les mêmes phrases ne se recopient pas d’une carte à l’autre.');
+  L.push('5. LONGUEURS MAXIMALES en caractères — au-delà, REFORMULE plus court, ne tronque jamais en cours de phrase : surv 320 · arb 320 · prat 320 · note 200 · tend 200 · desk 500 · revue 600 · valoRef 250 · risques 300 · resume 250 · preuve 300 · propo 250 · decl 250 · cb 250 · inval 250 · these 600 · coh 400 · cata 300 · valo 300 · liq 200 · fin 200. Ces plafonds sont un budget de concision, pas une cible à remplir.');
+  L.push('6. Ne propose RIEN qui figure déjà dans evFuturs (même objet à la même date) ni dans refuse : ce serait payé deux fois et revalidé une deuxième fois à la main.');
+  L.push('7. Ne recopie pas le snapshot dans ta réponse : les blocs positions / orders / trades / margin se remplissent depuis les DOCUMENTS JOINTS uniquement. Sans document, ils sont vides.');
   L.push('');
   L.push('=== FORMAT DE SORTIE (strict) ===');
-  L.push('Réponds UNIQUEMENT par un objet JSON valide — aucun préambule, aucune balise de code, aucun commentaire, aucun texte après. Champs non récupérés : null (dans valuation notamment). Schéma exact :');
-  L.push('{"releveAsOf": "date/heure imprimée sur le relevé PDF, sinon null",');
-  L.push(' "quotes": [{"ticker","pre","last","post","chgPct","asOf","src"}],');
-  L.push(' "fundamentals": [{"ticker","consensus (ex. Achat — 8 achat / 3 neutre / 1 vente, 12 analystes)","targetMean","targetGapPct","revisionTrend (hausse/stable/baisse + précision)","nextReport (date + objet + confirmée ou non)","synth (en amélioration / stables / en dégradation, + qualificatif décotée / en ligne / tendue si référentiels)","src"}],');
-  L.push(' "valuation": [{"ticker","perTtm","perFwd1","perFwd2","evSales","evEbitda","pb","divYield","peg","refHist","refPeers","valoTendue (true/false/null)","note","src"}],');
-  L.push(' "events": [{"ticker (null si macro)","date (ISO AAAA-MM-JJ)","label (QUI + QUOI, lisible seul)","labelCourt (≤ 28 caractères — libellé compact pour la case du calendrier, abréviations usuelles : Rés., trim., sem., CA, publ., Déc., ex-div, couv., ajust. — SANS le ticker, préfixé automatiquement par l’application)","sev (Crit/Warn/Info)","note (une ligne de contexte)","confirmed (true seulement si vérifié sur source primaire)","metrics":[{"label","value"}] (NON vide),"surveiller","arbitrage","pratique","src"}],');
-  L.push(' "positions": [{"ticker","isin","libelle","quantite","cours","devise","valeurEur","pctVN","categorie","sousJacent","sens (long/short)","levier","barriere","strike","ratioParite","deltaEur","portageMensuelEur","facteurs":["…"],"liquiditeFaible (true/false/null)","src"}],');
-  L.push(' "orders": [{"ticker","sens","type","quantite","limite","montantEur","validite","effetSiExecute","categorie","src"}],');
-  L.push(' "trades": [{"ticker","sens","quantite","cours","montantEur","date","src"}],');
-  L.push(' "analysis": [{"kind (position_soldee/ordre_execute/nouvelle_ligne/divergence_liquidites/reclassification)","ticker","summary","evidence (rapprochement chiffré)","proposal"}],');
-  L.push(' "expertise": [{"ticker","tendance","expositionEur","expositionPctVN","lectureDesk","revueResultats (null si aucune publication depuis la dernière consolidation)","valorisationVsRef","risques","src"}],');
-  L.push(' "actions": [{"ticker (null si portefeuille entier)","priorite (1 à 3)","proposition","declencheur","coutBenefice","horizon","invalidation"}],');
-  L.push(' "opportunities": [{"ticker","isin","libelle","place","type (watchlist/long/paire/couverture)","these","coherencePortefeuille (calcul explicite vs profil d’exposition et garde-fous)","verdictCoherence (cohérente / sous conditions / incohérente)","financement (ligne à alléger et montant si le coussin ou le levier l’imposent, sinon null)","facteurs":["…"],"devise","score (0-100)","conviction (faible/moyenne/forte)","prixReference","asOf","valorisation","catalyseurs","dateCatalyseur (ISO AAAA-MM-JJ, future ou du jour, sinon null)","declencheur","invalidation","risques","horizon","allocationCiblePctVN","tailleEur","liquidite","src"}],');
-  L.push(' "margin": {"securitiesValue","cash","liquidationValue","portfolioRisk","freeMargin","asOf (heure lue SUR la capture)"} ou null intégralement si la capture n’a pas été fournie}');
+  L.push('Un objet JSON unique, schéma exact ci-dessous. Les clés sont courtes ; leur sens est donné juste après chaque bloc.');
+  L.push('{"v":2,');
+  L.push(' "releve":"date/heure imprimée sur le relevé PDF",');
+  L.push(' "quotes":[{"t","pre","preVar","preAs","last","var","ouv","haut","bas","clotPrec","post","postVar","postAs","vol","adv","h52","b52","dev","place","as","u","s"}],');
+  L.push('   → t=ticker · pre/preVar/preAs=pré-ouverture, sa variation en % et son heure · last/var=dernier cours de séance et sa variation en % · ouv/haut/bas/clotPrec=ouverture, plus haut, plus bas, clôture de la veille · post/postVar/postAs=après-clôture, sa variation en % et son heure · vol=volume du jour en titres · adv=volume moyen quotidien 3 mois en titres · h52/b52=plus haut et plus bas de 52 semaines · dev=devise · place=place de cotation · as=horodatage de la cotation (JJ/MM/AA HH:MM, heure de Paris) · u=lien direct · s=source nommée.');
+  L.push(' "fundamentals":[{"t","conso","nbA","obj","objEcart","objHaut","objBas","revi","pub","pubDate","synth","u","s"}],');
+  L.push('   → conso=consensus agrégé avec sa répartition (ex. « Achat — 8 achat / 3 neutre / 1 vente ») · nbA=nombre d’analystes · obj=objectif de cours moyen · objEcart=écart en % au dernier cours · objHaut/objBas=objectifs extrêmes · revi=direction des révisions de BNA/CA (hausse/stable/baisse + précision) · pub=prochaine publication en clair (objet + date JJ/MM/AA + confirmée ou non) · pubDate=cette date en ISO AAAA-MM-JJ · synth=en amélioration / stables / en dégradation, plus décotée / en ligne / tendue si des référentiels existent.');
+  L.push(' "valuation":[{"t","per","perN","perN1","bpa","bpaN","bpaN1","veCa","veEbitda","pb","peg","rdt","divAct","exDiv","capi","capiDev","detteNette","dnEbitda","roe","margeOp","croisCa","croisBpa","refHist","refPairs","tendue","note","u","s"}],');
+  L.push('   → per=PER TTM · perN/perN1=PER prévisionnels exercice en cours et suivant · bpa=BPA publié (TTM) · bpaN/bpaN1=BPA prévisionnels · veCa=VE/CA · veEbitda=VE/EBITDA · pb=P/B · peg=PEG · rdt=rendement du dividende en % · divAct=dividende par action · exDiv=prochain détachement en ISO · capi=capitalisation (nombre entier, pas de texte) · capiDev=devise de la capitalisation · detteNette=dette nette · dnEbitda=dette nette/EBITDA · roe=ROE en % · margeOp=marge opérationnelle en % · croisCa/croisBpa=croissance attendue du CA et du BPA en % · refHist=médiane historique du titre (5 ou 10 ans) · refPairs=médiane des pairs ou du secteur · tendue=true/false (multiples au-dessus de leur référentiel), clé OMISE s’il n’y a aucun référentiel · note=cas particulier (résultat négatif, ETF, multiples du sous-jacent d’un produit à levier).');
+  L.push(' "expertise":[{"t","tend","expoEur","expoPct","desk","revue","valoRef","risques","u","s"}],');
+  L.push('   → tend=tendance technique et fondamentale · expoEur/expoPct=exposition effective en € et en % de la valeur nette · desk=lecture de desk · revue=revue d’analyste-comptable (clé OMISE si aucune publication depuis la dernière consolidation) · valoRef=valorisation vs référentiel · risques=risques spécifiques.');
+  L.push(' "events":[{"t","d","lib","court","sev","note","conf","m":[{"l","v"}],"surv","arb","prat","u","s"}],');
+  L.push('   → t=ticker (clé OMISE si macro) · d=date ISO AAAA-MM-JJ · lib=libellé complet (QUI + QUOI, lisible seul) · court=libellé compact de 28 caractères MAXIMUM pour la case du calendrier (abréviations usuelles : Rés., trim., sem., CA, publ., Déc., ex-div, couv., ajust.) SANS le ticker, que l’application préfixe · sev=Crit/Warn/Info · note=une ligne de contexte · conf=true UNIQUEMENT si la date est vérifiée sur source primaire · m=rangée de métriques chiffrées, NON VIDE, chaque entrée {l=libellé, v=valeur} · surv/arb/prat=les trois textes de la mission 7.');
+  L.push(' "positions":[{"t","isin","lib","qte","cours","dev","valEur","pctVN","cat","sj","sens","lev","bar","strike","parite","deltaEur","portMens","fact":["…"],"liqFaible","u","s"}],');
+  L.push('   → qte=quantité · valEur=valeur en € · pctVN=% de la valeur nette · cat=catégorie de la taxonomie · sj=sous-jacent · sens=long/short · lev=levier · bar=barrière · parite=ratio/parité · deltaEur=delta en € · portMens=portage mensuel estimé en € · fact=facteurs de risque · liqFaible=true/false (sortie impossible en 1-2 séances au regard de l’ADV).');
+  L.push(' "orders":[{"t","sens","type","qte","lim","montEur","validite","effet","cat","s"}],');
+  L.push('   → lim=limite · montEur=montant en € · effet=effet sur la marge et la classification si l’ordre est exécuté.');
+  L.push(' "trades":[{"t","sens","qte","cours","montEur","d","s"}],');
+  L.push(' "analysis":[{"kind","t","resume","preuve","propo"}],');
+  L.push('   → kind parmi position_soldee / ordre_execute / nouvelle_ligne / divergence_liquidites / reclassification · resume=l’écart constaté · preuve=le rapprochement CHIFFRÉ · propo=le traitement proposé.');
+  L.push(' "actions":[{"t","prio","propo","decl","cb","hor","inval"}],');
+  L.push('   → t=ticker (clé OMISE si l’action porte sur le portefeuille entier) · prio=1 à 3 · propo=la proposition concrète · decl=le déclencheur conditionnel · cb=coût/bénéfice chiffré · hor=horizon · inval=condition d’invalidation.');
+  L.push(' "opportunities":[{"k","t","isin","lib","place","type","these","coh","verdict","fin","fact":["…"],"dev","score","conv","prixRef","as","valo","cata","cataDate","decl","inval","risques","hor","allocPct","tailleEur","liq","u","s"}],');
+  L.push('   → k=clé de la fiche déjà ouverte à mettre à jour (reprise du bloc opp du snapshot ; clé OMISE pour une fiche nouvelle) · type=watchlist/long/paire/couverture · these=la thèse · coh=cohérence avec l’exposition, calcul explicite vs profil et garde-fous · verdict=cohérente / sous conditions / incohérente · fin=ligne à alléger et montant si le coussin ou le levier l’imposent · conv=faible/moyenne/forte · prixRef=prix de référence · as=horodatage d’arrêté · valo=valorisation comparée · cata=catalyseurs · cataDate=catalyseur daté en ISO (future ou du jour) · allocPct=allocation cible en % de la valeur nette · liq=liquidité.');
+  L.push(' "margin":{"titres","cash","vl","risque","libre","as"}}');
+  L.push('   → titres=valeur des titres · vl=valeur liquidative · risque=risque du portefeuille · libre=marge disponible · as=heure LUE SUR la capture (jamais l’heure de l’appel). Bloc entièrement OMIS si la capture n’a pas été fournie.');
   L.push('');
   L.push('=== EXCLUSIONS ===');
   L.push('Aucune instruction de génération d’interface ou de code, de construction de glossaire, de refonte des indicateurs de discipline ni de livraison de fichier : rien de tout cela ne relève de cet appel. Ta sortie est UNIQUEMENT le JSON ci-dessus.');
