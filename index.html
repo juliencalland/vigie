@@ -437,6 +437,22 @@ const Cst_MaxTokens   = 128000;
 // SEUL abaissement autorisé, et automatique (voir Fn_LancerConsolidation) : jamais 1000, jamais 8000.
 const Cst_MaxTokensRepli = 64000;
 const Cst_ApiUrl      = 'https://api.anthropic.com/v1/messages';
+// OUTILS SERVEUR DE LA MAJ. La recherche seule ne rend que des extraits de
+// résultats : c'est ce qui expliquait qu'aucune page « Valorisation » ne soit
+// jamais lue (multiples, BPA, capitalisation absents 10 fois sur 14). La LECTURE
+// de page (web_fetch) permet d'ouvrir l'URL trouvée et d'y lire les tableaux.
+// Les versions 20260209 filtrent les résultats avant qu'ils n'entrent dans le
+// contexte : plus précises ET moins coûteuses que les précédentes.
+// Repli tracé si l'API refuse ces versions (voir Fn_LancerConsolidation).
+const Cst_OutilRecherche = 'web_search_20260209';
+const Cst_OutilRechercheRepli = 'web_search_20250305';
+const Cst_OutilLecture = 'web_fetch_20260209';
+// Plafonds : une page lue entre ENTIÈREMENT dans le contexte facturé. Sans
+// plafond, une vingtaine de pages financières suffirait à faire exploser
+// l'entrée — exactement l'inflation qu'on cherche à éviter.
+const Cst_MaxRecherches = 60;
+const Cst_MaxLectures = 40;
+const Cst_MaxJetonsParPage = 12000;
 const Cst_VersionEtat = 1;
 // Tarifs par défaut (USD) — préremplis, modifiables dans Paramètres → Accès API, à vérifier sur docs.claude.com
 const Cst_TarifsDefaut = { entreeParM: 5, sortieParM: 25, recherchePour1000: 10 };
@@ -3168,6 +3184,34 @@ function Fn_JaugeHtml(pct, segments) {
   return '<div class="jauge">' + segments.map(s => '<span class="jz jz-' + s.cls + '" style="width:' + s.w + '%"></span>').join('')
     + (pct != null ? '<span class="jauge-marq" style="left:' + Math.max(0, Math.min(100, pct)) + '%"></span>' : '') + '</div>';
 }
+/* COUVERTURE D'UN INDICATEUR — quelle part de sa base il a réellement mesurée.
+   La règle « un indicateur “—” est exclu du score, jamais compté zéro » ne suffisait
+   pas : un indicateur calculé sur une fraction de la base rend un verdict qui a
+   l'air net et qui est tout aussi faux qu'un zéro. Cas vécu : « tension de
+   valorisation » calculée sur UNE ligne de 2,6 % de la valeur nette (une seule
+   valorisation portait un référentiel), affichée « 0 % de la VN en valorisation
+   tendue » en VERT — les 97 % restants n'avaient simplement pas été mesurés.
+   Sous le plancher, l'indicateur redevient « — » et dit ce qui manque ; au-dessus,
+   il affiche la part qu'il couvre pour que le verdict se lise avec sa portée. */
+const Cst_CouvertureMin = 60; // % de la base en dessous duquel aucun verdict n'est rendu
+function Fn_Couverture(mesure, base) {
+  const m = Fn_Num(mesure), b = Fn_Num(base);
+  if (m == null || b == null || b <= 0) return null;
+  return Math.max(0, Math.min(100, m / b * 100));
+}
+// Applique le plancher à un indicateur en cours de construction. Renvoie l'objet
+// { zone, manquant, couverture } à répercuter, sans jamais toucher à la valeur :
+// elle reste affichée, c'est le VERDICT qui est retiré.
+function Fn_AppliquerCouverture(couv, zone, manquant, quoiManque) {
+  if (couv == null || couv >= Cst_CouvertureMin) return { zone, manquant, couverture: couv };
+  return {
+    zone: null,
+    couverture: couv,
+    manquant: (manquant ? manquant + ' · ' : '')
+      + quoiManque + ' — mesuré sur ' + Fn_FmtPct(couv, 0) + ' de la base seulement, sous le plancher de '
+      + Cst_CouvertureMin + ' % : aucun verdict n’est rendu sur une fraction aussi mince'
+  };
+}
 function Fn_IndicateursDiscipline() {
   const s = Var_State.seuils;
   const g = Fn_GrandeursMarge();
@@ -3182,16 +3226,17 @@ function Fn_IndicateursDiscipline() {
   // ---- BLOC COUVERTURE (prioritaire) ----
   // 1. Ratio de couverture par poche
   (function () {
-    let valeur = null, aff = '—', zone = null, manquant = null, extra = '';
+    let valeur = null, aff = '—', zone = null, manquant = null, extra = '', couverture = null;
     if (pasDePositions) manquant = manquePortefeuille;
     else if (!couvertures.length) manquant = 'aucune position classée COUVERTURE (indicateur sans objet tant qu’aucune couverture n’est détenue)';
     else {
-      const ratios = [];
+      const ratios = [], sansDonnee = [];
       couvertures.forEach(c => {
         const poche = Var_State.positions.filter(p => p !== c && (p.ticker === c.sousJacent || (c.sousJacent && p.sousJacent === c.sousJacent && p.categorie !== 'COUVERTURE')));
         const expo = poche.length && poche.every(p => Fn_Num(p.valeurEur) != null) ? poche.reduce((a, p) => a + Fn_Num(p.valeurEur), 0) : null;
         const delta = Fn_Num(c.deltaEur);
         if (delta != null && expo) ratios.push({ t: c.ticker, r: Math.abs(delta) / expo * 100 });
+        else sansDonnee.push(c.ticker + (delta == null ? ' (delta manquant)' : ' (exposition de la poche couverte inconnue)'));
       });
       if (!ratios.length) manquant = 'delta en € des couvertures et exposition des poches couvertes (fiches émetteur via MAJ)';
       else {
@@ -3199,10 +3244,17 @@ function Fn_IndicateursDiscipline() {
         const pire = ratios[0];
         valeur = pire.r; aff = Fn_FmtPct(pire.r, 0) + ' (' + pire.t + ')';
         zone = valeur < s.ratioCouvMin ? 'warn' : (valeur > s.ratioCouvMax ? 'crit' : 'ok');
-        extra = ratios.map(r => r.t + ' ' + Fn_FmtPct(r.r, 0)).join(' · ');
+        // Ici la base se compte en NOMBRE de couvertures : chacune protège une poche
+        // distincte, une couverture non mesurée est une poche dont on ignore l'état.
+        const c2 = Fn_AppliquerCouverture(Fn_Couverture(ratios.length, couvertures.length), zone,
+          null, ratios.length + ' couverture(s) mesurée(s) sur ' + couvertures.length);
+        zone = c2.zone; couverture = c2.couverture;
+        if (c2.manquant) manquant = c2.manquant;
+        extra = ratios.map(r => r.t + ' ' + Fn_FmtPct(r.r, 0)).join(' · ')
+          + (sansDonnee.length ? '<br>Hors calcul : ' + sansDonnee.map(Fn_Esc).join(', ') + '.' : '');
       }
     }
-    inds.push({ bloc: 'COUVERTURE', nom: 'Ratio de couverture par poche', valeurAff: aff, zone, manquant, extra,
+    inds.push({ bloc: 'COUVERTURE', nom: 'Ratio de couverture par poche', valeurAff: aff, zone, manquant, extra, couverture,
       jauge: Fn_JaugeHtml(valeur == null ? null : valeur / 2, [{ cls: 'warn', w: 35 }, { cls: 'ok', w: 20 }, { cls: 'crit', w: 45 }]),
       seuils: 'sous-couvert < ' + s.ratioCouvMin + ' % · neutre ' + s.ratioCouvMin + '–' + s.ratioCouvMax + ' % · sur-couvert > ' + s.ratioCouvMax + ' %',
       pratique: 'Une couverture > 100 % est un short net : il doit porter sa propre thèse, son invalidation et son horizon.' });
@@ -3280,7 +3332,7 @@ function Fn_IndicateursDiscipline() {
   // ---- BLOC TENDANCE FONDAMENTALE & VALORISATION ----
   // 5. Alignement position / fondamentaux
   (function () {
-    let aff = '—', zone = null, manquant = null, extra = '';
+    let aff = '—', zone = null, manquant = null, extra = '', couverture = null;
     if (pasDePositions) manquant = manquePortefeuille;
     else if (!convictions.length) manquant = 'aucune ligne classée CONVICTION';
     else {
@@ -3294,36 +3346,49 @@ function Fn_IndicateursDiscipline() {
         });
         aff = desalignees.length + ' désalignement(s) / ' + evaluees.length + ' ligne(s)';
         zone = desalignees.length === 0 ? 'ok' : (desalignees.length === 1 ? 'warn' : 'crit');
+        const c = Fn_AppliquerCouverture(Fn_Couverture(evaluees.length, convictions.length), zone,
+          null, evaluees.length + ' ligne(s) CONVICTION analysée(s) sur ' + convictions.length);
+        zone = c.zone; couverture = c.couverture;
+        if (c.manquant) manquant = c.manquant;
         if (desalignees.length) extra = 'À revoir (point de revue, pas une injonction) : ' + desalignees.map(p => Fn_Esc(p.ticker) + ' (' + Fn_Esc(p.sens === 'short' ? 'short sur fondamentaux en amélioration' : 'long sur fondamentaux en dégradation') + ')').join(' · ');
         if (evaluees.length < convictions.length) extra += (extra ? '<br>' : '') + 'Hors calcul : ' + convictions.filter(p => evaluees.indexOf(p) < 0).map(p => Fn_Esc(p.ticker)).join(', ') + ' — synthèse manquante.';
       }
     }
-    inds.push({ bloc: 'TENDANCE', nom: 'Alignement position / fondamentaux', valeurAff: aff, zone, manquant, extra,
+    inds.push({ bloc: 'TENDANCE', nom: 'Alignement position / fondamentaux', valeurAff: aff, zone, manquant, extra, couverture,
       jauge: '', seuils: '0 désalignement = vert · 1 = ambre · ≥ 2 = rouge',
       pratique: 'Un long sur fondamentaux en dégradation (ou un short sur amélioration) se documente : soit la thèse explique l’écart, soit la position est à revoir.' });
   })();
   // 6. Tension de valorisation
   (function () {
-    let valeur = null, aff = '—', zone = null, manquant = null, extra = '';
+    let valeur = null, aff = '—', zone = null, manquant = null, extra = '', couverture = null;
     if (pasDePositions) manquant = manquePortefeuille;
     else {
       const actions = Var_State.positions.filter(p => p.categorie !== 'COUVERTURE' && p.categorie !== 'SPÉCULATIF-LEVIER');
       const evaluables = [], horsCalcul = [];
+      let basePct = 0;
       actions.forEach(p => {
         const v = Var_State.valuation[p.ticker];
         const pct = Fn_Num(p.pctVN);
+        if (pct != null) basePct += pct;
         if (v && (v.valoTendue === true || v.valoTendue === false) && pct != null) evaluables.push({ p, tendue: v.valoTendue, pct });
         else horsCalcul.push(p.ticker + (pct == null ? ' (% VN manquant)' : ' (référentiel ou multiple manquant)'));
       });
       if (!evaluables.length) manquant = 'multiples et référentiels des lignes (consolidation via MAJ)' + (horsCalcul.length ? ' — hors calcul : ' + horsCalcul.join(', ') : '');
       else {
+        // La base est la VALEUR des lignes actions, pas leur nombre : une valorisation
+        // manquante sur la ligne la plus lourde ne pèse pas comme une petite ligne.
+        const pesee = evaluables.reduce((a, e) => a + e.pct, 0);
         valeur = evaluables.filter(e => e.tendue).reduce((a, e) => a + e.pct, 0);
         aff = Fn_FmtPct(valeur, 0) + ' de la VN en valorisation tendue';
         zone = valeur <= s.tensionValoVert ? 'ok' : (valeur > s.tensionValoRouge ? 'crit' : 'warn');
+        const c = Fn_AppliquerCouverture(Fn_Couverture(pesee, basePct), zone,
+          null, evaluables.length + ' ligne(s) valorisée(s) sur ' + actions.length);
+        zone = c.zone; couverture = c.couverture;
+        if (c.manquant) manquant = c.manquant;
         if (horsCalcul.length) extra = 'Hors calcul (exclues du score, jamais comptées zéro) : ' + horsCalcul.map(Fn_Esc).join(', ') + '.';
       }
     }
-    inds.push({ bloc: 'TENDANCE', nom: 'Tension de valorisation', valeurAff: aff, zone, manquant, extra,
+    inds.push({ bloc: 'TENDANCE', nom: 'Tension de valorisation', valeurAff: aff, zone, manquant, extra, couverture,
       jauge: Fn_JaugeHtml(valeur == null ? null : valeur, [{ cls: 'ok', w: s.tensionValoVert }, { cls: 'warn', w: Math.max(0, s.tensionValoRouge - s.tensionValoVert) }, { cls: 'crit', w: Math.max(0, 100 - s.tensionValoRouge) }]),
       seuils: 'vert ≤ ' + s.tensionValoVert + ' % · ambre ' + s.tensionValoVert + '–' + s.tensionValoRouge + ' % · rouge > ' + s.tensionValoRouge + ' % VN',
       pratique: 'Un multiple tendu se juge sur la révision des BNA : tendu + révisions en baisse = combinaison à documenter en priorité ; tendu + révisions en hausse peut se justifier, mais la thèse doit le dire.' });
@@ -3334,16 +3399,31 @@ function Fn_IndicateursDiscipline() {
     if (pasDePositions) manquant = manquePortefeuille;
     else if (!convictions.length) manquant = 'aucune ligne classée CONVICTION';
     else {
-      let pire = -1, jamais = [];
+      let pire = -1;
+      const jamais = [], perimees = [];
       const details = convictions.map(p => {
         const th = Var_State.theses[p.ticker];
         if (!th || !th.derniereRevue) { jamais.push(p.ticker); return Fn_Esc(p.ticker) + ' : jamais revue'; }
         const age = -Fn_JoursDepuis(th.derniereRevue);
         if (age > pire) pire = age;
-        return Fn_Esc(p.ticker) + ' : revue il y a ' + age + ' j' + (th.ecrite && th.invalidation && th.objectif ? '' : ' (check-list incomplète)');
+        // Une PUBLICATION DE RÉSULTATS postérieure à la revue périme la thèse. La
+        // consolidation le sait : le bloc expertise ne porte une revue d'analyste-
+        // comptable que lorsqu'une publication est intervenue. Sans ce lien,
+        // l'indicateur ne bougeait jamais entre deux clics de l'utilisateur — une
+        // MAJ pouvait rapporter des résultats sans que la fraîcheur en tienne compte.
+        const x = Var_State.expertise[p.ticker];
+        const dateExp = (x && Fn_Num(x.dateMaj) != null) ? Fn_DateISO(new Date(Fn_Num(x.dateMaj))) : null;
+        const perimee = !!(x && x.revueResultats && dateExp && dateExp > th.derniereRevue);
+        if (perimee) perimees.push(p.ticker);
+        return Fn_Esc(p.ticker) + ' : revue il y a ' + age + ' j'
+          + (perimee ? ' <b style="color:var(--crit)">— publication depuis</b>' : '')
+          + (th.ecrite && th.invalidation && th.objectif ? '' : ' (check-list incomplète)');
       });
-      extra = details.join(' · ') + '<br><span class="muted">Check-list par ligne (thèse écrite / invalidation / objectif) : onglet Cours &amp; tendances.</span>';
+      extra = details.join(' · ')
+        + (perimees.length ? '<br>Publication de résultats intervenue depuis votre dernière revue : <b>' + perimees.map(Fn_Esc).join(', ') + '</b> — la revue d’analyste figure sur la fiche de l’instrument (onglet Cours &amp; tendances), le compteur ne repart qu’après votre relecture.' : '')
+        + '<br><span class="muted">Check-list par ligne (thèse écrite / invalidation / objectif) : onglet Cours &amp; tendances. Seule votre relecture remet ce compteur à zéro — une consolidation ne revoit pas une thèse à votre place.</span>';
       if (jamais.length) { zone = 'crit'; aff = jamais.length + ' thèse(s) jamais revue(s)'; }
+      else if (perimees.length) { valeur = pire; zone = 'crit'; aff = perimees.length + ' thèse(s) périmée(s) par une publication'; }
       else { valeur = pire; aff = pire + ' j (revue la plus ancienne)'; zone = pire <= s.fraicheurTheseVert ? 'ok' : (pire > s.fraicheurTheseRouge ? 'crit' : 'warn'); }
     }
     inds.push({ bloc: 'TENDANCE', nom: 'Fraîcheur des thèses', valeurAff: aff, zone, manquant, extra,
@@ -3401,15 +3481,20 @@ function Fn_IndicateursDiscipline() {
   })();
   // 9b. Concentration par facteur
   (function () {
-    let valeur = null, aff = '—', zone = null, manquant = null, extra = '';
+    let valeur = null, aff = '—', zone = null, manquant = null, extra = '', couverture = null;
     if (pasDePositions) manquant = manquePortefeuille;
     else {
       const facteurs = {};
-      let incomplet = false;
+      let basePct = 0, classePct = 0;
+      const horsCalcul = [];
       Var_State.positions.forEach(p => {
         const pct = Fn_Num(p.pctVN);
-        if (!(p.facteurs || []).length) { incomplet = true; return; }
-        if (pct == null) { incomplet = true; return; }
+        if (pct != null) basePct += pct;
+        if (!(p.facteurs || []).length || pct == null) {
+          horsCalcul.push(p.ticker + (pct == null ? ' (% VN manquant)' : ' (facteur non identifié)'));
+          return;
+        }
+        classePct += pct;
         p.facteurs.forEach(f => { facteurs[f] = (facteurs[f] || 0) + pct; });
       });
       const cles = Object.keys(facteurs);
@@ -3419,10 +3504,15 @@ function Fn_IndicateursDiscipline() {
         valeur = facteurs[pire];
         aff = Fn_FmtPct(valeur, 0) + ' (facteur « ' + pire + ' »)';
         zone = valeur <= s.concFacteurVert ? 'ok' : (valeur > s.concFacteurRouge ? 'crit' : 'warn');
-        extra = cles.slice(0, 5).map(f => Fn_Esc(f) + ' ' + Fn_FmtPct(facteurs[f], 0)).join(' · ') + (incomplet ? ' · données partielles (lignes sans facteur ou sans % VN exclues)' : '');
+        const c = Fn_AppliquerCouverture(Fn_Couverture(classePct, basePct), zone,
+          null, 'lignes sans facteur identifié');
+        zone = c.zone; couverture = c.couverture;
+        if (c.manquant) manquant = c.manquant;
+        extra = cles.slice(0, 5).map(f => Fn_Esc(f) + ' ' + Fn_FmtPct(facteurs[f], 0)).join(' · ')
+          + (horsCalcul.length ? '<br>Hors calcul : ' + horsCalcul.map(Fn_Esc).join(', ') + '.' : '');
       }
     }
-    inds.push({ bloc: 'STRUCTURE', nom: 'Concentration par facteur', valeurAff: aff, zone, manquant, extra,
+    inds.push({ bloc: 'STRUCTURE', nom: 'Concentration par facteur', valeurAff: aff, zone, manquant, extra, couverture,
       jauge: Fn_JaugeHtml(valeur == null ? null : valeur / 60 * 100, [{ cls: 'ok', w: s.concFacteurVert / 60 * 100 }, { cls: 'warn', w: Math.max(0, (s.concFacteurRouge - s.concFacteurVert) / 60 * 100) }, { cls: 'crit', w: Math.max(0, 100 - s.concFacteurRouge / 60 * 100) }]),
       seuils: 'vert ≤ ' + s.concFacteurVert + ' % · rouge > ' + s.concFacteurRouge + ' % VN (échelle 0–60 %)',
       pratique: 'Des lignes corrélées constituent UNE exposition : le facteur se pilote comme une position unique.' });
@@ -3483,7 +3573,7 @@ function Fn_IndicateursDiscipline() {
   })();
   // 12. Liquidité
   (function () {
-    let valeur = null, aff = '—', zone = null, manquant = null, extra = '';
+    let valeur = null, aff = '—', zone = null, manquant = null, extra = '', couverture = null;
     if (pasDePositions) manquant = manquePortefeuille;
     else {
       const evaluees = Var_State.positions.filter(p => p.liquiditeFaible === true || p.liquiditeFaible === false);
@@ -3493,15 +3583,20 @@ function Fn_IndicateursDiscipline() {
         const faibles = evaluees.filter(p => p.liquiditeFaible === true);
         if (!faibles.every(p => Fn_Num(p.pctVN) != null)) manquant = '% VN des lignes peu liquides';
         else {
+          const somme = liste => liste.reduce((a, p) => a + (Fn_Num(p.pctVN) || 0), 0);
           valeur = faibles.reduce((a, p) => a + Fn_Num(p.pctVN), 0);
           aff = Fn_FmtPct(valeur, 0) + ' de la VN à faible profondeur';
           zone = valeur <= s.liquiditeVert ? 'ok' : (valeur > s.liquiditeRouge ? 'crit' : 'warn');
+          const c = Fn_AppliquerCouverture(Fn_Couverture(somme(evaluees), somme(Var_State.positions)), zone,
+            null, evaluees.length + ' ligne(s) jaugée(s) sur ' + Var_State.positions.length);
+          zone = c.zone; couverture = c.couverture;
+          if (c.manquant) manquant = c.manquant;
           if (faibles.length) extra = 'Lignes concernées : ' + faibles.map(p => Fn_Esc(p.ticker)).join(', ') + '.';
           if (horsCalcul.length) extra += (extra ? '<br>' : '') + 'Hors calcul : ' + horsCalcul.map(p => Fn_Esc(p.ticker)).join(', ') + ' — donnée ADV manquante.';
         }
       }
     }
-    inds.push({ bloc: 'STRUCTURE', nom: 'Liquidité (capacité de sortie 1–2 séances)', valeurAff: aff, zone, manquant, extra,
+    inds.push({ bloc: 'STRUCTURE', nom: 'Liquidité (capacité de sortie 1–2 séances)', valeurAff: aff, zone, manquant, extra, couverture,
       jauge: Fn_JaugeHtml(valeur == null ? null : valeur * 2, [{ cls: 'ok', w: s.liquiditeVert * 2 }, { cls: 'warn', w: Math.max(0, (s.liquiditeRouge - s.liquiditeVert) * 2) }, { cls: 'crit', w: Math.max(0, 100 - s.liquiditeRouge * 2) }]),
       seuils: 'vert ≤ ' + s.liquiditeVert + ' % · rouge > ' + s.liquiditeRouge + ' % VN (échelle 0–50 %)',
       pratique: 'La liquidité se dimensionne sur la sortie, pas sur l’entrée : une ligne qu’on ne peut solder en 1–2 séances sans peser sur le cours est structurellement plus risquée.' });
@@ -3533,8 +3628,17 @@ function Fn_RenderDiscipline() {
   const chantiers = inds.filter(i => i.zone === 'crit').concat(inds.filter(i => i.zone === 'warn')).slice(0, 2);
   let h = '<div class="carte"><div class="carte-titre">Score de discipline</div><div class="score-rang">'
     + '<div class="score-val" style="color:var(' + (score == null ? '--muted' : score >= 70 ? '--ok' : score >= 40 ? '--warn' : '--crit') + ')">' + (score == null ? '—' : score) + '<span class="petit muted">/100</span></div>'
-    + '<div class="petit"><div>Pondérations affichées : Couverture ' + Cst_PoidsBlocs.COUVERTURE + ' % · Tendances ' + Cst_PoidsBlocs.TENDANCE + ' % · Structure ' + Cst_PoidsBlocs.STRUCTURE + ' % (réparties entre les indicateurs calculables de chaque bloc).</div>'
-    + '<div class="tres-petit muted">' + calculables.length + ' indicateur(s) calculable(s) sur ' + inds.filter(i => !i.horsScore).length + ' — les indicateurs « — » (donnée manquante) sont EXCLUS du score, jamais comptés zéro.</div></div></div>';
+    // Pondérations RÉELLEMENT appliquées : un bloc sans aucun indicateur calculable
+    // sort du calcul et son poids se redistribue. Afficher 45 % pour un bloc
+    // Couverture entièrement à « — » laissait croire à un score qui en tient compte.
+    + '<div class="petit"><div>Pondérations appliquées : ' + Object.keys(Cst_PoidsBlocs).map(b => {
+      const n = calculables.filter(i => i.bloc === b).length;
+      const total = Object.keys(Cst_PoidsBlocs).reduce((a, x) => a + (calculables.some(i => i.bloc === x) ? Cst_PoidsBlocs[x] : 0), 0);
+      const eff = n ? Math.round(Cst_PoidsBlocs[b] / total * 100) : 0;
+      return b.charAt(0) + b.slice(1).toLowerCase() + ' <b>' + eff + ' %</b>'
+        + (n ? '' : ' <span class="muted">(aucun indicateur calculable — poids redistribué)</span>');
+    }).join(' · ') + '.</div>'
+    + '<div class="tres-petit muted">' + calculables.length + ' indicateur(s) calculable(s) sur ' + inds.filter(i => !i.horsScore).length + ' — les indicateurs « — » (donnée manquante) et ceux mesurés sur moins de ' + Cst_CouvertureMin + ' % de leur base sont EXCLUS du score, jamais comptés zéro.</div></div></div>';
   if (chantiers.length) {
     h += '<hr class="sep"><div class="petit"><b>Chantiers prioritaires :</b> ' + chantiers.map(c => '<span class="pastille p-' + c.zone + '"></span>' + Fn_Esc(c.nom)).join(' · ') + '</div>';
   } else if (score != null) {
@@ -3553,6 +3657,11 @@ function Fn_RenderDiscipline() {
         + '<div class="ind-valeur"' + (i.zone ? ' style="color:var(--' + (i.zone === 'ok' ? 'ok' : i.zone === 'warn' ? 'warn' : 'crit') + ')"' : '') + '>' + Fn_Gloss(Fn_Esc(i.valeurAff)) + '</div>'
         + (i.jauge || '')
         + '<div class="ind-seuils">' + Fn_Esc(i.seuils) + '</div>'
+        // La PORTÉE du verdict se lit à côté du verdict : un chiffre mesuré sur une
+        // fraction de la base n'est pas faux, il est partiel — et doit le dire.
+        + (i.couverture != null && i.couverture < 100
+          ? '<div class="petit" style="margin-top:4px"><span class="badge badge-' + (i.couverture < Cst_CouvertureMin ? 'crit' : 'warn') + '">mesuré sur ' + Fn_Esc(Fn_FmtPct(i.couverture, 0)) + ' de la base</span></div>'
+          : '')
         + (i.manquant ? '<div class="petit muted" style="margin-top:4px">Donnée manquante : ' + Fn_Gloss(Fn_Esc(i.manquant)) + ' — indicateur exclu du score.</div>' : '')
         + (i.extra ? '<div class="petit" style="margin-top:4px">' + Fn_Gloss(i.extra) + '</div>' : '')
         + '<div class="svap">' + Fn_HtmlSvap('prat', i.pratique) + '</div>'
@@ -3854,10 +3963,11 @@ function Fn_BuildPromptMAJ(ctx) {
   L.push('MISSION 2 — COLLECTE ET CONSOLIDATION des données de marché pour CHAQUE instrument du bloc inst (positions, sous-jacents, instruments suivis). Source privilégiée : les pages publiques Zone Bourse (zonebourse.com). EXHAUSTIVITÉ EXIGÉE : chaque champ listé ci-dessous est à chercher explicitement — un champ omis sera lu comme « introuvable », il ne se rattrape pas au tour suivant. Une valeur non trouvée s’omet (voir ÉCONOMIE) ; elle ne s’invente jamais.');
   L.push('  PROTOCOLE DE COLLECTE (à appliquer instrument par instrument, sans exception) :');
   L.push('   1. LE RELEVÉ N’EST PAS UNE COTATION. Le prix imprimé sur le relevé du courtier est une valorisation d’inventaire, pas un cours de marché : il ne porte ni variation, ni ouverture, ni volume, ni horodatage de séance. Le reprendre en last est une NON-COLLECTE. Le cours de séance se lit sur une page de cotation, et l’écart éventuel avec le relevé se signale dans analysis (mission 3).');
-  L.push('   2. Pour chaque instrument, DEUX recherches distinctes au minimum : (a) sa page de COTATION — cours, variation, ouverture, haut, bas, clôture précédente, volume, ADV, 52 semaines, et la cotation hors séance si la place est fermée ; (b) sa page de VALORISATION — les multiples, le BPA et les agrégats de la liste (e). Une seule requête générale du type « X cours action » ne rapporte ni multiples, ni BPA, ni volumes : elle ne suffit pas. Une troisième requête est due pour l’agenda et le consensus s’ils ne figurent pas sur les deux premières.');
-  L.push('   3. Un produit à levier compte pour SON SOUS-JACENT : ses multiples sont ceux du sous-jacent, sa fiche émetteur fournit barrière, parité, delta et portage. Ne consomme pas de recherche pour chercher un PER au turbo lui-même.');
-  L.push('   4. Si la page de valorisation reste introuvable ou illisible APRÈS l’avoir cherchée, dis-le dans note en nommant ce qui a été tenté. Une note de ce type sans recherche correspondante dans le journal est une faute : l’omission n’est légitime qu’après avoir réellement cherché.');
-  L.push('   5. Ordre de priorité si le temps manque : cotations complètes de toutes les lignes détenues D’ABORD, puis valorisation des lignes les plus lourdes en % de la valeur nette, puis le reste. Ne sacrifie jamais les cotations pour produire davantage de texte.');
+  L.push('   2. TU DISPOSES DE DEUX OUTILS, ET LE SECOND EST CELUI QUI RAPPORTE LES CHIFFRES : la RECHERCHE rend des extraits de résultats — jamais un tableau de valorisation — tandis que la LECTURE DE PAGE ouvre une URL et te donne son contenu. Les multiples, le BPA, la capitalisation, les volumes et les bornes de séance vivent DANS les pages, pas dans les extraits. Enchaîne donc systématiquement : chercher la page → LIRE la page → relever les chiffres. Une URL doit être apparue dans la conversation (donc dans un résultat de recherche) avant de pouvoir être lue.');
+  L.push('   3. Pour chaque instrument, au minimum : (a) ouvrir sa page de COTATION — cours, variation, ouverture, haut, bas, clôture précédente, volume, ADV, 52 semaines, et la cotation hors séance si la place est fermée ; (b) ouvrir sa page de VALORISATION — les multiples, le BPA et les agrégats de la liste (e). Une requête générale du type « X cours action » sans lecture de page ne rapporte ni multiples, ni BPA, ni volumes : elle ne suffit pas. L’agenda et le consensus se lisent sur ces mêmes pages ou sur une troisième.');
+  L.push('   4. Un produit à levier compte pour SON SOUS-JACENT : ses multiples sont ceux du sous-jacent, sa fiche émetteur fournit barrière, parité, delta et portage. Ne consomme pas d’appel pour chercher un PER au turbo lui-même.');
+  L.push('   5. Si la page de valorisation reste introuvable ou illisible APRÈS l’avoir cherchée ET tenté de la lire, dis-le dans note en nommant ce qui a été tenté. Une note de ce type sans lecture correspondante est une faute : l’omission n’est légitime qu’après avoir réellement ouvert la page.');
+  L.push('   6. Ordre de priorité si le temps manque : cotations complètes de toutes les lignes détenues D’ABORD, puis valorisation des lignes les plus lourdes en % de la valeur nette, puis le reste. Ne sacrifie jamais les cotations pour produire davantage de texte.');
   L.push('  (a) COTATIONS (bloc quotes) — pré-ouverture (pre), variation de la pré-ouverture en % (preVar) et son heure (preAs) ; dernier cours de séance (last) et sa variation en % (var) ; ouverture (ouv), plus haut (haut) et plus bas (bas) de la séance, clôture de la veille (clotPrec) ; après-clôture (post), sa variation en % (postVar) et son heure (postAs) ; volume du jour (vol) et volume moyen quotidien sur 3 mois (adv, en TITRES — il dimensionne la capacité de sortie) ; plus haut et plus bas de 52 semaines (h52, b52) ; devise de cotation (dev) et place (place). La RÈGLE HORS-HORAIRES ci-dessus s’applique : si la place est fermée, la valeur pertinente du moment (pré-ouverture ou après-clôture) est OBLIGATOIRE en plus du dernier cours de séance — « dernier cours de clôture » seul est une réponse incomplète.');
   L.push('  (b) AGENDA de la société (bloc fundamentals) — prochaine publication en clair (pub) ET sa date en ISO AAAA-MM-JJ (pubDate) quand elle est connue.');
   L.push('  (c) CONSENSUS (bloc fundamentals) — recommandation agrégée avec sa répartition (conso), nombre d’analystes (nbA), objectif de cours moyen (obj), écart en % au dernier cours (objEcart), objectifs le plus haut et le plus bas (objHaut, objBas).');
@@ -4356,20 +4466,36 @@ async function Fn_LancerConsolidation() {
       entetes['anthropic-version'] = '2023-06-01';
       entetes['anthropic-dangerous-direct-browser-access'] = 'true';
     }
-    const outilRecherche = { type: 'web_search_20250305', name: 'web_search' };
+    // Deux outils serveur : CHERCHER une page, puis la LIRE. Sans le second, le
+    // modèle ne voyait que des extraits de résultats — d'où les pages
+    // « Valorisation » jamais ouvertes et les multiples manquants.
+    // Ne JAMAIS déclarer code_execution à côté : les versions 20260209 s'en
+    // servent déjà en interne, et un second environnement d'exécution perturbe
+    // le modèle.
+    const outilRecherche = { type: Cst_OutilRecherche, name: 'web_search', max_uses: Cst_MaxRecherches };
+    const outilLecture = { type: Cst_OutilLecture, name: 'web_fetch', max_uses: Cst_MaxLectures, max_content_tokens: Cst_MaxJetonsParPage };
+    let outils = [outilRecherche, outilLecture];
     let domaines = sitesAutorises.slice();
-    if (domaines.length) outilRecherche.allowed_domains = domaines;
-    Fn_Phase(journal, 'envoi', 'ok', 'Requête envoyée (' + Cst_ModeleMAJ + ', effort ' + Cst_EffortMAJ + ', plafond ' + Fn_FmtNb(Cst_MaxTokens, 0) + ' jetons' + (mode.mode === 'byok' ? ', flux SSE' : ', pont d’artefact') + (domaines.length ? ', recherche limitée à ' + domaines.length + ' site(s)' : ', recherche libre') + ')');
+    // La restriction de domaines vaut pour les DEUX outils : autoriser la
+    // recherche sur un site sans autoriser sa lecture ne servirait à rien.
+    const appliquerDomaines = () => {
+      outils.forEach(o => {
+        if (domaines.length) o.allowed_domains = domaines;
+        else delete o.allowed_domains;
+      });
+    };
+    appliquerDomaines();
+    Fn_Phase(journal, 'envoi', 'ok', 'Requête envoyée (' + Cst_ModeleMAJ + ', effort ' + Cst_EffortMAJ + ', plafond ' + Fn_FmtNb(Cst_MaxTokens, 0) + ' jetons' + (mode.mode === 'byok' ? ', flux SSE' : ', pont d’artefact') + ', recherche + lecture de page (max ' + Cst_MaxRecherches + ' recherches, ' + Cst_MaxLectures + ' pages de ' + Fn_FmtNb(Cst_MaxJetonsParPage, 0) + ' jetons)' + (domaines.length ? ', limitées à ' + domaines.length + ' site(s)' : ', web libre') + ')');
     let texte = '', totalEntree = 0, totalSortie = 0, totalRech = 0, stopReason = null, continuations = 0;
     // Repli automatique et TRACÉ (jamais un abaissement choisi) : le plafond de sortie et le
     // paramètre d'effort varient d'un modèle à l'autre — plutôt qu'échouer, on réessaie une fois.
-    let plafond = Cst_MaxTokens, effort = Cst_EffortMAJ, repliPlafond = false, repliEffort = false, repliDomaines = 0;
+    let plafond = Cst_MaxTokens, effort = Cst_EffortMAJ, repliPlafond = false, repliEffort = false, repliDomaines = 0, repliOutils = false;
     for (;;) {
       const corps = {
         model: Cst_ModeleMAJ,
         max_tokens: plafond, // plafond maximal du modèle — la troncature ne doit jamais venir d'un plafond choisi trop bas
         thinking: { type: 'adaptive' },
-        tools: [outilRecherche],
+        tools: outils,
         messages: messagesApi
       };
       if (effort) corps.output_config = { effort: effort };
@@ -4385,6 +4511,16 @@ async function Fn_LancerConsolidation() {
         if (!repliEffort && effort && /output_config|effort/i.test(msgP)) {
           repliEffort = true; effort = null;
           Fn_Phase(journal, 'envoi', 'en cours', 'Paramètre d’effort refusé par l’API (' + Cst_ModeleMAJ + ') — nouvelle tentative sans output_config');
+          continue;
+        }
+        // Versions d'outils refusées : plutôt que d'échouer, on repart avec la
+        // recherche seule, en ancienne version — dégradé mais fonctionnel, et
+        // dit dans le journal pour que la baisse de qualité ne passe pas inaperçue.
+        if (!repliOutils && /tool|web_search|web_fetch/i.test(msgP) && /not (a )?(valid|supported)|unknown|unsupported|invalid/i.test(msgP)) {
+          repliOutils = true;
+          outils = [{ type: Cst_OutilRechercheRepli, name: 'web_search', max_uses: Cst_MaxRecherches }];
+          appliquerDomaines();
+          Fn_Phase(journal, 'envoi', 'en cours', 'Outils de recherche refusés par l’API — repli sur la recherche simple (' + Cst_OutilRechercheRepli + ') SANS lecture de page : les multiples et le BPA risquent de manquer');
           continue;
         }
         if (!repliPlafond && plafond > Cst_MaxTokensRepli && /max_tokens/i.test(msgP)) {
@@ -4404,13 +4540,13 @@ async function Fn_LancerConsolidation() {
           if (refuses.length && refuses.length < domaines.length) {
             Var_State.sitesBloques = (Var_State.sitesBloques || []).concat(refuses.filter(d => (Var_State.sitesBloques || []).indexOf(d) < 0));
             domaines = domaines.filter(d => refuses.indexOf(d) < 0);
-            outilRecherche.allowed_domains = domaines;
+            appliquerDomaines();
             reecrireTexte(domaines);
             Fn_Phase(journal, 'envoi', 'en cours', 'Domaine(s) refusé(s) par l’outil de recherche (leur éditeur bloque les agents automatiques) : ' + refuses.join(', ') + ' — retirés et mémorisés, nouvelle tentative sur ' + domaines.length + ' site(s)');
           } else {
             if (refuses.length) Var_State.sitesBloques = (Var_State.sitesBloques || []).concat(refuses.filter(d => (Var_State.sitesBloques || []).indexOf(d) < 0));
             domaines = [];
-            delete outilRecherche.allowed_domains;
+            appliquerDomaines();
             reecrireTexte([]);
             Fn_Phase(journal, 'envoi', 'en cours', 'Tous les sites cochés sont refusés par l’outil de recherche' + (refuses.length ? ' (' + refuses.join(', ') + ')' : ' (l’API ne les nomme pas)') + ' — nouvelle tentative en RECHERCHE LIBRE sur tout le web');
           }
