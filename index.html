@@ -1134,6 +1134,46 @@ function Fn_BadgeAge(ts) {
   const a = Fn_Age(ts);
   return a ? '<span class="badge badge-' + a.cls + '">' + Fn_Esc(a.txt) + '</span>' : '';
 }
+// DATE PORTÉE PAR LA COTATION ELLE-MÊME. `asOf` est du texte libre écrit par la
+// consolidation (« 30/07/26 09:40 », « 28/07/26 (dernier cours publié) ») : on en
+// extrait la date. C'est ELLE qui dit si le cours est à jour — surtout pas
+// `dateMaj`, qui est l'heure de l'APPEL et vaut donc toujours « aujourd'hui ».
+// Bug vécu : un cours vieux de 23 jours s'affichait avec un badge « du jour »,
+// ce qui rendait la péremption invisible à l'écran.
+function Fn_DateCotation(q) {
+  const m = /(\d{2})\/(\d{2})\/(\d{2})/.exec(String((q && q.asOf) || ''));
+  return m ? ('20' + m[3] + '-' + m[2] + '-' + m[1]) : null;
+}
+// Tolérance en JOURS CALENDAIRES : un lundi, la dernière clôture a trois jours
+// et c'est normal. L'ambre commence donc à 2 jours et le rouge à 5, plutôt que
+// de prétendre connaître le calendrier de chaque place.
+function Fn_BadgeFraicheurCours(q) {
+  if (!q) return '';
+  const iso = Fn_DateCotation(q);
+  if (!iso) return '<span class="badge badge-warn">date du cours non lue</span>';
+  const j = -Fn_JoursDepuis(iso);
+  if (j == null) return '';
+  if (j <= 0) {
+    // Même jour ne veut pas dire à jour : un instantané de 09 h 40 relevé à
+    // 22 h 26 a douze heures de retard et la clôture existe. Heuristique
+    // assumée, calée pour ne pas se déclencher à tort : aucune clôture de place
+    // européenne ou américaine n'est antérieure de plus de 7 h à une MAJ du
+    // soir (Xetra 17 h 35 vs 22 h 26 = 4 h 51), alors qu'un instantané de
+    // milieu de séance l'est largement. Ambre, pas rouge : c'est un doute.
+    const hq = /(\d{2}):(\d{2})/.exec(String(q.asOf || ''));
+    const ecart = (hq && Fn_Num(q.dateMaj) != null)
+      ? (new Date(Fn_Num(q.dateMaj)).getHours() * 60 + new Date(Fn_Num(q.dateMaj)).getMinutes())
+        - (Number(hq[1]) * 60 + Number(hq[2]))
+      : null;
+    if (ecart != null && ecart > 420) {
+      return '<span class="badge badge-warn">instantané de ' + Fn_Esc(hq[0]) + ' — séance close depuis, clôture non récupérée</span>';
+    }
+    return '<span class="badge badge-neutre">cours du jour</span>';
+  }
+  if (j === 1) return '<span class="badge badge-neutre">cours de la veille</span>';
+  return '<span class="badge badge-' + (j >= 5 ? 'crit' : 'warn') + '">cours du '
+    + Fn_Esc(Fn_FmtDateCourt(iso)) + ' — ' + j + ' j de retard</span>';
+}
 // Mise en puces d'un texte à alternatives (« si X → A ; si Y → B »). PRÉSENTATION
 // SEULE : le texte stocké n'est jamais modifié, et un texte qui ne s'y prête pas
 // (une seule proposition, ou des fragments trop courts pour être des alternatives)
@@ -3073,7 +3113,12 @@ function Fn_HtmlProduitLevier(pos) {
   if (cours != null && bar != null && cours !== 0) {
     const d = (pos.sens === 'short' ? (bar - cours) : (cours - bar)) / cours * 100;
     const z = Fn_ZoneSeuil(d, Var_State.seuils.barriereVert, Var_State.seuils.barriereRouge, 'bas');
-    champs.push(['distance à la barrière', Fn_FmtPct(d) + ' [calcul]', z]);
+    // La distance vaut ce que vaut le cours qui la produit : un sous-jacent coté
+    // il y a trois jours donne une distance de trois jours. La date du cours
+    // utilisé est donc affichée AVEC le résultat, jamais séparément.
+    const isoQ = Fn_DateCotation(qs);
+    champs.push(['distance à la barrière', Fn_FmtPct(d) + ' [calcul sur le cours du '
+      + (isoQ ? Fn_FmtDateCourt(isoQ) : 'sous-jacent, date inconnue') + ']', z]);
   }
   add('strike', Fn_FmtNb(pos.strike, 2));
   add('ratio/parité', pos.ratioParite == null ? null : String(pos.ratioParite));
@@ -3107,7 +3152,7 @@ function Fn_HtmlInstrumentCarte(inst) {
   // Cotation : les trois moments de la journée boursière se lisent ENSEMBLE, chacun
   // avec sa variation propre et son heure. Un cours de pré-ouverture sans horodatage
   // ne se distingue pas de celui de la veille — l'heure fait partie de la donnée.
-  h += '<div class="cours-ligne"><span class="lib">Cotation ' + Fn_BadgeAge(q && q.dateMaj) + '</span>'
+  h += '<div class="cours-ligne"><span class="lib">Cotation ' + Fn_BadgeFraicheurCours(q) + '</span>'
     + Fn_HtmlCotation(q)
     + (q && (q.asOf || q.src || q.url)
       ? '<span class="src">' + Fn_Esc([q.asOf, q.src].filter(Boolean).join(' · ')) + ' [consolidation]'
@@ -3962,6 +4007,7 @@ function Fn_BuildPromptMAJ(ctx) {
   L.push('MISSION 1 — EXTRACTION des documents joints : positions, ordres en attente, transactions récentes, bloc de marge. Restitue-les dans les blocs positions / orders / trades / margin du schéma final, avec pour chaque position sa CLASSIFICATION (voir taxonomie ci-dessous), sa devise, son % de la valeur nette (pctVN, calculé sur la valeur liquidative si l’aperçu de marge est fourni, sinon sur la somme des positions en le marquant), et pour les produits dérivés : sous-jacent, sens, levier, barrière, strike, ratio/parité, delta en €, portage mensuel estimé (fiche émetteur), facteurs de risque, liqFaible (capacité de sortie en 1-2 séances au regard de l’ADV). Le champ releve reprend l’horodatage imprimé sur le relevé.');
   L.push('MISSION 2 — COLLECTE ET CONSOLIDATION des données de marché pour CHAQUE instrument du bloc inst (positions, sous-jacents, instruments suivis). Source privilégiée : les pages publiques Zone Bourse (zonebourse.com). EXHAUSTIVITÉ EXIGÉE : chaque champ listé ci-dessous est à chercher explicitement — un champ omis sera lu comme « introuvable », il ne se rattrape pas au tour suivant. Une valeur non trouvée s’omet (voir ÉCONOMIE) ; elle ne s’invente jamais.');
   L.push('  PROTOCOLE DE COLLECTE (à appliquer instrument par instrument, sans exception) :');
+  L.push('   0. FRAÎCHEUR — CRITÈRE DE REJET, à vérifier AVANT de retenir un cours. Le champ last doit porter le dernier cours de la séance EN COURS, ou la clôture de la DERNIÈRE séance close. Sont des échecs de collecte, pas des valeurs acceptables : un instantané pris plus tôt dans la journée alors que la séance est terminée (« 09 h 40 » relevé à 22 h : la clôture de 17 h 35 existe, va la chercher) ; un cours de la veille ou d’avant quand la séance du jour a eu lieu ; un cours dont tu ne peux pas dater la séance. Un extrait de résultat de recherche porte la date de l’INDEXATION, pas celle du marché — c’est précisément pourquoi il faut OUVRIR la page. Si une source ne donne qu’un instantané ancien, change de source : essaies-en au moins deux avant d’abandonner. Si après cela la cotation du jour reste introuvable, rends le dernier cours réellement trouvé, mets sa VRAIE date dans as, et dis-le dans s (« clôture du JJ/MM/AA non publiée sur les N sources consultées ») — ne présente JAMAIS un cours ancien comme le cours courant. Le champ as porte toujours la date et l’heure DU COURS, jamais celles de l’appel : l’application compare les deux et affiche le retard.');
   L.push('   1. LE RELEVÉ N’EST PAS UNE COTATION. Le prix imprimé sur le relevé du courtier est une valorisation d’inventaire, pas un cours de marché : il ne porte ni variation, ni ouverture, ni volume, ni horodatage de séance. Le reprendre en last est une NON-COLLECTE. Le cours de séance se lit sur une page de cotation, et l’écart éventuel avec le relevé se signale dans analysis (mission 3).');
   L.push('   2. TU DISPOSES DE DEUX OUTILS, ET LE SECOND EST CELUI QUI RAPPORTE LES CHIFFRES : la RECHERCHE rend des extraits de résultats — jamais un tableau de valorisation — tandis que la LECTURE DE PAGE ouvre une URL et te donne son contenu. Les multiples, le BPA, la capitalisation, les volumes et les bornes de séance vivent DANS les pages, pas dans les extraits. Enchaîne donc systématiquement : chercher la page → LIRE la page → relever les chiffres. Une URL doit être apparue dans la conversation (donc dans un résultat de recherche) avant de pouvoir être lue.');
   L.push('   3. Pour chaque instrument, au minimum : (a) ouvrir sa page de COTATION — cours, variation, ouverture, haut, bas, clôture précédente, volume, ADV, 52 semaines, et la cotation hors séance si la place est fermée ; (b) ouvrir sa page de VALORISATION — les multiples, le BPA et les agrégats de la liste (e). Une requête générale du type « X cours action » sans lecture de page ne rapporte ni multiples, ni BPA, ni volumes : elle ne suffit pas. L’agenda et le consensus se lisent sur ces mêmes pages ou sur une troisième.');
