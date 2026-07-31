@@ -1,7 +1,7 @@
 'use strict';
 // Service worker Vigie — coquille en cache (hors ligne), réseau d'abord pour la page.
 // N'intercepte JAMAIS les autres origines (api.anthropic.com, api.github.com).
-const CACHE = 'vigie-202607302055';
+const CACHE = 'vigie-202607311723';
 const COQUILLE = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(COQUILLE)).then(() => self.skipWaiting()));

@@ -426,6 +426,10 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 /* ================================================================
    CONSTANTES
    ================================================================ */
+// Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
+// détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
+// pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
+const Cst_Version = 'vigie-202607311723';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -518,12 +522,18 @@ const Cst_SitesRecherche = [
     { d: 'morningstar.fr', n: 'Morningstar — analyse actions et fonds' },
     { d: 'tradingview.com', n: 'TradingView — graphiques et analyse technique' }
   ] },
+  // `bloque` : domaine dont l'éditeur refuse l'agent de l'outil de recherche.
+  // Ces quatre-là sont nommés noir sur blanc par l'API (« The following domains
+  // are not accessible to our user agent »), erreur 400 qui faisait échouer la
+  // consolidation ENTIÈRE avant la moindre recherche. Marqués d'avance plutôt
+  // qu'appris au prix d'un échec ; le repli automatique reste en place pour ceux
+  // que l'API ajouterait à sa liste plus tard.
   { cat: 'Presse financière', sites: [
-    { d: 'lesechos.fr', n: 'Les Échos / Investir' },
-    { d: 'reuters.com', n: 'Reuters — agence de presse' },
+    { d: 'lesechos.fr', n: 'Les Échos / Investir', bloque: true },
+    { d: 'reuters.com', n: 'Reuters — agence de presse', bloque: true },
     { d: 'bloomberg.com', n: 'Bloomberg', abo: true },
-    { d: 'ft.com', n: 'Financial Times', abo: true },
-    { d: 'barrons.com', n: 'Barron’s', abo: true }
+    { d: 'ft.com', n: 'Financial Times', abo: true, bloque: true },
+    { d: 'barrons.com', n: 'Barron’s', abo: true, bloque: true }
   ] },
   { cat: 'Sources primaires et régulateurs', sites: [
     { d: 'sec.gov', n: 'SEC — dépôts réglementaires américains (10-K, 8-K)' },
@@ -706,6 +716,48 @@ function Fn_CloturerBilan(journal) {
     + rech / 1000 * (Fn_Num(t.recherchePour1000) || 0);
   const c = Var_State.cumulApi;
   c.appels++; c.jetonsEntree += entree; c.jetonsSortie += sortie; c.recherches += rech; c.coutUsd += journal.coutUsd;
+}
+/* ----------------------------------------------------------------
+   VERSION EXÉCUTÉE vs VERSION PUBLIÉE
+   Le service worker sert la page « réseau d'abord », mais uniquement lors d'une
+   NAVIGATION. Un onglet laissé ouvert ne navigue jamais : il continue d'exécuter
+   le code chargé au premier affichage, indéfiniment, sans le moindre signe.
+   Cas vécu : trois publications successives ignorées pendant deux heures, des MAJ
+   à plus de 2 $ lancées sur du code périmé, et des résultats attribués à tort aux
+   corrections qui n'avaient jamais été chargées.
+   On relit donc sw.js par le réseau (même origine, jamais mis en cache) et on
+   compare son CACHE à notre propre estampille. Tout échec est absorbé : hors
+   ligne, en file:// ou en artefact, il n'y a simplement rien à signaler.
+   ---------------------------------------------------------------- */
+function Fn_VerifierVersion() {
+  const rt = Var_State._runtime;
+  if (Cst_Version === 'dev' || typeof fetch !== 'function') return Promise.resolve(null);
+  return fetch('sw.js?v=' + Date.now(), { cache: 'no-store' })
+    .then(r => (r.ok ? r.text() : ''))
+    .then(txt => {
+      const m = /const CACHE\s*=\s*'([^']+)'/.exec(txt || '');
+      rt.versionPubliee = m ? m[1] : null;
+      if (rt.versionPubliee && rt.versionPubliee !== Cst_Version) {
+        Fn_RenderMajPanel();
+        Fn_RenderEntete();
+      }
+      return rt.versionPubliee;
+    })
+    .catch(() => null); // hors ligne / file:// / artefact : rien à dire
+}
+function Fn_VersionPerimee() {
+  const p = Var_State._runtime.versionPubliee;
+  return !!(p && Cst_Version !== 'dev' && p !== Cst_Version);
+}
+// Bandeau d'alerte. Volontairement en rouge et non masquable : lancer une
+// consolidation sur du code périmé coûte le prix plein et rend un résultat
+// inexploitable — c'est l'avertissement le plus rentable de l'application.
+function Fn_HtmlBanniereVersion() {
+  if (!Fn_VersionPerimee()) return '';
+  return '<div class="note note-crit"><b>Cette page exécute une version périmée.</b> '
+    + 'Chargée : <span class="mono">' + Fn_Esc(Cst_Version) + '</span> · publiée : <span class="mono">'
+    + Fn_Esc(Var_State._runtime.versionPubliee) + '</span>. Un onglet resté ouvert ne recharge jamais le code tout seul. '
+    + '<b>Rechargez la page avant de lancer une consolidation</b> — sinon vous paierez le prix plein pour exécuter les anciens correctifs.</div>';
 }
 function Fn_GetApiKey() {
   try { return localStorage.getItem(Cst_CleApiKey) || ''; } catch (e) { return ''; }
@@ -1579,10 +1631,20 @@ function Fn_ListeInstruments() {
 // Domaines transmis à l'outil de recherche. Filtrés sur la liste connue : un
 // domaine hérité d'un état plus ancien, retiré de Cst_SitesRecherche depuis, ne
 // doit pas restreindre les recherches à une source que l'écran n'affiche plus.
+// Domaines refusés : ceux appris d'une erreur 400 ET ceux déjà connus comme tels
+// (marqués `bloque` dans la liste). Un seul suffit à faire échouer la requête
+// entière avant la moindre recherche : ils ne partent jamais.
+function Fn_SitesBloques() {
+  const liste = (Var_State.sitesBloques || []).slice();
+  Cst_SitesRecherche.forEach(g => g.sites.forEach(s => {
+    if (s.bloque && liste.indexOf(s.d) < 0) liste.push(s.d);
+  }));
+  return liste;
+}
 function Fn_SitesAutorises() {
   const connus = {};
   Cst_SitesRecherche.forEach(g => g.sites.forEach(s => { connus[s.d] = 1; }));
-  const bloques = Var_State.sitesBloques || [];
+  const bloques = Fn_SitesBloques();
   // Un domaine que l'API a déjà refusé est retiré AVANT l'envoi : le laisser
   // repartir ferait échouer toute la MAJ en 400, sans qu'aucune recherche
   // n'ait lieu — une case cochée dans Paramètres suffisait à tout bloquer.
@@ -2623,6 +2685,7 @@ function Fn_RenderMajPanel() {
       + (Fn_NbAValider() ? ', ' + Fn_NbAValider() + ' restant à valider' : '') + '</div>';
   }
   if (ouvert) {
+    h += Fn_HtmlBanniereVersion();
     h += '<hr class="sep"><div class="petit"><b>Mode d’accès API :</b> ' + Fn_Gloss(Fn_Esc(mode.libelle)) + '</div>';
     if (mode.mode === 'aucun') {
       h += '<div class="note note-info" style="margin-top:8px">Aucune requête ne sera émise (elle échouerait). Trois circuits possibles :<br>'
@@ -3821,10 +3884,19 @@ function Fn_RenderParametres() {
       + '<div class="rang-btn"><button class="btn btn-danger' + (rt.armes['cumul-raz'] ? ' arme' : '') + '" data-action="cumul-raz">' + (rt.armes['cumul-raz'] ? 'Confirmer ?' : 'Remettre le cumul à zéro') + '</button></div>';
   }
   h += '</div>';
+  // Version exécutée — première chose à vérifier quand un correctif « ne marche pas ».
+  h += '<div class="carte"><div class="carte-titre">Version</div>'
+    + Fn_HtmlBanniereVersion()
+    + '<div class="tres-petit muted">Code exécuté par cette page : <b class="mono">' + Fn_Esc(Cst_Version) + '</b>'
+    + (Var_State._runtime.versionPubliee
+      ? ' · publiée sur le serveur : <b class="mono">' + Fn_Esc(Var_State._runtime.versionPubliee) + '</b>'
+        + (Fn_VersionPerimee() ? '' : ' — à jour')
+      : ' · version publiée non vérifiable ici (hors ligne, fichier local ou artefact)')
+    + '. Un onglet laissé ouvert ne recharge pas le code tout seul : c’est la première chose à vérifier si un correctif semble sans effet.</div></div>';
   // Sources de recherche web de la MAJ
   const oSites = !!Var_State.panneaux.sitesParam;
   const sitesOk = Fn_SitesAutorises();
-  const bloques = Var_State.sitesBloques || [];
+  const bloques = Fn_SitesBloques();
   const totalSites = Cst_SitesRecherche.reduce((a, g) => a + g.sites.length, 0);
   h += '<div class="carte"><button type="button" class="panneau-tete' + (oSites ? ' ouvert' : '') + '" data-action="toggle" data-id="sitesParam">'
     + '<span>Sources de recherche web — ' + (sitesOk.length ? sitesOk.length + ' site(s) autorisé(s) sur ' + totalSites : 'tout le web') + '</span><span class="chevron">▶</span></button>';
@@ -5127,6 +5199,10 @@ function Fn_TickCompteurs() {
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     try { navigator.serviceWorker.register('sw.js'); } catch (e) { /* hors PWA */ }
   }
+  // Contrôle de version : au chargement, puis toutes les 10 min pour un onglet
+  // laissé ouvert — c'est exactement le cas qui posait problème.
+  Fn_VerifierVersion();
+  Var_State._runtime.timers.version = setInterval(Fn_VerifierVersion, 600000);
   await Promise.race([Fn_SyncTirer(true), new Promise(r => setTimeout(r, 4000))]);
   document.getElementById('nav-onglets').addEventListener('click', e => {
     const b = e.target.closest('[data-action="onglet"]');

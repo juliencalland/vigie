@@ -130,6 +130,13 @@ verifier('une seule déclaration de Cst_SyncDepot',
 
 verifier('Fn_BuildPromptMAJ présent', /function Fn_BuildPromptMAJ\s*\(/.test(js));
 
+// L'estampille de version doit exister et être remplaçable par publier.js :
+// sans elle, un onglet resté ouvert continue d'exécuter l'ancien code sans que
+// rien ne le signale (deux heures de MAJ payées sur du code périmé).
+verifier('estampille Cst_Version présente et remplaçable',
+  /const Cst_Version\s*=\s*'[^']*'/.test(js),
+  'publier.js ne pourra pas estampiller la version dans index.html');
+
 // La mécanique d'appel au modèle est transparente pour l'utilisateur : le mot
 // « prompt » ne doit apparaître nulle part à l'écran. Toléré dans les
 // commentaires, dans l'identifiant Fn_BuildPromptMAJ, et dans le texte envoyé
