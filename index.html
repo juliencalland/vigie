@@ -429,12 +429,51 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202607311723';
+const Cst_Version = 'vigie-202608041709';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
-const Cst_ModeleMAJ   = 'claude-opus-5';
-const Cst_EffortMAJ  = 'xhigh';
+const Cst_ModeleMAJ   = 'claude-opus-5'; // défaut ; le modèle réellement appelé est Fn_ModeleMAJ()
+const Cst_EffortMAJ  = 'xhigh';          // défaut ; l'effort réellement demandé est Fn_EffortMAJ()
+// CATALOGUE DES MODÈLES PROPOSÉS. Les tarifs voyagent AVEC le modèle : sans cela,
+// changer de modèle rendait l'estimation de coût fausse sans prévenir.
+// Haiku est volontairement absent : son plafond de sortie (64 000 jetons) est
+// inférieur au JSON que cette consolidation produit (~75 000 observés) — la
+// troncature serait systématique.
+const Cst_Modeles = [
+  { id: 'claude-opus-5', nom: 'Claude Opus 5', entreeParM: 5, sortieParM: 25,
+    note: 'Le plus capable de sa gamme. Réglage d’origine, référence de qualité pour l’expertise de desk.' },
+  { id: 'claude-sonnet-5', nom: 'Claude Sonnet 5', entreeParM: 3, sortieParM: 15,
+    note: 'Environ 40 % moins cher qu’Opus 5 à qualité proche sur la collecte et l’extraction ; l’écart se voit surtout sur les raisonnements longs.' },
+  { id: 'claude-opus-4-8', nom: 'Claude Opus 4.8', entreeParM: 5, sortieParM: 25,
+    note: 'Génération précédente d’Opus, même tarif. Utile seulement comme repli si Opus 5 pose problème.' }
+];
+// EFFORT : profondeur de réflexion ET nombre d'appels d'outils. C'est le levier
+// de coût le plus rentable après le cache, parce qu'il agit sur la SORTIE (5×
+// plus chère que l'entrée) et sur le nombre d'aller-retours.
+const Cst_Efforts = [
+  { id: 'xhigh', nom: 'xhigh — maximal utile', note: 'Réglage d’origine. Recommandé pour les tâches agentiques ; le plus coûteux en jetons de sortie.' },
+  { id: 'high', nom: 'high — équilibré', note: 'Défaut de l’API. Économie notable sur la sortie pour une perte limitée sur ce type de collecte.' },
+  { id: 'medium', nom: 'medium — économe', note: 'Réduit nettement la dépense ; le modèle cadre son travail au strict demandé.' },
+  { id: 'low', nom: 'low — minimal', note: 'Pour un rafraîchissement rapide des cours. Risque de sous-analyse sur les positions complexes.' },
+  { id: 'max', nom: 'max — sans retenue', note: 'Plafond de capacité, rendements décroissants et surcoût marqué. À réserver aux cas difficiles.' }
+];
+// CACHE DE PROMPT. À chaque relance (pause_turn), TOUT le contexte accumulé
+// repart — documents joints, texte d'expertise, et le contenu de chaque page
+// lue. Sur une MAJ à 100 appels d'outils, cela dépassait 2,5 M de jetons
+// d'entrée, soit l'essentiel d'une facture de 17 $. Avec un point de cache, ce
+// préfixe se relit à 0,1× au lieu du plein tarif.
+// TTL d'une heure et non cinq minutes : un tour de boucle d'outils dure ici
+// ~4 min, trop près des 5 minutes du cache court — une expiration en cours de
+// route ferait repayer le préfixe entier au prix fort.
+const Cst_CacheTtl = '1h';
+const Cst_CoefCacheEcriture = 2;   // écriture au TTL 1 h : 2× le tarif d'entrée
+const Cst_CoefCacheLecture = 0.1;  // relecture depuis le cache : 0,1×
+// Relances autorisées après un pause_turn. L'API rend la main tous les ~10
+// appels d'outils : avec 100 outils, il en faut une douzaine. Le plafond de 3
+// coupait la MAJ en pleine course APRÈS l'avoir payée — c'est le pire des cas.
+// Le cache rend chaque relance peu coûteuse, il n'y a plus de raison de brider.
+const Cst_MaxContinuations = 24;
 // Plafond MAXIMAL documenté pour Claude Opus 5 (128K jetons de sortie).
 // NE JAMAIS abaisser (bug vécu à 1000 : « Expected ',' or ']' after array element ») — jamais 1000 ni 8000.
 const Cst_MaxTokens   = 128000;
@@ -590,7 +629,13 @@ const Var_State = {
   sitesBloques: [],
   seuils: Object.assign({}, Cst_SeuilsDefaut),
   tarifs: Object.assign({}, Cst_TarifsDefaut),
-  cumulApi: { appels: 0, jetonsEntree: 0, jetonsSortie: 0, recherches: 0, coutUsd: 0 },
+  modeleMAJ: Cst_ModeleMAJ,  // choisi dans Paramètres → Accès API
+  effortMAJ: Cst_EffortMAJ,  // idem — pilote profondeur de réflexion et nb d'appels d'outils
+  // `lectures` (pages web ouvertes) est distinct de `recherches` : elles n'ont
+  // pas le même prix. Une lecture ne coûte rien à l'appel, mais son contenu
+  // entre dans le contexte facturé — l'amalgame gonflait le coût affiché des
+  // lectures tout en masquant leur vraie dépense.
+  cumulApi: { appels: 0, jetonsEntree: 0, jetonsSortie: 0, jetonsCacheEcriture: 0, jetonsCacheLecture: 0, recherches: 0, lectures: 0, coutUsd: 0 },
   majJournaux: [],   // dernier en premier : {id,debutTs,finTs,mode,modele,statut,phases[],recherches,jetonsEntree,jetonsSortie,coutUsd,stopReason,tronque,cartesProduites,message,coursSeuls}
   panneaux: { maj: false, journal: false, formAjout: false, regles: true, apiParam: true, seuilsParam: false, instrumentsParam: true, glossParam: false, sitesParam: false, erreursParam: false, oppoCadre: true },
   filtreTag: null,
@@ -653,7 +698,7 @@ async function Fn_Load() {
       // Fusion : la sauvegarde locale est prioritaire (coches, décisions, réglages).
       ['onglet', 'events', 'instruments', 'positions', 'orders', 'trades', 'margin', 'releveAsOf',
        'derniereConsolidation', 'actions', 'opportunites', 'filtreOpportunites', 'aValider', 'majJournaux', 'filtreTag', 'filtreJour',
-       'zbId', 'freqRappel', 'sitesRecherche', 'sitesBloques'].forEach(c => { if (s[c] !== undefined) Var_State[c] = s[c]; });
+       'zbId', 'freqRappel', 'sitesRecherche', 'sitesBloques', 'modeleMAJ', 'effortMAJ'].forEach(c => { if (s[c] !== undefined) Var_State[c] = s[c]; });
       ['quotes', 'fundamentals', 'valuation', 'expertise', 'theses'].forEach(c => {
         if (s[c] && typeof s[c] === 'object') Var_State[c] = s[c];
       });
@@ -703,19 +748,58 @@ function Fn_ReparerJournauxOrphelins() {
 // Bilan financier d'une MAJ, quelle que soit son issue. Un appel interrompu a
 // consommé des jetons : les masquer rendrait la dépense réelle invisible.
 // Idempotent (drapeau bilanFait) — jamais compté deux fois dans le cumul.
+// Modèle et effort réellement demandés. Un réglage inconnu (état plus ancien,
+// modèle retiré du catalogue) retombe sur le défaut plutôt que de partir tel quel
+// et de faire échouer l'appel en 404.
+function Fn_ModeleMAJ() {
+  const m = Cst_Modeles.find(x => x.id === Var_State.modeleMAJ);
+  return m ? m.id : Cst_ModeleMAJ;
+}
+function Fn_ModeleMeta() {
+  return Cst_Modeles.find(x => x.id === Fn_ModeleMAJ()) || Cst_Modeles[0];
+}
+function Fn_EffortMAJ() {
+  const e = Cst_Efforts.find(x => x.id === Var_State.effortMAJ);
+  return e ? e.id : Cst_EffortMAJ;
+}
+// Bilan financier d'une MAJ. Quatre postes désormais, et non plus trois :
+// l'entrée facturée plein tarif, l'ÉCRITURE du cache (majorée), sa RELECTURE
+// (à 0,1×) et la sortie. Ignorer les deux postes de cache rendait le coût
+// affiché faux dès que le cache était actif — et c'est justement lui qui doit
+// se voir, puisque c'est lui qui fait l'économie.
+function Fn_CoutJournal(journal) {
+  const t = Var_State.tarifs;
+  const pe = Fn_Num(t.entreeParM) || 0, ps = Fn_Num(t.sortieParM) || 0, pr = Fn_Num(t.recherchePour1000) || 0;
+  const entree = Fn_Num(journal.jetonsEntree) || 0;
+  const cw = Fn_Num(journal.jetonsCacheEcriture) || 0;
+  const cr = Fn_Num(journal.jetonsCacheLecture) || 0;
+  const sortie = Fn_Num(journal.jetonsSortie) || 0;
+  const rech = Fn_Num(journal.recherches) || 0;
+  return {
+    entree: entree / 1e6 * pe,
+    cacheEcriture: cw / 1e6 * pe * Cst_CoefCacheEcriture,
+    cacheLecture: cr / 1e6 * pe * Cst_CoefCacheLecture,
+    sortie: sortie / 1e6 * ps,
+    // Les LECTURES de page ne sont pas facturées à l'appel : leur coût est déjà
+    // compté dans les jetons d'entrée. Seules les recherches le sont.
+    recherches: rech / 1000 * pr,
+    get total() { return this.entree + this.cacheEcriture + this.cacheLecture + this.sortie + this.recherches; }
+  };
+}
 function Fn_CloturerBilan(journal) {
   if (!journal || journal.bilanFait) return;
   journal.bilanFait = true;
   journal.finTs = journal.finTs || Date.now();
-  const t = Var_State.tarifs;
-  const entree = Fn_Num(journal.jetonsEntree) || 0;
-  const sortie = Fn_Num(journal.jetonsSortie) || 0;
-  const rech = Fn_Num(journal.recherches) || 0;
-  journal.coutUsd = entree / 1e6 * (Fn_Num(t.entreeParM) || 0)
-    + sortie / 1e6 * (Fn_Num(t.sortieParM) || 0)
-    + rech / 1000 * (Fn_Num(t.recherchePour1000) || 0);
+  journal.coutUsd = Fn_CoutJournal(journal).total;
   const c = Var_State.cumulApi;
-  c.appels++; c.jetonsEntree += entree; c.jetonsSortie += sortie; c.recherches += rech; c.coutUsd += journal.coutUsd;
+  c.appels++;
+  c.jetonsEntree += Fn_Num(journal.jetonsEntree) || 0;
+  c.jetonsSortie += Fn_Num(journal.jetonsSortie) || 0;
+  c.jetonsCacheEcriture = (Fn_Num(c.jetonsCacheEcriture) || 0) + (Fn_Num(journal.jetonsCacheEcriture) || 0);
+  c.jetonsCacheLecture = (Fn_Num(c.jetonsCacheLecture) || 0) + (Fn_Num(journal.jetonsCacheLecture) || 0);
+  c.recherches += Fn_Num(journal.recherches) || 0;
+  c.lectures = (Fn_Num(c.lectures) || 0) + (Fn_Num(journal.lectures) || 0);
+  c.coutUsd += journal.coutUsd;
 }
 /* ----------------------------------------------------------------
    VERSION EXÉCUTÉE vs VERSION PUBLIÉE
@@ -871,7 +955,7 @@ function Fn_SerialiserEtat() {
 function Fn_AdopterEtat(s) {
   ['onglet', 'events', 'instruments', 'positions', 'orders', 'trades', 'margin', 'releveAsOf',
    'derniereConsolidation', 'actions', 'opportunites', 'filtreOpportunites', 'aValider', 'majJournaux', 'filtreTag', 'filtreJour',
-   'zbId', 'freqRappel', 'sitesRecherche', 'sitesBloques', 'etatTs'].forEach(c => { if (s[c] !== undefined) Var_State[c] = s[c]; });
+   'zbId', 'freqRappel', 'sitesRecherche', 'sitesBloques', 'modeleMAJ', 'effortMAJ', 'etatTs'].forEach(c => { if (s[c] !== undefined) Var_State[c] = s[c]; });
   ['quotes', 'fundamentals', 'valuation', 'expertise', 'theses'].forEach(c => { if (s[c] && typeof s[c] === 'object') Var_State[c] = s[c]; });
   ['seuils', 'tarifs', 'cumulApi', 'panneaux'].forEach(c => { if (s[c] && typeof s[c] === 'object') Var_State[c] = Object.assign({}, Var_State[c], s[c]); });
   // L'état adopté peut contenir un journal « en cours » d'un autre appareil ou
@@ -1448,6 +1532,8 @@ const Cst_AideActions = {
   'inst-suppr': { t: 'Ne plus suivre', d: 'Retire l’instrument de la liste suivie — deux appuis pour confirmer. Les données déjà collectées restent affichées jusqu’à la prochaine consolidation, mais ne seront plus actualisées.' },
   'seuil': { t: 'Modifier ce seuil', d: 'Change la limite à partir de laquelle l’indicateur passe en ambre ou en rouge. L’effet est immédiat sur les couleurs du cadre d’exposition et sur le score de discipline, et suit sur vos autres appareils.' },
   'seuils-reset': { t: 'Seuils par défaut', d: 'Rétablit tous les seuils d’origine — deux appuis pour confirmer. Vos réglages personnalisés sont perdus.' },
+  'modele': { t: 'Modèle appelé par la MAJ', d: 'Change le modèle qui réalise la consolidation, et réaligne aussitôt les tarifs d’estimation sur celui-ci. Sonnet 5 coûte environ 40 % de moins qu’Opus 5 à qualité proche sur la collecte, l’écart se creusant sur les raisonnements longs. Sans effet sur les données déjà intégrées ; le modèle réellement utilisé est enregistré dans chaque journal de MAJ.' },
+  'effort': { t: 'Effort de la MAJ', d: 'Règle la profondeur de réflexion du modèle et le nombre d’appels d’outils qu’il s’autorise. Agit surtout sur les jetons de sortie, cinq fois plus chers que ceux d’entrée : c’est le levier de coût le plus efficace après le cache. Baisser l’effort réduit la dépense mais peut appauvrir l’analyse des positions complexes ; sans effet rétroactif.' },
   'tarif': { t: 'Tarif d’estimation', d: 'Prix unitaire servant à estimer le coût des mises à jour. N’influe que sur l’estimation affichée ici, jamais sur la facturation réelle, qui se lit sur console.anthropic.com.' },
   'cumul-raz': { t: 'Remettre le cumul à zéro', d: 'Efface le compteur local de consommation — deux appuis pour confirmer. N’efface rien côté Anthropic : la facturation réelle reste inchangée.' },
   'these-revue': { t: 'Thèse revue aujourd’hui', d: 'Horodate la revue de cette thèse à aujourd’hui et remet à zéro son ancienneté dans l’indicateur « Fraîcheur des thèses ». À n’utiliser qu’après l’avoir réellement relue.' },
@@ -2588,9 +2674,9 @@ function Fn_RenderAValider() {
 }
 /* ---- Panneau MAJ des données (section 6) ---- */
 function Fn_ModeAcces() {
-  if (Cst_IsArtifact) return { mode: 'artefact', court: 'mode artefact', libelle: 'Artefact Claude.ai — appel du pont d’artefact SANS clé, modèle ' + Cst_ModeleMAJ + ', effort ' + Cst_EffortMAJ + ', plafond ' + Fn_FmtNb(Cst_MaxTokens, 0) + ' jetons.' };
+  if (Cst_IsArtifact) return { mode: 'artefact', court: 'mode artefact', libelle: 'Artefact Claude.ai — appel du pont d’artefact SANS clé, modèle ' + Fn_ModeleMAJ() + ', effort ' + Fn_EffortMAJ() + ', plafond ' + Fn_FmtNb(Cst_MaxTokens, 0) + ' jetons.' };
   const cle = Fn_GetApiKey();
-  if (cle) return { mode: 'byok', court: 'mode BYOK', libelle: 'Clé personnelle (BYOK) enregistrée dans ce navigateur (…' + cle.slice(-4) + ') — appel direct api.anthropic.com, modèle ' + Cst_ModeleMAJ + ', effort ' + Cst_EffortMAJ + ', plafond ' + Fn_FmtNb(Cst_MaxTokens, 0) + ' jetons, avancement en direct (SSE).' };
+  if (cle) return { mode: 'byok', court: 'mode BYOK', libelle: 'Clé personnelle (BYOK) enregistrée dans ce navigateur (…' + cle.slice(-4) + ') — appel direct api.anthropic.com, modèle ' + Fn_ModeleMAJ() + ', effort ' + Fn_EffortMAJ() + ', plafond ' + Fn_FmtNb(Cst_MaxTokens, 0) + ' jetons, avancement en direct (SSE).' };
   return { mode: 'aucun', court: 'aucun accès API', libelle: 'Aucun accès API configuré.' };
 }
 // État de santé d'une MAJ en cours — répond à la seule question qui compte quand
@@ -2798,12 +2884,33 @@ function Fn_RenderMajPanel() {
           + '<span class="met">modèle <b>' + Fn_Esc(journal.modele || '?') + '</b></span>'
           + '<span class="met">durée <b>' + Fn_Esc(Fn_DureeFmt((journal.finTs || Date.now()) - journal.debutTs)) + '</b></span>'
           + '<span class="met">recherches <b>' + (journal.recherches || 0) + '</b></span>'
+          + '<span class="met">pages lues <b>' + (journal.lectures || 0) + '</b></span>'
+          + (journal.continuations ? '<span class="met">reprises <b>' + journal.continuations + '</b></span>' : '')
           + '<span class="met">jetons entrée <b>' + Fn_Esc(Fn_FmtNb(journal.jetonsEntree || 0, 0)) + '</b></span>'
           + '<span class="met">jetons sortie <b>' + Fn_Esc(Fn_FmtNb(journal.jetonsSortie || 0, 0)) + '</b></span>'
           + '<span class="met">coût estimé <b>' + Fn_Esc(Fn_FmtUsd(journal.coutUsd)) + '</b></span>'
           + '</div>'
+          // Décomposition du coût : sans elle, un montant global n'apprend rien
+          // sur le poste à corriger. C'est ce détail qui a permis de voir que
+          // l'entrée relue, et non les recherches, faisait la facture.
+          + (function () {
+            const d = Fn_CoutJournal(journal);
+            const cr = Fn_Num(journal.jetonsCacheLecture) || 0;
+            const economie = cr / 1e6 * (Fn_Num(t.entreeParM) || 0) * (1 - Cst_CoefCacheLecture);
+            return '<div class="valo-grille">'
+              + '<span class="met">entrée plein tarif <b>' + Fn_Esc(Fn_FmtUsd(d.entree)) + '</b></span>'
+              + '<span class="met">écriture du cache <b>' + Fn_Esc(Fn_FmtUsd(d.cacheEcriture)) + '</b></span>'
+              + '<span class="met">relecture du cache <b>' + Fn_Esc(Fn_FmtUsd(d.cacheLecture)) + '</b></span>'
+              + '<span class="met">sortie <b>' + Fn_Esc(Fn_FmtUsd(d.sortie)) + '</b></span>'
+              + '<span class="met">recherches <b>' + Fn_Esc(Fn_FmtUsd(d.recherches)) + '</b></span>'
+              + '</div>'
+              + (cr ? '<div class="note note-ok tres-petit">Cache de contexte : <b>' + Fn_Esc(Fn_FmtNb(cr, 0))
+                  + '</b> jetons relus à 0,1× au lieu du plein tarif, soit <b>' + Fn_Esc(Fn_FmtUsd(economie))
+                  + '</b> d’économie sur cette seule MAJ.</div>'
+                : '<div class="tres-petit muted">Aucune relecture depuis le cache sur cette MAJ : elle n’a pas eu de reprise, ou le cache n’a pas été utilisé.</div>');
+          })()
           + Fn_HtmlBilanTraitement(journal)
-          + '<div class="tres-petit muted">Coût estimé aux tarifs de Paramètres → Accès API (' + t.entreeParM + ' $/M entrée · ' + t.sortieParM + ' $/M sortie · ' + t.recherchePour1000 + ' $/1000 recherches — à vérifier sur docs.claude.com).'
+          + '<div class="tres-petit muted">Coût estimé aux tarifs de Paramètres → Accès API (' + t.entreeParM + ' $/M entrée · ' + t.sortieParM + ' $/M sortie · ' + t.recherchePour1000 + ' $/1000 recherches — à vérifier sur docs.claude.com). Les pages lues ne sont pas facturées à l’appel : leur contenu est compté dans les jetons d’entrée.'
           + (aboutie ? '' : ' Sur un appel interrompu, les jetons de sortie sont ceux ESTIMÉS pendant le flux : le décompte exact n’arrive qu’avec la fin de la réponse, qui n’a pas eu lieu. Le montant réel se lit sur console.anthropic.com.')
           + '</div>'
           + (aboutie
@@ -3866,6 +3973,21 @@ function Fn_RenderParametres() {
       + (cle ? '<button class="btn btn-danger' + (rt.armes['cle-effacer'] ? ' arme' : '') + '" data-action="cle-effacer">' + (rt.armes['cle-effacer'] ? 'Confirmer ?' : 'Effacer la clé') + '</button>' : '')
       + '</div>'
       + '<div class="tres-petit muted" style="margin-top:6px">Avertissements : appareil personnel uniquement · clé DÉDIÉE à cet usage · plafond de dépense bas sur console.anthropic.com · révocable à tout moment · stockée en clair dans le stockage local de CE navigateur, jamais synchronisée ni écrite dans le dépôt, transmise uniquement à api.anthropic.com. Ce n’est PAS un identifiant de courtier — aucun identifiant de courtier n’est demandé, stocké ni transmis, jamais.</div>'
+      // MODÈLE ET EFFORT — les deux réglages qui pilotent le coût d'une MAJ.
+      // Chacun affiche son effet AVANT le choix : un menu qui ne dit pas ce
+      // qu'il change se règle au hasard.
+      + '<hr class="sep"><div class="carte-titre">Modèle et profondeur d’analyse</div>'
+      + '<label class="champ">Modèle appelé par la MAJ</label>'
+      + '<select data-action="modele">' + Cst_Modeles.map(m => '<option value="' + Fn_Esc(m.id) + '"' + (Fn_ModeleMAJ() === m.id ? ' selected' : '') + '>'
+        + Fn_Esc(m.nom) + ' — ' + m.entreeParM + ' $/M entrée · ' + m.sortieParM + ' $/M sortie</option>').join('') + '</select>'
+      + '<div class="tres-petit muted" style="margin:3px 0 6px">' + Fn_Esc(Fn_ModeleMeta().note)
+      + ' Changer de modèle réaligne les tarifs d’estimation ci-dessous. Haiku n’est pas proposé : son plafond de sortie (64 000 jetons) est inférieur au JSON que produit cette consolidation.</div>'
+      + '<label class="champ">Effort — profondeur de réflexion et nombre d’appels d’outils</label>'
+      + '<select data-action="effort">' + Cst_Efforts.map(e => '<option value="' + Fn_Esc(e.id) + '"' + (Fn_EffortMAJ() === e.id ? ' selected' : '') + '>'
+        + Fn_Esc(e.nom) + '</option>').join('') + '</select>'
+      + '<div class="tres-petit muted" style="margin:3px 0 0">' + Fn_Esc((Cst_Efforts.find(e => e.id === Fn_EffortMAJ()) || Cst_Efforts[0]).note)
+      + ' L’effort agit surtout sur les jetons de SORTIE, cinq fois plus chers que ceux d’entrée : c’est le levier de coût le plus efficace après le cache de contexte.</div>'
+      + '<div class="note note-ok tres-petit" style="margin-top:8px"><b>Cache de contexte actif.</b> À chaque reprise d’une MAJ, tout le contexte déjà accumulé — documents joints, texte d’expertise, pages web déjà lues — est relu à <b>0,1×</b> le tarif d’entrée au lieu du plein tarif. C’est le poste qui pesait le plus lourd sur les consolidations longues. Le détail par MAJ figure dans le bilan du panneau MAJ.</div>'
       + '<hr class="sep"><div class="carte-titre">Tarifs pour l’estimation de coût <span class="badge badge-warn">à vérifier sur docs.claude.com</span></div>'
       + '<div class="form-grille">'
       + '<div><label class="champ">$ / M jetons entrée</label><input type="number" step="any" value="' + Fn_Esc(t.entreeParM) + '" data-action="tarif" data-id="entreeParM"></div>'
@@ -3877,7 +3999,10 @@ function Fn_RenderParametres() {
       + '<span class="met">appels <b>' + c.appels + '</b></span>'
       + '<span class="met">jetons entrée <b>' + Fn_Esc(Fn_FmtNb(c.jetonsEntree, 0)) + '</b></span>'
       + '<span class="met">jetons sortie <b>' + Fn_Esc(Fn_FmtNb(c.jetonsSortie, 0)) + '</b></span>'
+      + '<span class="met">cache écrit <b>' + Fn_Esc(Fn_FmtNb(c.jetonsCacheEcriture || 0, 0)) + '</b></span>'
+      + '<span class="met">cache relu <b>' + Fn_Esc(Fn_FmtNb(c.jetonsCacheLecture || 0, 0)) + '</b></span>'
       + '<span class="met">recherches <b>' + c.recherches + '</b></span>'
+      + '<span class="met">pages lues <b>' + (c.lectures || 0) + '</b></span>'
       + '<span class="met">coût estimé <b>' + Fn_Esc(Fn_FmtUsd(c.coutUsd)) + '</b></span>'
       + '</div>'
       + '<div class="tres-petit muted">Le crédit restant n’est pas exposé par l’API à une clé standard : consultez console.anthropic.com. Ce cumul local, persisté, sert d’estimation de substitution.</div>'
@@ -4253,7 +4378,7 @@ const Cst_ErreursAPI = [
     faire: 'Recoller la clé dans Paramètres → Accès API, et vérifier qu’elle existe toujours sur console.anthropic.com (API keys).' },
   { code: 'permission_error', http: 403, retard: false, quoi: 'Accès refusé au modèle',
     pourquoi: 'La clé n’a pas le droit d’utiliser ce modèle ou cette fonctionnalité.',
-    faire: 'Vérifier les permissions de la clé sur console.anthropic.com. Une clé de projet restreint peut ne pas couvrir ' + Cst_ModeleMAJ + '.' },
+    faire: 'Vérifier les permissions de la clé sur console.anthropic.com. Une clé de projet restreint peut ne pas couvrir le modèle choisi dans Paramètres → Accès API ; essayez-en un autre dans la liste.' },
   { code: 'billing_error', http: 400, retard: false, quoi: 'Crédit épuisé',
     pourquoi: 'Solde à zéro ou plafond de dépense atteint — détecté AVANT l’envoi.',
     faire: 'Recharger sur console.anthropic.com (Billing), puis relancer. Rien n’a été consommé.' },
@@ -4262,7 +4387,7 @@ const Cst_ErreursAPI = [
     faire: 'Vérifier le solde (Billing) puis relancer. Aucune donnée n’est intégrée — les jetons déjà consommés restent dus.' },
   { code: 'not_found_error', http: 404, retard: false, quoi: 'Modèle introuvable',
     pourquoi: 'L’identifiant de modèle n’existe pas ou plus (modèle retiré).',
-    faire: 'Le modèle appelé est ' + Cst_ModeleMAJ + '. S’il a été retiré, il faut le changer dans le code — signalez-le.' },
+    faire: 'Le modèle appelé se choisit dans Paramètres → Accès API. S’il a été retiré, sélectionnez-en un autre dans la liste ; si aucun ne répond, signalez-le.' },
   { code: 'request_too_large', http: 413, retard: false, quoi: 'Requête trop lourde',
     pourquoi: 'Les pièces jointes dépassent la limite de l’API (32 Mo par requête, tout compris).',
     faire: 'Réduire le poids : relevé PDF en qualité normale, captures en PNG compressé ou JPEG plutôt qu’en pleine résolution.' },
@@ -4324,7 +4449,9 @@ async function Fn_AppelStream(corps, entetes, journal, signal) {
   let tampon = '', texte = '', modele = null, entree = 0, sortie = 0, stop = null;
   const blocs = [];
   const baseRech = journal.recherches || 0, baseSortie = journal.jetonsSortie || 0;
-  let rech = 0, charsSortie = 0; // charsSortie : estimation vivante (l'usage exact n'arrive qu'en fin de flux)
+  const baseLect = journal.lectures || 0;
+  let rech = 0, lect = 0, charsSortie = 0; // charsSortie : estimation vivante (l'usage exact n'arrive qu'en fin de flux)
+  let cacheEcriture = 0, cacheLecture = 0;
   // Un flux SSE complet se termine TOUJOURS par message_stop, précédé d'un
   // message_delta portant stop_reason. Sans ces marqueurs, la connexion a été
   // coupée en cours de route : crédit épuisé, coupure réseau, ou fin de session
@@ -4346,17 +4473,27 @@ async function Fn_AppelStream(corps, entetes, journal, signal) {
       try { ev = JSON.parse(brut); } catch (e) { continue; }
       if (ev.type === 'message_start') {
         modele = ev.message && ev.message.model || null;
-        entree = (ev.message && ev.message.usage && ev.message.usage.input_tokens) || 0;
+        const u0 = (ev.message && ev.message.usage) || {};
+        entree = u0.input_tokens || 0;
+        // Jetons de cache : c'est ICI que se lit l'économie réelle. Une relecture
+        // à 0,1× au lieu du plein tarif est ce qui sépare une MAJ à 3 $ d'une à 17 $.
+        cacheEcriture = u0.cache_creation_input_tokens || 0;
+        cacheLecture = u0.cache_read_input_tokens || 0;
         journal.modele = modele;
         Fn_Phase(journal, 'analyse', 'en cours', 'Analyse des documents (modèle : ' + (modele || '?') + ')');
       } else if (ev.type === 'content_block_start') {
         const b = ev.content_block ? JSON.parse(JSON.stringify(ev.content_block)) : { type: 'inconnu' };
         blocs[ev.index] = b;
         if (b.type === 'server_tool_use') {
-          rech++;
-          journal.recherches = baseRech + rech;
+          // Recherche et lecture de page sont deux outils DISTINCTS. Les
+          // confondre dans un seul compteur affichait « 100 recherches » là où
+          // il y avait 60 recherches et 40 lectures — et faisait payer les
+          // lectures au tarif des recherches dans l'estimation.
+          if (b.name === 'web_fetch') { lect++; journal.lectures = baseLect + lect; }
+          else { rech++; journal.recherches = baseRech + rech; }
           b._json = '';
-          Fn_Phase(journal, 'recherches', 'en cours', 'Recherche web n° ' + journal.recherches + ' en cours');
+          Fn_Phase(journal, 'recherches', 'en cours',
+            (b.name === 'web_fetch' ? 'Lecture de page n° ' + journal.lectures : 'Recherche web n° ' + journal.recherches) + ' en cours');
         } else if (b.type === 'text') {
           b.text = b.text || '';
           Fn_Phase(journal, 'redaction', 'en cours', 'Rédaction du JSON');
@@ -4409,7 +4546,8 @@ async function Fn_AppelStream(corps, entetes, journal, signal) {
       message: 'Le flux s’est interrompu avant la fin de la réponse : la connexion a été fermée sans marqueur de fin.'
     };
   }
-  return { contenu: blocs.filter(Boolean), texte, modele, entree, sortie, recherches: rech, stopReason: stop };
+  return { contenu: blocs.filter(Boolean), texte, modele, entree, sortie, recherches: rech, lectures: lect,
+    cacheEcriture, cacheLecture, stopReason: stop };
 }
 /* ---- Appel direct sans flux (mode artefact — le pont ne streame pas) ---- */
 async function Fn_AppelDirect(corps, entetes, journal, signal) {
@@ -4419,20 +4557,25 @@ async function Fn_AppelDirect(corps, entetes, journal, signal) {
   const data = await rep.json();
   const contenu = data.content || [];
   const texte = contenu.filter(b => b && b.type === 'text').map(b => b.text || '').join('');
-  let rech = 0;
-  if (data.usage && data.usage.server_tool_use && data.usage.server_tool_use.web_search_requests != null) {
-    rech = data.usage.server_tool_use.web_search_requests;
-  } else {
-    rech = contenu.filter(b => b && b.type === 'server_tool_use').length;
-  }
+  const u = (data && data.usage) || {};
+  // Recherches et lectures comptées séparément : l'usage donne le nombre exact
+  // de recherches, les lectures se déduisent du reste des blocs d'outil serveur.
+  const outils = contenu.filter(b => b && b.type === 'server_tool_use');
+  const rech = (u.server_tool_use && u.server_tool_use.web_search_requests != null)
+    ? u.server_tool_use.web_search_requests
+    : outils.filter(b => b.name !== 'web_fetch').length;
+  const lect = outils.filter(b => b.name === 'web_fetch').length;
   journal.modele = data.model || journal.modele;
   journal.recherches = (journal.recherches || 0) + rech;
-  journal.jetonsSortie = (journal.jetonsSortie || 0) + ((data.usage && data.usage.output_tokens) || 0);
+  journal.lectures = (journal.lectures || 0) + lect;
+  journal.jetonsSortie = (journal.jetonsSortie || 0) + (u.output_tokens || 0);
   return {
     contenu, texte, modele: data.model || null,
-    entree: (data.usage && data.usage.input_tokens) || 0,
-    sortie: (data.usage && data.usage.output_tokens) || 0,
-    recherches: rech, stopReason: data.stop_reason || null
+    entree: u.input_tokens || 0,
+    sortie: u.output_tokens || 0,
+    cacheEcriture: u.cache_creation_input_tokens || 0,
+    cacheLecture: u.cache_read_input_tokens || 0,
+    recherches: rech, lectures: lect, stopReason: data.stop_reason || null
   };
 }
 /* ---- Parseur JSON tolérant aux troncatures (6.4) : réparation, jamais de rejet total ---- */
@@ -4603,19 +4746,26 @@ async function Fn_LancerConsolidation() {
       });
     };
     appliquerDomaines();
-    Fn_Phase(journal, 'envoi', 'ok', 'Requête envoyée (' + Cst_ModeleMAJ + ', effort ' + Cst_EffortMAJ + ', plafond ' + Fn_FmtNb(Cst_MaxTokens, 0) + ' jetons' + (mode.mode === 'byok' ? ', flux SSE' : ', pont d’artefact') + ', recherche + lecture de page (max ' + Cst_MaxRecherches + ' recherches, ' + Cst_MaxLectures + ' pages de ' + Fn_FmtNb(Cst_MaxJetonsParPage, 0) + ' jetons)' + (domaines.length ? ', limitées à ' + domaines.length + ' site(s)' : ', web libre') + ')');
-    let texte = '', totalEntree = 0, totalSortie = 0, totalRech = 0, stopReason = null, continuations = 0;
+    const modele = Fn_ModeleMAJ();
+    Fn_Phase(journal, 'envoi', 'ok', 'Requête envoyée (' + modele + ', effort ' + Fn_EffortMAJ() + ', plafond ' + Fn_FmtNb(Cst_MaxTokens, 0) + ' jetons, cache de contexte actif' + (mode.mode === 'byok' ? ', flux SSE' : ', pont d’artefact') + ', recherche + lecture de page (max ' + Cst_MaxRecherches + ' recherches, ' + Cst_MaxLectures + ' pages de ' + Fn_FmtNb(Cst_MaxJetonsParPage, 0) + ' jetons)' + (domaines.length ? ', limitées à ' + domaines.length + ' site(s)' : ', web libre') + ')');
+    let texte = '', totalEntree = 0, totalSortie = 0, totalRech = 0, totalLect = 0, totalCw = 0, totalCr = 0;
+    let stopReason = null, continuations = 0;
     // Repli automatique et TRACÉ (jamais un abaissement choisi) : le plafond de sortie et le
     // paramètre d'effort varient d'un modèle à l'autre — plutôt qu'échouer, on réessaie une fois.
-    let plafond = Cst_MaxTokens, effort = Cst_EffortMAJ, repliPlafond = false, repliEffort = false, repliDomaines = 0, repliOutils = false;
+    let plafond = Cst_MaxTokens, effort = Fn_EffortMAJ(), repliPlafond = false, repliEffort = false, repliDomaines = 0, repliOutils = false, repliCache = false;
     for (;;) {
       const corps = {
-        model: Cst_ModeleMAJ,
+        model: modele,
         max_tokens: plafond, // plafond maximal du modèle — la troncature ne doit jamais venir d'un plafond choisi trop bas
         thinking: { type: 'adaptive' },
         tools: outils,
         messages: messagesApi
       };
+      // CACHE DE CONTEXTE. Placement automatique sur le dernier bloc cacheable :
+      // à chaque relance, tout ce qui précède (documents joints, texte
+      // d'expertise, pages déjà lues) se relit à 0,1× au lieu du plein tarif.
+      // C'est le poste qui faisait l'essentiel d'une facture à 17 $.
+      if (!repliCache) corps.cache_control = { type: 'ephemeral', ttl: Cst_CacheTtl };
       if (effort) corps.output_config = { effort: effort };
       if (mode.mode === 'byok') corps.stream = true;
       let res;
@@ -4628,7 +4778,7 @@ async function Fn_LancerConsolidation() {
         if (errParam && errParam.name === 'AbortError') throw errParam;
         if (!repliEffort && effort && /output_config|effort/i.test(msgP)) {
           repliEffort = true; effort = null;
-          Fn_Phase(journal, 'envoi', 'en cours', 'Paramètre d’effort refusé par l’API (' + Cst_ModeleMAJ + ') — nouvelle tentative sans output_config');
+          Fn_Phase(journal, 'envoi', 'en cours', 'Paramètre d’effort refusé par l’API (' + modele + ') — nouvelle tentative sans output_config');
           continue;
         }
         // Versions d'outils refusées : plutôt que d'échouer, on repart avec la
@@ -4643,7 +4793,15 @@ async function Fn_LancerConsolidation() {
         }
         if (!repliPlafond && plafond > Cst_MaxTokensRepli && /max_tokens/i.test(msgP)) {
           repliPlafond = true; plafond = Cst_MaxTokensRepli;
-          Fn_Phase(journal, 'envoi', 'en cours', 'Plafond de sortie refusé par l’API (' + Cst_ModeleMAJ + ') — nouvelle tentative à ' + Fn_FmtNb(plafond, 0) + ' jetons');
+          Fn_Phase(journal, 'envoi', 'en cours', 'Plafond de sortie refusé par l’API (' + modele + ') — nouvelle tentative à ' + Fn_FmtNb(plafond, 0) + ' jetons');
+          continue;
+        }
+        // Cache refusé : on relance SANS lui plutôt que d'échouer. La MAJ
+        // coûtera le plein tarif, et le journal le dit — l'économie ne doit
+        // jamais se perdre en silence.
+        if (!repliCache && /cache_control|cache/i.test(msgP)) {
+          repliCache = true;
+          Fn_Phase(journal, 'envoi', 'en cours', 'Cache de contexte refusé par l’API — nouvelle tentative SANS cache : le coût de cette MAJ sera nettement plus élevé');
           continue;
         }
         // Domaines refusés par l'outil de recherche : l'API rejette la requête en
@@ -4674,20 +4832,34 @@ async function Fn_LancerConsolidation() {
       }
       texte += res.texte;
       totalEntree += res.entree; totalSortie += res.sortie; totalRech += res.recherches;
+      totalLect += (res.lectures || 0); totalCw += (res.cacheEcriture || 0); totalCr += (res.cacheLecture || 0);
       journal.jetonsEntree = totalEntree; journal.jetonsSortie = totalSortie; journal.recherches = totalRech;
+      journal.lectures = totalLect; journal.jetonsCacheEcriture = totalCw; journal.jetonsCacheLecture = totalCr;
+      journal.continuations = continuations;
       if (res.modele) journal.modele = res.modele;
       stopReason = res.stopReason;
-      if (stopReason === 'pause_turn' && continuations < 3) {
+      if (stopReason === 'pause_turn' && continuations < Cst_MaxContinuations) {
         continuations++;
         messagesApi.push({ role: 'assistant', content: res.contenu });
-        Fn_Phase(journal, 'recherches', 'en cours', 'Reprise automatique n° ' + continuations + ' (pause_turn : boucle d’outils serveur à poursuivre)');
+        Fn_Phase(journal, 'recherches', 'en cours', 'Reprise automatique n° ' + continuations + '/' + Cst_MaxContinuations
+          + ' (pause_turn : la boucle d’outils serveur rend la main tous les ~10 appels)'
+          + (totalCr ? ' — contexte relu depuis le cache : ' + Fn_FmtNb(totalCr, 0) + ' jetons à 0,1×' : ''));
         continue;
+      }
+      // Plafond de reprises atteint alors que le modèle n'avait pas fini : c'est
+      // une COUPURE, pas une fin. Elle était jusqu'ici silencieuse — la MAJ
+      // paraissait réussie sur un JSON amputé, après avoir été payée en entier.
+      if (stopReason === 'pause_turn') {
+        Fn_Phase(journal, 'recherches', 'echec', 'Travail interrompu au plafond de ' + Cst_MaxContinuations
+          + ' reprises : le modèle n’avait pas terminé sa collecte. Les données déjà produites sont intégrées, mais elles sont incomplètes.');
       }
       break;
     }
     journal.stopReason = stopReason;
     Fn_Phase(journal, 'analyse', 'ok');
-    Fn_Phase(journal, 'recherches', 'ok', 'Recherches web : ' + totalRech);
+    Fn_Phase(journal, 'recherches', 'ok', totalRech + ' recherche(s) web · ' + totalLect + ' page(s) lue(s)'
+      + (continuations ? ' · ' + continuations + ' reprise(s)' : '')
+      + (totalCr ? ' · ' + Fn_FmtNb(totalCr, 0) + ' jetons relus depuis le cache' : ''));
     Fn_Phase(journal, 'redaction', 'ok');
     Fn_Phase(journal, 'reception', 'ok', 'Réponse reçue : ' + Fn_FmtNb(totalSortie, 0) + ' jetons de sortie (stop_reason : ' + (stopReason || '?') + ')');
     if (stopReason === 'refusal') {
@@ -5026,7 +5198,7 @@ function Fn_OnAction(e) {
     }
     case 'cumul-raz': {
       Fn_DoubleTap('cumul-raz', () => {
-        Var_State.cumulApi = { appels: 0, jetonsEntree: 0, jetonsSortie: 0, recherches: 0, coutUsd: 0 };
+        Var_State.cumulApi = { appels: 0, jetonsEntree: 0, jetonsSortie: 0, jetonsCacheEcriture: 0, jetonsCacheLecture: 0, recherches: 0, lectures: 0, coutUsd: 0 };
         Fn_Save(); Fn_RenderParametres();
       }, () => Fn_RenderParametres());
       break;
@@ -5090,6 +5262,25 @@ function Fn_OnChange(e) {
     case 'seuil': {
       const v = Fn_Num(el.value);
       if (v != null) { Var_State.seuils[id] = v; Fn_Save(); }
+      break;
+    }
+    case 'modele': {
+      const m = Cst_Modeles.find(x => x.id === el.value);
+      if (m) {
+        Var_State.modeleMAJ = m.id;
+        // Les tarifs suivent le modèle : les laisser en arrière rendrait toute
+        // estimation de coût fausse dès le changement, sans le dire.
+        Var_State.tarifs.entreeParM = m.entreeParM;
+        Var_State.tarifs.sortieParM = m.sortieParM;
+        Fn_Save(); Fn_RenderParametres(); Fn_RenderMajPanel();
+      }
+      break;
+    }
+    case 'effort': {
+      if (Cst_Efforts.some(x => x.id === el.value)) {
+        Var_State.effortMAJ = el.value;
+        Fn_Save(); Fn_RenderParametres(); Fn_RenderMajPanel();
+      }
       break;
     }
     case 'tarif': {
