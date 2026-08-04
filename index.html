@@ -429,7 +429,7 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202608041923';
+const Cst_Version = 'vigie-202608041929';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -799,7 +799,11 @@ function Fn_CoutJournal(journal) {
     // Les LECTURES de page ne sont pas facturées à l'appel : leur coût est déjà
     // compté dans les jetons d'entrée. Seules les recherches le sont.
     recherches: rech / 1000 * pr,
-    get total() { return this.entree + this.cacheEcriture + this.cacheLecture + this.sortie + this.recherches; }
+    // Les deux sous-totaux sont ceux de console.anthropic.com — « Coût total en
+    // tokens » et « Coût total de la recherche web ». Les nommer autrement rendait
+    // le rapprochement avec la facture impossible à faire de tête.
+    get jetons() { return this.entree + this.cacheEcriture + this.cacheLecture + this.sortie; },
+    get total() { return this.jetons + this.recherches; }
   };
 }
 function Fn_CloturerBilan(journal) {
@@ -1018,6 +1022,11 @@ function Fn_TexteDiagnostic(journal) {
   ligne('Réponse tronquée', journal && journal.tronque ? 'oui' : 'non');
   ligne('Mode d’appel', journal && journal.mode);
   ligne('Cours seuls', journal && journal.coursSeuls ? 'oui' : 'non');
+  ligne('Instruments traités', journal && journal.nbInstruments);
+  if (journal && journal.nbInstruments) {
+    const bud = Fn_BudgetCollecte(journal.nbInstruments);
+    ligne('Budget de collecte accordé', bud.recherches + ' recherches · ' + bud.lectures + ' pages');
+  }
   L.push('');
   L.push('## Consommation');
   L.push('');
@@ -1028,11 +1037,15 @@ function Fn_TexteDiagnostic(journal) {
     L.push('| Jetons écrits dans le cache | ' + Fn_FmtNb(journal.jetonsCacheEcriture || 0, 0) + ' | ' + Fn_FmtUsd(d.cacheEcriture) + ' |');
     L.push('| Jetons relus depuis le cache | ' + Fn_FmtNb(journal.jetonsCacheLecture || 0, 0) + ' | ' + Fn_FmtUsd(d.cacheLecture) + ' |');
     L.push('| Jetons de sortie (réflexion incluse) | ' + Fn_FmtNb(journal.jetonsSortie || 0, 0) + ' | ' + Fn_FmtUsd(d.sortie) + ' |');
-    L.push('| Recherches web | ' + (journal.recherches || 0) + ' | ' + Fn_FmtUsd(d.recherches) + ' |');
     L.push('| Pages lues | ' + (journal.lectures || 0) + ' | compté dans l’entrée |');
+    L.push('| **Sous-total « coût en tokens »** | | **' + Fn_FmtUsd(d.jetons) + '** |');
+    L.push('| Recherches web facturables | ' + (journal.recherches || 0) + ' | ' + Fn_FmtUsd(d.recherches) + ' |');
     L.push('| Reprises (pause_turn) | ' + (journal.continuations || 0) + ' | — |');
     L.push('| **Total** | | **' + Fn_FmtUsd(d.total) + '** |');
     L.push('');
+    L.push('Les deux sous-totaux portent les noms de console.anthropic.com → Usage :');
+    L.push('« Coût total en tokens » et « Coût total de la recherche web ». Un écart entre');
+    L.push('cette table et la facture se localise donc ligne à ligne, sans recalcul.');
     L.push('L’API ne détaille pas les jetons de réflexion : ils sont comptés dans les');
     L.push('jetons de sortie. Le résumé du raisonnement figure plus bas.');
     const ov = journal.outilsVus || {};
@@ -2888,6 +2901,41 @@ function Fn_DocSlotHtml(cle, titre, obligatoire, accept, note) {
     + '<label class="btn">' + (doc ? 'Remplacer' : 'Choisir') + '<input type="file" accept="' + accept + '" data-action="maj-doc" data-id="' + cle + '"></label>'
     + '</div>';
 }
+/* Projection AVANT lancement. Calée sur les MAJ réellement facturées, jamais sur
+   un barème théorique : on prend le coût par instrument des dernières MAJ abouties
+   et on l'applique au portefeuille du jour. Sans historique, on annonce le budget
+   de collecte sans inventer de montant — une estimation fabriquée serait pire que
+   pas d'estimation du tout. */
+function Fn_ProjectionMAJ(nbInstruments) {
+  const n = Math.max(0, Math.round(Fn_Num(nbInstruments) || 0));
+  const budget = Fn_BudgetCollecte(n);
+  const refs = (Var_State.majJournaux || []).filter(j => j && j.coutUsd != null && j.statut !== 'echec'
+    && !j.coursSeuls && Fn_Num(j.nbInstruments) > 0).slice(0, 3);
+  let coutParInst = null;
+  if (refs.length) {
+    coutParInst = refs.reduce((s, j) => s + (Fn_Num(j.coutUsd) || 0) / Fn_Num(j.nbInstruments), 0) / refs.length;
+  }
+  return {
+    instruments: n, recherches: budget.recherches, lectures: budget.lectures,
+    coutParInst, nbRefs: refs.length,
+    cout: coutParInst == null ? null : coutParInst * n
+  };
+}
+function Fn_HtmlProjectionMAJ(nbInstruments) {
+  const p = Fn_ProjectionMAJ(nbInstruments);
+  if (!p.instruments) return '';
+  let t = 'Budget de collecte pour ' + p.instruments + ' instrument(s) : <b class="mono">' + p.recherches
+    + '</b> recherches et <b class="mono">' + p.lectures + '</b> pages, calculé sur le portefeuille — aucun plafond fixe.';
+  if (p.cout != null) {
+    t += ' Sur la base des ' + p.nbRefs + ' dernière(s) MAJ complète(s), soit <b class="mono">'
+      + Fn_FmtUsd(Math.round(p.coutParInst * 100) / 100) + '</b> par instrument, cette MAJ devrait coûter de l’ordre de <b class="mono">'
+      + Fn_FmtUsd(Math.round(p.cout * 100) / 100) + '</b>.';
+  } else {
+    t += ' Aucune MAJ complète en référence : le coût ne peut pas être projeté honnêtement. Il s’affichera en direct pendant l’appel.';
+  }
+  t += ' Le nombre de recherches FACTURÉES peut dépasser ce budget : le plafond transmis à l’API borne les appels d’outil, pas la facturation.';
+  return '<div class="note note-info tres-petit" style="margin-top:8px">' + t + '</div>';
+}
 function Fn_RenderMajPanel() {
   const el = document.getElementById('v-maj');
   const ouvert = !!Var_State.panneaux.maj;
@@ -2945,6 +2993,10 @@ function Fn_RenderMajPanel() {
       if (!rt.docs.executes && !rt.aucuneTransac) {
         h += '<div class="tres-petit muted">Astuce : cochez « aucune transaction récente » si l’écran des ordres exécutés est vide.</div>';
       }
+      // Le budget de collecte n'a plus de plafond en dur : il suit le portefeuille.
+      // La contrepartie obligatoire est de dire AVANT le clic ce que ça représente,
+      // sinon on aurait seulement remplacé une limite arbitraire par une surprise.
+      if (!enCours) h += Fn_HtmlProjectionMAJ(instruments.length);
       const lancable = !enCours && (pdfOk || instruments.length);
       h += '<div class="rang-btn">'
         + (enCours
@@ -3044,6 +3096,11 @@ function Fn_RenderMajPanel() {
               + '<span class="met">sortie <b>' + Fn_Esc(Fn_FmtUsd(d.sortie)) + '</b></span>'
               + '<span class="met">recherches <b>' + Fn_Esc(Fn_FmtUsd(d.recherches)) + '</b></span>'
               + '</div>'
+              // Deux sous-totaux nommés comme sur le relevé Anthropic : le
+              // rapprochement avec la facture doit se faire sans recalcul.
+              + '<div class="valo-grille"><span class="met">coût en tokens <b>' + Fn_Esc(Fn_FmtUsd(d.jetons))
+              + '</b></span><span class="met">coût recherche web <b>' + Fn_Esc(Fn_FmtUsd(d.recherches)) + '</b></span></div>'
+              + '<div class="tres-petit muted">Ces deux lignes portent les intitulés de console.anthropic.com → Usage : comparez-les à la facture, un écart se localise alors ligne à ligne. Le nombre de recherches FACTURÉES peut dépasser le budget transmis à l’API — ce budget borne les appels d’outil, pas la facturation.</div>'
               + (cr ? '<div class="note note-ok tres-petit">Cache de contexte : <b>' + Fn_Esc(Fn_FmtNb(cr, 0))
                   + '</b> jetons relus à 0,1× au lieu du plein tarif, soit <b>' + Fn_Esc(Fn_FmtUsd(economie))
                   + '</b> d’économie sur cette seule MAJ.</div>'
@@ -4483,7 +4540,9 @@ const Cst_PhasesMAJ = [
 function Fn_NouveauJournal(mode, coursSeuls) {
   const j = {
     id: Fn_Uid('maj'), debutTs: Date.now(), finTs: null, mode, coursSeuls: !!coursSeuls,
-    modele: null, statut: 'en cours', phases: [], recherches: 0, lectures: 0, outilsVus: {},
+    // nbInstruments : dénominateur du coût unitaire, seule base honnête pour
+    // projeter la dépense d'une MAJ à venir sur un portefeuille de taille différente.
+    modele: null, statut: 'en cours', phases: [], recherches: 0, lectures: 0, outilsVus: {}, nbInstruments: 0,
     jetonsEntree: 0, jetonsSortie: 0, jetonsCacheEcriture: 0, jetonsCacheLecture: 0,
     coutUsd: null, stopReason: null, tronque: false, cartesProduites: 0, opportunitesProduites: 0, message: null
   };
@@ -4931,6 +4990,7 @@ async function Fn_LancerConsolidation() {
     // le modèle.
     // Budget déduit du nombre d'instruments à traiter, jamais fixé en dur.
     const budget = Fn_BudgetCollecte(instruments.length);
+    journal.nbInstruments = instruments.length;
     const outilRecherche = { type: Cst_OutilRecherche, name: 'web_search', max_uses: budget.recherches };
     const outilLecture = { type: Cst_OutilLecture, name: 'web_fetch', max_uses: budget.lectures, max_content_tokens: Cst_MaxJetonsParPage };
     let outils = [outilRecherche, outilLecture];
