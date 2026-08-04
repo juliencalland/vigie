@@ -429,7 +429,7 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202608041849';
+const Cst_Version = 'vigie-202608041923';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -493,12 +493,24 @@ const Cst_OutilLecture = 'web_fetch_20260209';
 // Plafonds : une page lue entre ENTIÈREMENT dans le contexte facturé. Sans
 // plafond, une vingtaine de pages financières suffirait à faire exploser
 // l'entrée — exactement l'inflation qu'on cherche à éviter.
-// Relevés du 04/08/26 : les DEUX plafonds saturés (60/60 et 40/40), le modèle
-// écrivant lui-même « limite de budget de recherche atteinte » et laissant des
-// valorisations vides. Le plafond était devenu la contrainte de qualité, pas le
-// coût. Relevés en conséquence — la dépense reste lisible en direct.
-const Cst_MaxRecherches = 100;
-const Cst_MaxLectures = 60;
+// PAS de plafond fixe : un nombre en dur est arbitraire par construction. Avec 14
+// instruments, 60 recherches saturaient déjà (le modèle écrivait lui-même « limite
+// de budget de recherche atteinte » et laissait des valorisations vides) ; avec 60
+// titres, n'importe quelle constante serait absurde. Le budget se DÉDUIT du travail
+// demandé : le protocole exige par instrument une page de cotation, une page de
+// valorisation, l'agenda et le consensus — d'où ces ratios. Les planchers couvrent
+// les portefeuilles minuscules, où le coût fixe (macro, marge) domine.
+const Cst_RecherchesParInstrument = 8;
+const Cst_LecturesParInstrument = 4;
+const Cst_RecherchesPlancher = 40;
+const Cst_LecturesPlancher = 24;
+function Fn_BudgetCollecte(nbInstruments) {
+  const n = Math.max(0, Math.round(Fn_Num(nbInstruments) || 0));
+  return {
+    recherches: Math.max(Cst_RecherchesPlancher, n * Cst_RecherchesParInstrument),
+    lectures: Math.max(Cst_LecturesPlancher, n * Cst_LecturesParInstrument)
+  };
+}
 const Cst_MaxJetonsParPage = 12000;
 const Cst_VersionEtat = 1;
 // Tarifs par défaut (USD) — préremplis, modifiables dans Paramètres → Accès API, à vérifier sur docs.claude.com
@@ -1041,11 +1053,22 @@ function Fn_TexteDiagnostic(journal) {
   const req = (journal && journal.listeRecherches) || [];
   L.push(''); L.push('## Requêtes de recherche (' + req.length + ')'); L.push('');
   L.push(req.length ? req.map((q, i) => (i + 1) + '. ' + q).join('\n') : '_aucune_');
+  // Bornes de lecture : le fichier doit rester ouvrable et lisible. Le raisonnement
+  // est le plus bavard et le moins dense — il est borné plus court que la réponse,
+  // qui est la donnée elle-même.
+  const borner = (txt, max) => {
+    const t = String(txt || '');
+    return t.length <= max ? t : t.slice(0, max) + '\n\n[…] ' + Fn_FmtNb(t.length - max, 0) + ' caractères supplémentaires non repris (total ' + Fn_FmtNb(t.length, 0) + ').';
+  };
+  const poids = n => Fn_FmtNb(Math.round(String(n || '').length / 1024), 0) + ' Ko';
+  L.push(''); L.push('## Volume des échanges'); L.push('');
+  L.push('Envoyé ' + poids(diag.consignes) + ' · raisonnement ' + poids(diag.reflexion) + ' · réponse ' + poids(diag.reponse)
+    + '. La réponse est le poste de dépense dominant : si elle enfle sans gagner en contenu chiffré, c’est la consigne de concision qu’il faut resserrer.');
   L.push(''); L.push('## Résumé du raisonnement du modèle'); L.push('');
-  L.push(diag.reflexion ? diag.reflexion : '_non capturé (réflexion non résumée par l’API pour cet appel)_');
+  L.push(diag.reflexion ? borner(diag.reflexion, 30000) : '_non capturé (réflexion non résumée par l’API pour cet appel)_');
   L.push(''); L.push('## Réponse brute reçue'); L.push('');
   L.push('```json');
-  L.push(diag.reponse ? String(diag.reponse).slice(0, 200000) : '(vide)');
+  L.push(diag.reponse ? borner(diag.reponse, 120000) : '(vide)');
   L.push('```');
   L.push(''); L.push('## Texte intégral envoyé au modèle'); L.push('');
   L.push('```');
@@ -4291,6 +4314,10 @@ function Fn_BuildPromptMAJ(ctx) {
   let horodatage = new Date().toString();
   try { horodatage = new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', dateStyle: 'full', timeStyle: 'medium' }).format(new Date()) + ' (heure de Paris)'; } catch (e) { /* défaut */ }
   const instruments = ctx.instruments;
+  // Budget de collecte : annoncé au modèle pour qu'il le RÉPARTISSE. Le lui cacher
+  // le faisait dépenser sans compter puis constater la panne sèche en fin de course.
+  const nbInst = (instruments && instruments.length) || 0;
+  const budget = Fn_BudgetCollecte(nbInst);
   L.push('Tu es à la fois (1) un gérant de desk actions/dérivés senior, expert en lecture de tendances, en exposition et en gestion du risque sur marge, et (2) un analyste financier de formation expert-comptable, spécialiste de la lecture critique des publications de résultats (comptes, guidances, qualité du résultat). Tu analyses le portefeuille fourni comme le ferait un comité d’investissement pour son client expert.');
   L.push('');
   L.push('=== POSTURE (non négociable) ===');
@@ -4331,7 +4358,7 @@ function Fn_BuildPromptMAJ(ctx) {
   L.push('   4. Un produit à levier compte pour SON SOUS-JACENT : ses multiples sont ceux du sous-jacent, sa fiche émetteur fournit barrière, parité, delta et portage. Ne consomme pas d’appel pour chercher un PER au turbo lui-même.');
   L.push('   5. Si la page de valorisation reste introuvable ou illisible APRÈS l’avoir cherchée ET tenté de la lire, dis-le dans note en nommant ce qui a été tenté. Une note de ce type sans lecture correspondante est une faute : l’omission n’est légitime qu’après avoir réellement ouvert la page.');
   L.push('   6. Ordre de priorité si le temps manque : cotations complètes de toutes les lignes détenues D’ABORD, puis valorisation des lignes les plus lourdes en % de la valeur nette, puis le reste. Ne sacrifie jamais les cotations pour produire davantage de texte.');
-  L.push('   7. BUDGET DE RECHERCHE — il est limité et il s’épuise. Deux gaspillages constatés, à ne pas répéter : (a) RELANCER LA MÊME REQUÊTE. Une requête déjà émise a déjà rendu ce qu’elle avait ; si elle n’a rien donné, change d’angle (autre source, autre libellé, ticker au lieu de l’ISIN), ne la répète pas à l’identique. (b) INSISTER SUR UNE PAGE QUI NE REND PAS SES CHIFFRES. Certaines fiches (Zone Bourse, Boursorama et plus généralement les pages à contenu chargé par script) s’ouvrent sans que les tableaux chiffrés soient restitués : le texte revient, les nombres non. Après UNE tentative infructueuse sur une telle page, passe à une source qui rend ses chiffres en clair (StockAnalysis, Investing, Yahoo Finance, extraETF pour les ETF, site IR de l’émetteur) plutôt que d’y revenir. Compte tes appels : quand le budget approche de sa fin, termine par les cotations manquantes des lignes les plus lourdes, jamais par du texte.');
+  L.push('   7. BUDGET DE COLLECTE — il est calculé pour CE portefeuille : ' + budget.recherches + ' recherches et ' + budget.lectures + ' lectures de page pour ' + nbInst + ' instrument(s), soit environ ' + Cst_RecherchesParInstrument + ' recherches et ' + Cst_LecturesParInstrument + ' lectures par instrument. Répartis-le : ne consomme pas la moitié du budget sur les trois premières lignes. Deux gaspillages constatés, à ne pas répéter : (a) RELANCER LA MÊME REQUÊTE. Une requête déjà émise a déjà rendu ce qu’elle avait ; si elle n’a rien donné, change d’angle (autre source, autre libellé, ticker au lieu de l’ISIN), ne la répète pas à l’identique. (b) INSISTER SUR UNE PAGE QUI NE REND PAS SES CHIFFRES. Certaines fiches (Zone Bourse, Boursorama et plus généralement les pages à contenu chargé par script) s’ouvrent sans que les tableaux chiffrés soient restitués : le texte revient, les nombres non. Après UNE tentative infructueuse sur une telle page, passe à une source qui rend ses chiffres en clair (StockAnalysis, Investing, Yahoo Finance, extraETF pour les ETF, site IR de l’émetteur) plutôt que d’y revenir. Compte tes appels : quand le budget approche de sa fin, termine par les cotations manquantes des lignes les plus lourdes, jamais par du texte.');
   L.push('  (a) COTATIONS (bloc quotes) — pré-ouverture (pre), variation de la pré-ouverture en % (preVar) et son heure (preAs) ; dernier cours de séance (last) et sa variation en % (var) ; ouverture (ouv), plus haut (haut) et plus bas (bas) de la séance, clôture de la veille (clotPrec) ; après-clôture (post), sa variation en % (postVar) et son heure (postAs) ; volume du jour (vol) et volume moyen quotidien sur 3 mois (adv, en TITRES — il dimensionne la capacité de sortie) ; plus haut et plus bas de 52 semaines (h52, b52) ; devise de cotation (dev) et place (place). La RÈGLE HORS-HORAIRES ci-dessus s’applique : si la place est fermée, la valeur pertinente du moment (pré-ouverture ou après-clôture) est OBLIGATOIRE en plus du dernier cours de séance — « dernier cours de clôture » seul est une réponse incomplète.');
   L.push('  (b) AGENDA de la société (bloc fundamentals) — prochaine publication en clair (pub) ET sa date en ISO AAAA-MM-JJ (pubDate) quand elle est connue.');
   L.push('  (c) CONSENSUS (bloc fundamentals) — recommandation agrégée avec sa répartition (conso), nombre d’analystes (nbA), objectif de cours moyen (obj), écart en % au dernier cours (objEcart), objectifs le plus haut et le plus bas (objHaut, objBas).');
@@ -4401,7 +4428,11 @@ function Fn_BuildPromptMAJ(ctx) {
   L.push('2. OMETS toute clé dont la valeur est inconnue, non trouvée ou vide. N’écris JAMAIS "champ": null, ni "", ni "—", ni "n. d." : l’absence dit déjà « non trouvé » et ne coûte rien. N’émets pas non plus d’entrée vide ni de tableau vide (sauf ceux explicitement exigés en mode « cours seuls »). UNIQUE EXCEPTION : la valeur v d’une métrique d’événement, où « — (donnée manquante : X) » reste EXIGÉ — l’utilisateur doit lire ce qui manque et comment l’obtenir, jamais une case vide.');
   L.push('3. Emploie les clés COURTES du schéma ci-dessous À LA LETTRE. Une clé rallongée, traduite ou inventée n’est pas lue.');
   L.push('4. PAS DE REDITE : un chiffre porté par un champ dédié ne se répète pas en prose ; un texte ne récapitule pas les champs voisins ; les mêmes phrases ne se recopient pas d’une carte à l’autre.');
-  L.push('5. LONGUEURS MAXIMALES en caractères — au-delà, REFORMULE plus court, ne tronque jamais en cours de phrase : surv 320 · arb 320 · prat 320 · note 200 · tend 200 · desk 500 · revue 600 · valoRef 250 · risques 300 · resume 250 · preuve 300 · propo 250 · decl 250 · cb 250 · inval 250 · these 600 · coh 400 · cata 300 · valo 300 · liq 200 · fin 200. Ces plafonds sont un budget de concision, pas une cible à remplir.');
+  L.push('5. LONGUEURS MAXIMALES en caractères — au-delà, REFORMULE plus court, ne tronque jamais en cours de phrase : surv 320 · arb 320 · prat 320 · note 200 · tend 200 · desk 500 · revue 600 · valoRef 250 · risques 300 · resume 250 · preuve 300 · propo 250 · decl 250 · cb 250 · inval 250 · these 600 · coh 400 · cata 300 · valo 300 · liq 200 · fin 200 · as 40 · s 120 · lib 120 · effet 400. Ces plafonds sont un budget de concision, pas une cible à remplir. Ce sont des MAXIMA FERMES : le relevé du 04/08/26 comportait un champ note de 340 caractères pour un plafond de 200 et des champs as de 160 caractères là où 20 suffisaient.');
+  L.push('5 bis. STYLE — DEUX RÉGIMES, à ne pas confondre.');
+  L.push('  (i) CHAMPS DE DONNÉES ET DE TRAÇABILITÉ — as, s, u, lib, dev, place, note, tend, valoRef, risques, resume, preuve : style TÉLÉGRAPHIQUE. Pas de phrase complète, pas de justification, pas de récit de ce que tu as tenté. « 03/08/26 clôture » et non « 03/08/26 (clôture, cf. note releve) — séance du 04/08/26 non confirmée sur 2 sources consultées (…) ». « Boursorama 04/08/26 » et non « Boursorama (bandeau temps réel, 04/08/26 20:03 Paris) recoupé StockAnalysis.com (OHLC/volume 18:50 Paris) et CNBC (ADV 10j 7,88M — pas d’ADV 3 mois trouvé) ». Une réserve sur la fraîcheur ou la fiabilité tient en quelques mots : « non confirmé 04/08 », « 2 sources divergentes », « source unique ». Nomme les sources séparées par « + », sans commenter chacune.');
+  L.push('  (ii) CHAMPS D’EXPERTISE — prat, surv, arb, revue, desk, propo, decl, cb, inval, these : c’est LÀ que se trouve la valeur, et la concision n’y justifie AUCUN appauvrissement. Règle professionnelle nommée, chiffre, action corrective : rien de tout cela ne se sacrifie. Reste dans le plafond en supprimant les redites et les précautions oratoires, jamais en supprimant du fond.');
+  L.push('  Un mot ajouté à un champ de traçabilité coûte autant qu’un mot ajouté à une ligne pratique, et n’apporte rien. La sortie est le poste de dépense DOMINANT de cet appel : chaque phrase de commentaire non demandée est payée au prix fort et ne sera jamais lue.');
   L.push('6. Ne propose RIEN qui figure déjà dans evFuturs (même objet à la même date) ni dans refuse : ce serait payé deux fois et revalidé une deuxième fois à la main.');
   L.push('7. Ne recopie pas le snapshot dans ta réponse : les blocs positions / orders / trades / margin se remplissent depuis les DOCUMENTS JOINTS uniquement. Sans document, ils sont vides.');
   L.push('');
@@ -4898,8 +4929,10 @@ async function Fn_LancerConsolidation() {
     // Ne JAMAIS déclarer code_execution à côté : les versions 20260209 s'en
     // servent déjà en interne, et un second environnement d'exécution perturbe
     // le modèle.
-    const outilRecherche = { type: Cst_OutilRecherche, name: 'web_search', max_uses: Cst_MaxRecherches };
-    const outilLecture = { type: Cst_OutilLecture, name: 'web_fetch', max_uses: Cst_MaxLectures, max_content_tokens: Cst_MaxJetonsParPage };
+    // Budget déduit du nombre d'instruments à traiter, jamais fixé en dur.
+    const budget = Fn_BudgetCollecte(instruments.length);
+    const outilRecherche = { type: Cst_OutilRecherche, name: 'web_search', max_uses: budget.recherches };
+    const outilLecture = { type: Cst_OutilLecture, name: 'web_fetch', max_uses: budget.lectures, max_content_tokens: Cst_MaxJetonsParPage };
     let outils = [outilRecherche, outilLecture];
     let domaines = sitesAutorises.slice();
     // La restriction de domaines vaut pour les DEUX outils : autoriser la
@@ -4912,7 +4945,7 @@ async function Fn_LancerConsolidation() {
     };
     appliquerDomaines();
     const modele = Fn_ModeleMAJ();
-    Fn_Phase(journal, 'envoi', 'ok', 'Requête envoyée (' + modele + ', effort ' + Fn_EffortMAJ() + ', plafond ' + Fn_FmtNb(Cst_MaxTokens, 0) + ' jetons, cache de contexte actif' + (mode.mode === 'byok' ? ', flux SSE' : ', pont d’artefact') + ', recherche + lecture de page (max ' + Cst_MaxRecherches + ' recherches, ' + Cst_MaxLectures + ' pages de ' + Fn_FmtNb(Cst_MaxJetonsParPage, 0) + ' jetons)' + (domaines.length ? ', limitées à ' + domaines.length + ' site(s)' : ', web libre') + ')');
+    Fn_Phase(journal, 'envoi', 'ok', 'Requête envoyée (' + modele + ', effort ' + Fn_EffortMAJ() + ', plafond ' + Fn_FmtNb(Cst_MaxTokens, 0) + ' jetons, cache de contexte actif' + (mode.mode === 'byok' ? ', flux SSE' : ', pont d’artefact') + ', budget de collecte pour ' + instruments.length + ' instrument(s) : ' + budget.recherches + ' recherches et ' + budget.lectures + ' pages de ' + Fn_FmtNb(Cst_MaxJetonsParPage, 0) + ' jetons' + (domaines.length ? ', limitées à ' + domaines.length + ' site(s)' : ', web libre') + ')');
     let texte = '', totalEntree = 0, totalSortie = 0, totalRech = 0, totalLect = 0, totalCw = 0, totalCr = 0;
     let stopReason = null, continuations = 0;
     // Repli automatique et TRACÉ (jamais un abaissement choisi) : le plafond de sortie et le
@@ -4956,7 +4989,7 @@ async function Fn_LancerConsolidation() {
         // dit dans le journal pour que la baisse de qualité ne passe pas inaperçue.
         if (!repliOutils && /tool|web_search|web_fetch/i.test(msgP) && /not (a )?(valid|supported)|unknown|unsupported|invalid/i.test(msgP)) {
           repliOutils = true;
-          outils = [{ type: Cst_OutilRechercheRepli, name: 'web_search', max_uses: Cst_MaxRecherches }];
+          outils = [{ type: Cst_OutilRechercheRepli, name: 'web_search', max_uses: budget.recherches }];
           appliquerDomaines();
           Fn_Phase(journal, 'envoi', 'en cours', 'Outils de recherche refusés par l’API — repli sur la recherche simple (' + Cst_OutilRechercheRepli + ') SANS lecture de page : les multiples et le BPA risquent de manquer');
           continue;
