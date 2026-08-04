@@ -429,7 +429,7 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202608041709';
+const Cst_Version = 'vigie-202608041740';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -947,6 +947,106 @@ function Fn_SyncRequete(methode, corps) {
   if (corps) entetes['Content-Type'] = 'application/json';
   return fetch('https://api.github.com/repos/' + Cst_SyncDepot + '/contents/' + Cst_SyncChemin,
     { method: methode, headers: entetes, body: corps ? JSON.stringify(corps) : undefined });
+}
+/* ----------------------------------------------------------------
+   JOURNAL D'APPEL DÉTAILLÉ — écrit dans le dépôt PRIVÉ à chaque MAJ,
+   écrasé à chaque fois. C'est la boîte noire : sans elle, une MAJ ratée
+   ne laisse qu'un message d'erreur, et il devient impossible de savoir
+   si c'est le texte envoyé, le raisonnement du modèle ou la collecte qui
+   a fauté. Écrit dans le `finally` : une MAJ qui échoue est justement
+   celle dont on a le plus besoin des données.
+   Dépôt PRIVÉ obligatoire — ce fichier contient le snapshot du
+   portefeuille (lignes, montants), exactement comme etat.json.
+   ---------------------------------------------------------------- */
+const Cst_CheminDiagnostic = 'dernier-appel.md';
+// Écriture d'un fichier quelconque du dépôt privé. `Fn_SyncRequete` vise
+// etat.json ; celle-ci prend un chemin. Récupère d'abord le sha (l'API GitHub
+// l'exige pour écraser), 404 = fichier neuf.
+async function Fn_DepotEcrire(chemin, texte, message) {
+  const token = Fn_GetSyncToken();
+  if (!token) return false;
+  const entetes = { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
+  const url = 'https://api.github.com/repos/' + Cst_SyncDepot + '/contents/' + chemin;
+  let sha = null;
+  try {
+    const r = await fetch(url + '?ref=main', { headers: entetes });
+    if (r.ok) { const j = await r.json(); sha = j.sha || null; }
+  } catch (e) { /* fichier neuf */ }
+  const corps = { message: message || 'Diagnostic MAJ', content: Fn_TexteVersB64(texte), branch: 'main' };
+  if (sha) corps.sha = sha;
+  const rep = await fetch(url, { method: 'PUT', headers: Object.assign({ 'Content-Type': 'application/json' }, entetes), body: JSON.stringify(corps) });
+  return rep.ok;
+}
+function Fn_TexteDiagnostic(journal) {
+  const d = journal ? Fn_CoutJournal(journal) : null;
+  const diag = Var_State._runtime.diag || {};
+  const L = [];
+  const ligne = (k, v) => L.push('| ' + k + ' | ' + (v == null ? '—' : v) + ' |');
+  L.push('# Journal du dernier appel de consolidation');
+  L.push('');
+  L.push('Fichier écrasé à chaque MAJ, réussie ou non. Sert à expertiser le signal :');
+  L.push('texte envoyé, raisonnement du modèle, réponse brute et comptage des jetons.');
+  L.push('');
+  L.push('## Contexte');
+  L.push('');
+  L.push('| Élément | Valeur |');
+  L.push('|---|---|');
+  ligne('Date', journal ? Fn_FmtHeure(journal.debutTs) : Fn_FmtHeure(Date.now()));
+  ligne('Durée', journal ? Fn_DureeFmt((journal.finTs || Date.now()) - journal.debutTs) : '—');
+  ligne('Version de l’application', Cst_Version);
+  ligne('Modèle demandé', Fn_ModeleMAJ());
+  ligne('Modèle ayant répondu', journal && journal.modele);
+  ligne('Effort', Fn_EffortMAJ());
+  ligne('Statut', journal && journal.statut);
+  ligne('stop_reason', journal && journal.stopReason);
+  ligne('Réponse tronquée', journal && journal.tronque ? 'oui' : 'non');
+  ligne('Mode d’appel', journal && journal.mode);
+  ligne('Cours seuls', journal && journal.coursSeuls ? 'oui' : 'non');
+  L.push('');
+  L.push('## Consommation');
+  L.push('');
+  L.push('| Poste | Quantité | Coût estimé |');
+  L.push('|---|---|---|');
+  if (journal && d) {
+    L.push('| Jetons d’entrée (plein tarif) | ' + Fn_FmtNb(journal.jetonsEntree || 0, 0) + ' | ' + Fn_FmtUsd(d.entree) + ' |');
+    L.push('| Jetons écrits dans le cache | ' + Fn_FmtNb(journal.jetonsCacheEcriture || 0, 0) + ' | ' + Fn_FmtUsd(d.cacheEcriture) + ' |');
+    L.push('| Jetons relus depuis le cache | ' + Fn_FmtNb(journal.jetonsCacheLecture || 0, 0) + ' | ' + Fn_FmtUsd(d.cacheLecture) + ' |');
+    L.push('| Jetons de sortie (réflexion incluse) | ' + Fn_FmtNb(journal.jetonsSortie || 0, 0) + ' | ' + Fn_FmtUsd(d.sortie) + ' |');
+    L.push('| Recherches web | ' + (journal.recherches || 0) + ' | ' + Fn_FmtUsd(d.recherches) + ' |');
+    L.push('| Pages lues | ' + (journal.lectures || 0) + ' | compté dans l’entrée |');
+    L.push('| Reprises (pause_turn) | ' + (journal.continuations || 0) + ' | — |');
+    L.push('| **Total** | | **' + Fn_FmtUsd(d.total) + '** |');
+    L.push('');
+    L.push('L’API ne détaille pas les jetons de réflexion : ils sont comptés dans les');
+    L.push('jetons de sortie. Le résumé du raisonnement figure plus bas.');
+  }
+  if (journal && journal.message) { L.push(''); L.push('## Message de clôture'); L.push(''); L.push('> ' + journal.message); }
+  if (journal && journal.phases && journal.phases.length) {
+    L.push(''); L.push('## Phases'); L.push('');
+    journal.phases.forEach(p => L.push('- **' + p.cle + '** — ' + p.statut + ' — ' + String(p.message || '')));
+  }
+  const req = (journal && journal.listeRecherches) || [];
+  L.push(''); L.push('## Requêtes de recherche (' + req.length + ')'); L.push('');
+  L.push(req.length ? req.map((q, i) => (i + 1) + '. ' + q).join('\n') : '_aucune_');
+  L.push(''); L.push('## Résumé du raisonnement du modèle'); L.push('');
+  L.push(diag.reflexion ? diag.reflexion : '_non capturé (réflexion non résumée par l’API pour cet appel)_');
+  L.push(''); L.push('## Réponse brute reçue'); L.push('');
+  L.push('```json');
+  L.push(diag.reponse ? String(diag.reponse).slice(0, 200000) : '(vide)');
+  L.push('```');
+  L.push(''); L.push('## Texte intégral envoyé au modèle'); L.push('');
+  L.push('```');
+  L.push(diag.consignes || '(non capturé)');
+  L.push('```');
+  return L.join('\n');
+}
+function Fn_EcrireDiagnostic(journal) {
+  // Jamais bloquant et jamais fatal : l'échec d'écriture du diagnostic ne doit
+  // pas transformer une MAJ réussie en échec.
+  try {
+    return Fn_DepotEcrire(Cst_CheminDiagnostic, Fn_TexteDiagnostic(journal),
+      'Diagnostic MAJ ' + new Date().toISOString()).catch(() => false);
+  } catch (e) { return Promise.resolve(false); }
 }
 function Fn_SerialiserEtat() {
   return JSON.stringify(Var_State, (k, v) => (k && k.charAt && k.charAt(0) === '_') ? undefined : v);
@@ -2836,6 +2936,10 @@ function Fn_RenderMajPanel() {
           + '<span class="met">recherches <b id="maj-rech">' + (journal.recherches || 0) + '</b></span>'
           + '<span class="met">jetons reçus <b id="maj-jetons">≈ ' + Fn_Esc(Fn_FmtNb(journal.jetonsSortie || 0, 0)) + '</b></span>'
           + '<span class="met">chrono <b id="maj-chrono">' + Fn_Esc(Fn_DureeFmt(Date.now() - journal.debutTs)) + '</b></span>'
+          // Dépense engagée en direct : même formule que le bilan de fin, appliquée
+          // aux compteurs vivants. Elle ne redescend jamais — ce qui est consommé
+          // est dû, y compris si la MAJ échoue ensuite.
+          + '<span class="met">dépense <b id="maj-cout">' + Fn_Esc(Fn_CoutVivant(journal)) + '</b></span>'
           + (journal.mode === 'byok' ? '<span class="met met-large">dernier signal <b id="maj-signal">…</b></span>' : '')
           + '</div>'
           // Verdict en clair, rafraîchi chaque seconde par le tic du chrono.
@@ -3954,6 +4058,9 @@ function Fn_RenderParametres() {
     + '<hr class="sep"><label class="champ">Restaurer un état (fichier <b class="mono">etat.json</b>)</label>'
     + '<label class="btn">Choisir le fichier<input type="file" accept=".json,application/json" data-action="sync-importer" style="display:none"></label>'
     + '<div class="tres-petit muted" style="margin-top:4px">Filet de sécurité, à n’utiliser qu’après incident : le dépôt privé conserve l’historique complet de chaque enregistrement. Pour revenir en arrière, télécharger la version voulue de <b class="mono">etat.json</b> depuis github.com/' + Fn_Esc(Cst_SyncDepot) + ' (onglet History) et la charger ici. Un état plus ANCIEN que celui de cet appareil est ignoré.</div>'
+    // Boîte noire : dit à l'utilisateur QUE le fichier existe et OÙ, sinon il ne
+    // le découvrirait jamais — et c'est la seule pièce exploitable après un échec.
+    + '<hr class="sep"><div class="tres-petit muted">À chaque MAJ, réussie ou non, un compte rendu technique <b class="mono">' + Fn_Esc(Cst_CheminDiagnostic) + '</b> est déposé dans le même dépôt privé : consignes envoyées au modèle, résumé de son raisonnement, réponse brute, comptage des jetons et coût par poste. Il est ÉCRASÉ à chaque MAJ (l’historique reste consultable dans l’onglet History de github.com/' + Fn_Esc(Cst_SyncDepot) + '). C’est la pièce à fournir pour faire expertiser une MAJ ratée.</div>'
     + '</div>';
   // Accès API (section 6)
   const oApi = !!Var_State.panneaux.apiParam;
@@ -4352,6 +4459,12 @@ function Fn_MajCompteursDirect(journal) {
   const m = document.getElementById('maj-modele'); if (m) m.textContent = journal.modele || '…';
   const r = document.getElementById('maj-rech'); if (r) r.textContent = String(journal.recherches || 0);
   const jt = document.getElementById('maj-jetons'); if (jt) jt.textContent = '≈ ' + Fn_FmtNb(journal.jetonsSortie || 0, 0);
+  const ct = document.getElementById('maj-cout'); if (ct) ct.textContent = Fn_CoutVivant(journal);
+}
+// Dépense déjà engagée, arrondie au centime : à 4 décimales le compteur
+// clignoterait à chaque bloc reçu sans rien apprendre de plus.
+function Fn_CoutVivant(journal) {
+  return '≈ ' + Fn_FmtUsd(Math.round(Fn_CoutJournal(journal).total * 100) / 100);
 }
 /* ---- Erreurs API différenciées ---- */
 async function Fn_ErreurHttp(rep) {
@@ -4450,6 +4563,10 @@ async function Fn_AppelStream(corps, entetes, journal, signal) {
   const blocs = [];
   const baseRech = journal.recherches || 0, baseSortie = journal.jetonsSortie || 0;
   const baseLect = journal.lectures || 0;
+  // Cumuls d'entrée des reprises déjà faites : sans eux le compteur de dépense
+  // en direct retomberait à zéro à chaque reprise, alors que c'est précisément
+  // la relecture du contexte d'une reprise à l'autre qui coûte le plus cher.
+  const baseEntree = journal.jetonsEntree || 0, baseCw = journal.jetonsCacheEcriture || 0, baseCr = journal.jetonsCacheLecture || 0;
   let rech = 0, lect = 0, charsSortie = 0; // charsSortie : estimation vivante (l'usage exact n'arrive qu'en fin de flux)
   let cacheEcriture = 0, cacheLecture = 0;
   // Un flux SSE complet se termine TOUJOURS par message_stop, précédé d'un
@@ -4479,6 +4596,12 @@ async function Fn_AppelStream(corps, entetes, journal, signal) {
         // à 0,1× au lieu du plein tarif est ce qui sépare une MAJ à 3 $ d'une à 17 $.
         cacheEcriture = u0.cache_creation_input_tokens || 0;
         cacheLecture = u0.cache_read_input_tokens || 0;
+        // L'entrée est facturée dès l'ouverture du segment : elle est reportée au
+        // journal ICI, et pas à la fin de l'appel, pour que la dépense affichée à
+        // l'écran soit celle déjà engagée et non celle du segment précédent.
+        journal.jetonsEntree = baseEntree + entree;
+        journal.jetonsCacheEcriture = baseCw + cacheEcriture;
+        journal.jetonsCacheLecture = baseCr + cacheLecture;
         journal.modele = modele;
         Fn_Phase(journal, 'analyse', 'en cours', 'Analyse des documents (modèle : ' + (modele || '?') + ')');
       } else if (ev.type === 'content_block_start') {
@@ -4546,7 +4669,8 @@ async function Fn_AppelStream(corps, entetes, journal, signal) {
       message: 'Le flux s’est interrompu avant la fin de la réponse : la connexion a été fermée sans marqueur de fin.'
     };
   }
-  return { contenu: blocs.filter(Boolean), texte, modele, entree, sortie, recherches: rech, lectures: lect,
+  const reflexion = blocs.filter(b => b && b.type === 'thinking' && b.thinking).map(b => b.thinking).join('\n\n---\n\n');
+  return { contenu: blocs.filter(Boolean), texte, reflexion, modele, entree, sortie, recherches: rech, lectures: lect,
     cacheEcriture, cacheLecture, stopReason: stop };
 }
 /* ---- Appel direct sans flux (mode artefact — le pont ne streame pas) ---- */
@@ -4571,6 +4695,7 @@ async function Fn_AppelDirect(corps, entetes, journal, signal) {
   journal.jetonsSortie = (journal.jetonsSortie || 0) + (u.output_tokens || 0);
   return {
     contenu, texte, modele: data.model || null,
+    reflexion: contenu.filter(b => b && b.type === 'thinking' && b.thinking).map(b => b.thinking).join('\n\n---\n\n'),
     entree: u.input_tokens || 0,
     sortie: u.output_tokens || 0,
     cacheEcriture: u.cache_creation_input_tokens || 0,
@@ -4676,6 +4801,9 @@ async function Fn_LancerConsolidation() {
   rt.timers.chrono = setInterval(() => {
     const el = document.getElementById('maj-chrono');
     if (el) el.textContent = Fn_DureeFmt(Date.now() - journal.debutTs);
+    // Le mode artefact ne streame pas : sans ce rappel, la dépense resterait figée
+    // à 0 pendant tout l'appel.
+    Fn_MajCompteursDirect(journal);
     Fn_MajAfficherSante(journal); // « ça avance » / « c'est planté », chaque seconde
     if (document.hidden) return; // page masquée : ni affichage utile, ni coupure automatique
     const sig = rt.dernierSignal;
@@ -4713,12 +4841,15 @@ async function Fn_LancerConsolidation() {
       }
     };
     contenus.push({ type: 'text', text: Fn_BuildPromptMAJ(ctxTexte) });
+    // Boîte noire : ce qui part, ce que le modèle en pense, ce qui revient.
+    rt.diag = { consignes: contenus[contenus.length - 1].text, reponse: '', reflexion: '' };
     // Le périmètre de recherche est ANNONCÉ au modèle : s'il change au cours des
     // replis, le texte doit changer avec lui — sinon le modèle croirait toujours
     // la recherche bridée et rendrait des « donnée hors périmètre » à tort.
     const reecrireTexte = sites => {
       ctxTexte.sitesAutorises = sites;
       contenus[contenus.length - 1].text = Fn_BuildPromptMAJ(ctxTexte);
+      rt.diag.consignes = contenus[contenus.length - 1].text;
     };
     const messagesApi = [{ role: 'user', content: contenus }];
     const entetes = { 'Content-Type': 'application/json' };
@@ -4757,7 +4888,12 @@ async function Fn_LancerConsolidation() {
       const corps = {
         model: modele,
         max_tokens: plafond, // plafond maximal du modèle — la troncature ne doit jamais venir d'un plafond choisi trop bas
-        thinking: { type: 'adaptive' },
+        // `display: summarized` demande le RÉSUMÉ du raisonnement. Il ne change
+        // pas la facturation — la réflexion est facturée de la même façon quelle
+        // que soit sa visibilité — mais sans lui le journal de diagnostic ne
+        // contiendrait qu'un texte vide : impossible de comprendre pourquoi le
+        // modèle a cherché ici plutôt que là.
+        thinking: { type: 'adaptive', display: 'summarized' },
         tools: outils,
         messages: messagesApi
       };
@@ -4831,6 +4967,8 @@ async function Fn_LancerConsolidation() {
         throw errParam;
       }
       texte += res.texte;
+      rt.diag.reponse = texte;
+      if (res.reflexion) rt.diag.reflexion += (rt.diag.reflexion ? '\n\n---\n\n' : '') + res.reflexion;
       totalEntree += res.entree; totalSortie += res.sortie; totalRech += res.recherches;
       totalLect += (res.lectures || 0); totalCw += (res.cacheEcriture || 0); totalCr += (res.cacheLecture || 0);
       journal.jetonsEntree = totalEntree; journal.jetonsSortie = totalSortie; journal.recherches = totalRech;
@@ -4918,6 +5056,10 @@ async function Fn_LancerConsolidation() {
     // Coût et cumul arrêtés ICI : succès, échec, annulation ou coupure du flux,
     // les jetons consommés sont les mêmes et doivent être comptés une fois.
     Fn_CloturerBilan(journal);
+    // Boîte noire déposée dans le dépôt PRIVÉ après clôture du bilan, pour que le
+    // fichier porte les compteurs définitifs. Volontairement après : un échec
+    // d'écriture ne doit rien coûter à la MAJ, qui est déjà terminée.
+    Fn_EcrireDiagnostic(journal);
     Fn_Save();
     Fn_RenderVigie();
     if (Var_State.onglet === 'cours') Fn_RenderCours();
