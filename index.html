@@ -429,7 +429,7 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202608041740';
+const Cst_Version = 'vigie-202608041849';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -493,8 +493,12 @@ const Cst_OutilLecture = 'web_fetch_20260209';
 // Plafonds : une page lue entre ENTIÈREMENT dans le contexte facturé. Sans
 // plafond, une vingtaine de pages financières suffirait à faire exploser
 // l'entrée — exactement l'inflation qu'on cherche à éviter.
-const Cst_MaxRecherches = 60;
-const Cst_MaxLectures = 40;
+// Relevés du 04/08/26 : les DEUX plafonds saturés (60/60 et 40/40), le modèle
+// écrivant lui-même « limite de budget de recherche atteinte » et laissant des
+// valorisations vides. Le plafond était devenu la contrainte de qualité, pas le
+// coût. Relevés en conséquence — la dépense reste lisible en direct.
+const Cst_MaxRecherches = 100;
+const Cst_MaxLectures = 60;
 const Cst_MaxJetonsParPage = 12000;
 const Cst_VersionEtat = 1;
 // Tarifs par défaut (USD) — préremplis, modifiables dans Paramètres → Accès API, à vérifier sur docs.claude.com
@@ -1019,6 +1023,15 @@ function Fn_TexteDiagnostic(journal) {
     L.push('');
     L.push('L’API ne détaille pas les jetons de réflexion : ils sont comptés dans les');
     L.push('jetons de sortie. Le résumé du raisonnement figure plus bas.');
+    const ov = journal.outilsVus || {};
+    const noms = Object.keys(ov);
+    if (noms.length) {
+      L.push('');
+      L.push('Outils serveur réellement appelés (blocs observés dans le flux) : '
+        + noms.map(n => n + ' × ' + ov[n]).join(', ') + '. Le décompte facturable des');
+      L.push('recherches vient de l’API (`server_tool_use.web_search_requests`) et non de ce');
+      L.push('comptage : un écart entre les deux indique un outil interne non facturé comme recherche.');
+    }
   }
   if (journal && journal.message) { L.push(''); L.push('## Message de clôture'); L.push(''); L.push('> ' + journal.message); }
   if (journal && journal.phases && journal.phases.length) {
@@ -4318,6 +4331,7 @@ function Fn_BuildPromptMAJ(ctx) {
   L.push('   4. Un produit à levier compte pour SON SOUS-JACENT : ses multiples sont ceux du sous-jacent, sa fiche émetteur fournit barrière, parité, delta et portage. Ne consomme pas d’appel pour chercher un PER au turbo lui-même.');
   L.push('   5. Si la page de valorisation reste introuvable ou illisible APRÈS l’avoir cherchée ET tenté de la lire, dis-le dans note en nommant ce qui a été tenté. Une note de ce type sans lecture correspondante est une faute : l’omission n’est légitime qu’après avoir réellement ouvert la page.');
   L.push('   6. Ordre de priorité si le temps manque : cotations complètes de toutes les lignes détenues D’ABORD, puis valorisation des lignes les plus lourdes en % de la valeur nette, puis le reste. Ne sacrifie jamais les cotations pour produire davantage de texte.');
+  L.push('   7. BUDGET DE RECHERCHE — il est limité et il s’épuise. Deux gaspillages constatés, à ne pas répéter : (a) RELANCER LA MÊME REQUÊTE. Une requête déjà émise a déjà rendu ce qu’elle avait ; si elle n’a rien donné, change d’angle (autre source, autre libellé, ticker au lieu de l’ISIN), ne la répète pas à l’identique. (b) INSISTER SUR UNE PAGE QUI NE REND PAS SES CHIFFRES. Certaines fiches (Zone Bourse, Boursorama et plus généralement les pages à contenu chargé par script) s’ouvrent sans que les tableaux chiffrés soient restitués : le texte revient, les nombres non. Après UNE tentative infructueuse sur une telle page, passe à une source qui rend ses chiffres en clair (StockAnalysis, Investing, Yahoo Finance, extraETF pour les ETF, site IR de l’émetteur) plutôt que d’y revenir. Compte tes appels : quand le budget approche de sa fin, termine par les cotations manquantes des lignes les plus lourdes, jamais par du texte.');
   L.push('  (a) COTATIONS (bloc quotes) — pré-ouverture (pre), variation de la pré-ouverture en % (preVar) et son heure (preAs) ; dernier cours de séance (last) et sa variation en % (var) ; ouverture (ouv), plus haut (haut) et plus bas (bas) de la séance, clôture de la veille (clotPrec) ; après-clôture (post), sa variation en % (postVar) et son heure (postAs) ; volume du jour (vol) et volume moyen quotidien sur 3 mois (adv, en TITRES — il dimensionne la capacité de sortie) ; plus haut et plus bas de 52 semaines (h52, b52) ; devise de cotation (dev) et place (place). La RÈGLE HORS-HORAIRES ci-dessus s’applique : si la place est fermée, la valeur pertinente du moment (pré-ouverture ou après-clôture) est OBLIGATOIRE en plus du dernier cours de séance — « dernier cours de clôture » seul est une réponse incomplète.');
   L.push('  (b) AGENDA de la société (bloc fundamentals) — prochaine publication en clair (pub) ET sa date en ISO AAAA-MM-JJ (pubDate) quand elle est connue.');
   L.push('  (c) CONSENSUS (bloc fundamentals) — recommandation agrégée avec sa répartition (conso), nombre d’analystes (nbA), objectif de cours moyen (obj), écart en % au dernier cours (objEcart), objectifs le plus haut et le plus bas (objHaut, objBas).');
@@ -4438,7 +4452,8 @@ const Cst_PhasesMAJ = [
 function Fn_NouveauJournal(mode, coursSeuls) {
   const j = {
     id: Fn_Uid('maj'), debutTs: Date.now(), finTs: null, mode, coursSeuls: !!coursSeuls,
-    modele: null, statut: 'en cours', phases: [], recherches: 0, jetonsEntree: 0, jetonsSortie: 0,
+    modele: null, statut: 'en cours', phases: [], recherches: 0, lectures: 0, outilsVus: {},
+    jetonsEntree: 0, jetonsSortie: 0, jetonsCacheEcriture: 0, jetonsCacheLecture: 0,
     coutUsd: null, stopReason: null, tronque: false, cartesProduites: 0, opportunitesProduites: 0, message: null
   };
   Var_State.majJournaux.unshift(j);
@@ -4568,6 +4583,8 @@ async function Fn_AppelStream(corps, entetes, journal, signal) {
   // la relecture du contexte d'une reprise à l'autre qui coûte le plus cher.
   const baseEntree = journal.jetonsEntree || 0, baseCw = journal.jetonsCacheEcriture || 0, baseCr = journal.jetonsCacheLecture || 0;
   let rech = 0, lect = 0, charsSortie = 0; // charsSortie : estimation vivante (l'usage exact n'arrive qu'en fin de flux)
+  let rechApi = null;          // décompte facturable renvoyé par l'API, fait foi sur le comptage par blocs
+  const outilsVus = {};        // {nom d'outil serveur: nombre d'appels} — pour comprendre les écarts de compteur
   let cacheEcriture = 0, cacheLecture = 0;
   // Un flux SSE complet se termine TOUJOURS par message_stop, précédé d'un
   // message_delta portant stop_reason. Sans ces marqueurs, la connexion a été
@@ -4590,15 +4607,17 @@ async function Fn_AppelStream(corps, entetes, journal, signal) {
       try { ev = JSON.parse(brut); } catch (e) { continue; }
       if (ev.type === 'message_start') {
         modele = ev.message && ev.message.model || null;
+        // ATTENTION : l'usage de `message_start` n'est qu'un INSTANTANÉ D'OUVERTURE.
+        // Il ne contient PAS ce que les outils serveur verseront ensuite dans le
+        // contexte. S'en contenter affichait « 2 jetons d'entrée » pour un appel de
+        // 30 min et 146 appels d'outils, soit une dépense sous-estimée d'un ordre de
+        // grandeur — exactement ce que l'application s'interdit. Le total réel arrive
+        // dans le `message_delta` final, plus bas ; celui-ci ne sert qu'à afficher
+        // quelque chose de plausible dès la première seconde.
         const u0 = (ev.message && ev.message.usage) || {};
         entree = u0.input_tokens || 0;
-        // Jetons de cache : c'est ICI que se lit l'économie réelle. Une relecture
-        // à 0,1× au lieu du plein tarif est ce qui sépare une MAJ à 3 $ d'une à 17 $.
         cacheEcriture = u0.cache_creation_input_tokens || 0;
         cacheLecture = u0.cache_read_input_tokens || 0;
-        // L'entrée est facturée dès l'ouverture du segment : elle est reportée au
-        // journal ICI, et pas à la fin de l'appel, pour que la dépense affichée à
-        // l'écran soit celle déjà engagée et non celle du segment précédent.
         journal.jetonsEntree = baseEntree + entree;
         journal.jetonsCacheEcriture = baseCw + cacheEcriture;
         journal.jetonsCacheLecture = baseCr + cacheLecture;
@@ -4612,8 +4631,9 @@ async function Fn_AppelStream(corps, entetes, journal, signal) {
           // confondre dans un seul compteur affichait « 100 recherches » là où
           // il y avait 60 recherches et 40 lectures — et faisait payer les
           // lectures au tarif des recherches dans l'estimation.
+          outilsVus[b.name || 'sans nom'] = (outilsVus[b.name || 'sans nom'] || 0) + 1;
           if (b.name === 'web_fetch') { lect++; journal.lectures = baseLect + lect; }
-          else { rech++; journal.recherches = baseRech + rech; }
+          else { rech++; if (rechApi == null) journal.recherches = baseRech + rech; }
           b._json = '';
           Fn_Phase(journal, 'recherches', 'en cours',
             (b.name === 'web_fetch' ? 'Lecture de page n° ' + journal.lectures : 'Recherche web n° ' + journal.recherches) + ' en cours');
@@ -4647,7 +4667,18 @@ async function Fn_AppelStream(corps, entetes, journal, signal) {
           Fn_Phase(journal, 'recherches', 'en cours', 'Recherche web n° ' + journal.listeRecherches.length + ' : « ' + String(b.input.query).slice(0, 90) + ' »');
         }
       } else if (ev.type === 'message_delta') {
-        if (ev.usage && ev.usage.output_tokens != null) { sortie = ev.usage.output_tokens; journal.jetonsSortie = baseSortie + sortie; }
+        // Usage CUMULÉ de toute la requête, tours d'outils serveur compris : c'est
+        // la seule mesure facturable. Elle écrase l'instantané d'ouverture.
+        const u = ev.usage || {};
+        if (u.output_tokens != null) { sortie = u.output_tokens; journal.jetonsSortie = baseSortie + sortie; }
+        if (u.input_tokens != null) { entree = u.input_tokens; journal.jetonsEntree = baseEntree + entree; }
+        if (u.cache_creation_input_tokens != null) { cacheEcriture = u.cache_creation_input_tokens; journal.jetonsCacheEcriture = baseCw + cacheEcriture; }
+        if (u.cache_read_input_tokens != null) { cacheLecture = u.cache_read_input_tokens; journal.jetonsCacheLecture = baseCr + cacheLecture; }
+        // Décompte de recherches facturables selon l'API elle-même. Le comptage par
+        // blocs surestimait : il rangeait dans « recherches » TOUT outil serveur non
+        // nommé web_fetch — 106 comptées pour 60 requêtes réellement émises.
+        const su = u.server_tool_use || {};
+        if (su.web_search_requests != null) { rechApi = su.web_search_requests; journal.recherches = baseRech + rechApi; }
         if (ev.delta && ev.delta.stop_reason) stop = ev.delta.stop_reason;
       } else if (ev.type === 'message_stop') {
         finPropre = true;
@@ -4670,7 +4701,8 @@ async function Fn_AppelStream(corps, entetes, journal, signal) {
     };
   }
   const reflexion = blocs.filter(b => b && b.type === 'thinking' && b.thinking).map(b => b.thinking).join('\n\n---\n\n');
-  return { contenu: blocs.filter(Boolean), texte, reflexion, modele, entree, sortie, recherches: rech, lectures: lect,
+  return { contenu: blocs.filter(Boolean), texte, reflexion, modele, entree, sortie,
+    recherches: rechApi == null ? rech : rechApi, lectures: lect, outilsVus,
     cacheEcriture, cacheLecture, stopReason: stop };
 }
 /* ---- Appel direct sans flux (mode artefact — le pont ne streame pas) ---- */
@@ -4689,6 +4721,8 @@ async function Fn_AppelDirect(corps, entetes, journal, signal) {
     ? u.server_tool_use.web_search_requests
     : outils.filter(b => b.name !== 'web_fetch').length;
   const lect = outils.filter(b => b.name === 'web_fetch').length;
+  const outilsVus = {};
+  outils.forEach(b => { const n = b.name || 'sans nom'; outilsVus[n] = (outilsVus[n] || 0) + 1; });
   journal.modele = data.model || journal.modele;
   journal.recherches = (journal.recherches || 0) + rech;
   journal.lectures = (journal.lectures || 0) + lect;
@@ -4700,7 +4734,7 @@ async function Fn_AppelDirect(corps, entetes, journal, signal) {
     sortie: u.output_tokens || 0,
     cacheEcriture: u.cache_creation_input_tokens || 0,
     cacheLecture: u.cache_read_input_tokens || 0,
-    recherches: rech, lectures: lect, stopReason: data.stop_reason || null
+    recherches: rech, lectures: lect, outilsVus, stopReason: data.stop_reason || null
   };
 }
 /* ---- Parseur JSON tolérant aux troncatures (6.4) : réparation, jamais de rejet total ---- */
@@ -4971,6 +5005,7 @@ async function Fn_LancerConsolidation() {
       if (res.reflexion) rt.diag.reflexion += (rt.diag.reflexion ? '\n\n---\n\n' : '') + res.reflexion;
       totalEntree += res.entree; totalSortie += res.sortie; totalRech += res.recherches;
       totalLect += (res.lectures || 0); totalCw += (res.cacheEcriture || 0); totalCr += (res.cacheLecture || 0);
+      Object.keys(res.outilsVus || {}).forEach(n => { journal.outilsVus[n] = (journal.outilsVus[n] || 0) + res.outilsVus[n]; });
       journal.jetonsEntree = totalEntree; journal.jetonsSortie = totalSortie; journal.recherches = totalRech;
       journal.lectures = totalLect; journal.jetonsCacheEcriture = totalCw; journal.jetonsCacheLecture = totalCr;
       journal.continuations = continuations;
