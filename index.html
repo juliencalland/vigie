@@ -56,6 +56,13 @@ main{padding-top:10px}
 .onglet.actif{display:block}
 .carte{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin:0 0 10px}
 .carte-titre{font-size:13px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+/* Étape d'un panneau. Trois blocs empilés sans séparation se lisaient comme un
+   seul mur de texte où le bouton d'action se perdait : chacun porte désormais un
+   liseré et son titre, et l'œil retrouve où il en est. */
+.etape{border-left:2px solid var(--line);padding:2px 0 2px 9px;margin:10px 0}
+.etape-t{font-size:12px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+.etape-cle{border-left-color:var(--accent)}
+.etape-cle .etape-t{color:var(--accent)}
 .panneau-tete{display:flex;align-items:center;justify-content:space-between;width:100%;background:none;border:none;color:var(--txt);font:inherit;font-weight:700;font-size:13.5px;padding:2px 0;cursor:pointer;min-height:36px;text-align:left}
 .panneau-tete .chevron{color:var(--muted);font-size:12px;transition:transform .15s}
 .panneau-tete.ouvert .chevron{transform:rotate(90deg)}
@@ -207,6 +214,12 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent);vertical-
    d'erreur ne vient qu'au premier appel. */
 .champ-code{font-family:var(--mono);letter-spacing:.03em}
 /* ---- acquisition (étage 1) ---- */
+/* Une entrée d'écran en forme COMPACTE : une ligne d'état, pas une zone de
+   collage. C'est ce qui distingue « il n'y a rien à faire ici » de « à coller ». */
+.entree-l{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:4px 0;border-bottom:1px solid var(--line)}
+.entree-n{font-weight:600;font-size:12.5px;min-width:0;flex:1 1 9rem}
+.entree-e{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.btn-mini{padding:3px 8px;font-size:11px;min-height:0}
 .zone-collage{border:1px solid var(--line);border-radius:10px;padding:9px 10px;margin-bottom:8px;background:var(--panel2)}
 .zone-tete{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap}
 .zone-tete .zt-nom{font-weight:700;font-size:13px}
@@ -390,7 +403,7 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202608241749';
+const Cst_Version = 'vigie-202608241822';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -680,7 +693,7 @@ const Var_State = {
   panneaux: { acquisition: true, maj: false, journal: false, formAjout: false, regles: true,
     etageAcquisition: true, etageEnrichissement: false, etageDesk: false, etageCalendrier: false,
     apiParam: true, syncParam: true, seuilsParam: false, instrumentsParam: false, glossParam: false,
-    sitesParam: false, erreursParam: false, cadreExpo: true },
+    sitesParam: false, erreursParam: false, remiseAZero: false, cadreExpo: true },
   filtreTag: null,
   filtreJour: null,
   filtreDecouvertes: 'vives',
@@ -1123,6 +1136,50 @@ function Fn_CollagesVider() {
   Var_State._runtime.capture = null;
   Var_State._runtime.aucuneTransac = false;
   Cst_ClesCollage.forEach(c => Fn_DocSupprimer(c));
+}
+/* COPIE DE SAUVEGARDE avant une remise à zéro. Le même format que « Restaurer un
+   état » sait relire : c'est la seule marche arrière possible, et elle doit
+   exister à côté du bouton qui efface, pas ailleurs. */
+function Fn_TelechargerEtat() {
+  try {
+    const url = URL.createObjectURL(new Blob([Fn_SerialiserEtat()], { type: 'application/json' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'vigie-etat-' + Fn_AujISO() + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => { try { URL.revokeObjectURL(url); } catch (e) { /* déjà libéré */ } }, 5000);
+    return true;
+  } catch (e) { return false; }
+}
+/* REPARTIR D'UNE VIGIE NEUVE. Efface les données de portefeuille — ici ET au
+   dépôt privé. Trois précautions, chacune répondant à un piège réel :
+   1. Le CUMUL DE DÉPENSE n'est PAS effacé. Le détail par appel disparaît, le
+      total reste : masquer ce qui a été payé est la seule chose que cette
+      application ne se permet nulle part.
+   2. Les RÉGLAGES restent — seuils, tarifs, modèle, effort, sites de recherche,
+      clé API et jeton de dépôt. Ce ne sont pas des données de portefeuille, et
+      les perdre couperait l'accès sans rapport avec ce qu'on efface.
+   3. L'état vidé est POUSSÉ AU DÉPÔT immédiatement. Sans cela la ceinture de
+      sécurité de la synchronisation — « un appareil sans substance adopte
+      toujours un distant rempli » — restaurait tout à la synchronisation
+      suivante, et la remise à zéro semblait n'avoir servi à rien. */
+function Fn_RemiseAZero() {
+  ['positions', 'ordres', 'executes', 'calendrier', 'decouvertes', 'actions',
+    'controles', 'instruments', 'majJournaux', 'captures'].forEach(c => { Var_State[c] = []; });
+  Var_State.theses = {};
+  Var_State.fx = null;
+  Var_State.marge = null;
+  Var_State.derniereMaj = null;
+  Var_State.derniereEnrichissement = null;
+  Var_State.filtreTag = null;
+  Var_State.filtreJour = null;
+  Fn_CollagesVider();
+  Var_State._runtime.analyse = null;
+  Fn_Recalculer();
+  Fn_Save();        // tamponne etatTs : l'état vide devient le plus récent
+  Fn_SyncPousser(); // et part au dépôt AVANT toute relecture qui le restaurerait
 }
 /* ----------------------------------------------------------------
    SYNCHRONISATION GITHUB — l'état complet voyage par le dépôt privé
@@ -1836,6 +1893,7 @@ const Cst_AidePanneaux = {
   glossParam: 'le glossaire complet des termes employés dans l’application.',
   sitesParam: 'le choix des sites autorisés pour les recherches du modèle.',
   erreursParam: 'la liste des codes d’erreur d’appel, avec leur cause et la conduite à tenir.',
+  remiseAZero: 'la remise à zéro complète : ce qui serait effacé, ce qui serait conservé, et la copie de sauvegarde à télécharger avant.',
   cadreExpo: 'le cadre d’exposition : les chiffres contre lesquels chaque découverte est jugée.'
 };
 const Cst_AideThese = {
@@ -1846,6 +1904,9 @@ const Cst_AideThese = {
 const Cst_AideActions = {
   'capture-coller': { t: 'Coller la capture', d: 'Lit le presse-papier, y reconnaît le document de capture à ses bornes et le répartit d’un seul geste dans les trois entrées d’écran. Une capture REMPLACE les entrées du jour : une section vide efface l’entrée correspondante, pour qu’un ordre annulé ne survive pas. Le texte reste sur cet appareil et n’est jamais synchronisé.' },
   'capture-saisie': { t: 'Zone de capture manuelle', d: 'Repli quand l’accès au presse-papier est refusé ou indisponible — c’est le cas en fichier local. Le texte est traité exactement comme s’il venait du presse-papier : découpé en sections, horodaté, conservé verbatim. Un texte sans borne de section est refusé ici plutôt que versé au hasard dans une entrée.' },
+  'etat-exporter': { t: 'Télécharger une copie de l’état', d: 'Enregistre l’état complet du portefeuille dans un fichier, sur cet appareil. C’est le format que « Restaurer un état » sait relire : c’est la seule marche arrière avant une remise à zéro. Rien n’est envoyé nulle part, rien n’est modifié.' },
+  'etat-raz': { t: 'Repartir d’une vigie neuve', d: 'Efface TOUTES les données de portefeuille — lignes, événements, découvertes, arbitrages, thèses, cartes à valider, journaux d’appel, collages du jour — deux appuis pour confirmer. L’état vide est POUSSÉ AU DÉPÔT PRIVÉ : l’effacement vaut pour tous vos appareils, sinon le premier synchronisé restaurerait tout. Sont conservés : la clé API, le jeton de dépôt, les seuils, les tarifs, le modèle, les sites de recherche, et le cumul de dépense. Il n’y a pas d’annulation : téléchargez une copie avant.' },
+  'capture-detacher': { t: 'Coller plutôt écran par écran', d: 'Rend aux trois entrées leur forme complète, avec leur bouton et leur zone de saisie, pour coller un écran à la main. Les textes déjà posés par la capture ne sont PAS effacés : seul l’en-tête de capture est oublié, et vous pouvez remplacer l’écran de votre choix sans refaire les autres.' },
   'capture-effacer': { t: 'Effacer la capture', d: 'Oublie la capture et les trois entrées d’écran qu’elle avait remplies — deux appuis pour confirmer. L’export du courtier n’est pas touché, et les lignes déjà intégrées à l’état restent intactes : seules les sources du jour disparaissent.' },
   'coller': { t: 'Coller depuis le presse-papier', d: 'Lit le presse-papier et dépose son contenu dans cette zone, horodaté à la seconde. Le texte reste sur cet appareil et n’est jamais synchronisé. Si le navigateur refuse l’accès au presse-papier, collez à la main dans la zone de texte.' },
   'collage-saisie': { t: 'Zone de collage manuelle', d: 'Repli quand l’accès au presse-papier est refusé ou indisponible — c’est le cas en fichier local. Le texte saisi est traité exactement comme un collage, horodaté et conservé verbatim pour pouvoir diagnostiquer une erreur de lecture.' },
@@ -3861,12 +3922,34 @@ function Fn_HtmlZoneCapture() {
   if (rt.collageErreur) h += '<div class="note note-crit tres-petit">' + Fn_Esc(rt.collageErreur) + '</div>';
   return h + '</div>';
 }
-function Fn_HtmlZoneCollage(entree) {
+/* UNE DES TROIS ENTRÉES D'ÉCRAN, en deux formes.
+   COMPACTE dès qu'une capture les a remplies : une ligne d'état par écran, et
+   rien d'autre. Cinq zones de collage ouvertes, chacune avec son bouton et sa
+   grande zone de texte, laissaient croire qu'il fallait coller cinq fois alors
+   qu'un seul geste suffit désormais.
+   COMPLÈTE sinon : c'est le repli écran par écran, et il doit rester évident. */
+function Fn_HtmlZoneCollage(entree, compact) {
   const rt = Var_State._runtime;
   const c = rt.collages[entree.cle];
   const cap = Var_State.captures.find(x => x.type === entree.cle);
   const arme = rt.armes['collage-' + entree.cle];
   const ouvert = rt['voir-' + entree.cle];
+  if (compact) {
+    let x = '<div class="entree-l"><span class="entree-n">' + Fn_Esc(entree.nom) + '</span>'
+      + '<span class="entree-e">' + (c
+        ? '<span class="badge badge-ok">rempli par la capture</span>'
+          + (cap ? ' <span class="tres-petit mono">' + cap.lignesOk + ' ligne(s)</span>' : '')
+          + (cap && cap.lignesKo ? ' <span class="badge badge-warn">' + cap.lignesKo + ' non reconnue(s)</span>' : '')
+        : '<span class="badge badge-neutre">section vide</span>') + '</span>'
+      + (c ? '<button class="btn btn-mini" data-action="collage-voir" data-id="' + entree.cle + '">' + (ouvert ? 'Masquer' : 'Voir') + ' le brut</button>' : '')
+      + '</div>';
+    if (cap && cap.lignesKo && cap.inconnues && cap.inconnues.length) {
+      x += '<div class="tres-petit muted" style="padding:0 0 4px">Non reconnues : '
+        + cap.inconnues.map(l => '« ' + Fn_Esc(String(l).slice(0, 60)) + ' »').join(' · ') + '</div>';
+    }
+    if (ouvert && c) x += '<div class="src mono" style="max-height:220px;overflow:auto">' + Fn_Esc(c.texte) + '</div>';
+    return x;
+  }
   let h = '<div class="zone-collage"><div class="zone-tete"><div style="min-width:0">'
     + '<div class="zt-nom">' + Fn_Esc(entree.nom) + ' '
     + (entree.obligatoire ? '<span class="badge badge-crit">indispensable</span>' : '<span class="badge badge-neutre">recommandé</span>') + '</div>'
@@ -3909,18 +3992,16 @@ function Fn_RenderAcquisition() {
     return void (el.innerHTML = h + '</div>');
   }
   h += '<div class="tres-petit muted">Tout arrive en texte : aucune image n’est analysée, aucun identifiant de courtier n’est demandé, stocké ni transmis. Les textes restent sur cet appareil et ne sont jamais synchronisés.</div>';
-  h += Fn_HtmlZoneCapture();
-  h += '<div class="tres-petit muted" style="padding:6px 0 2px">Les trois zones ci-dessous se remplissent seules quand une capture est collée. Elles restent utilisables écran par écran : c’est le repli quand la capture n’aboutit pas.</div>';
-  Cst_Entrees.forEach(e => {
-    if (e.cle === 'executes' && rt.aucuneTransac) return; // la case remplace l'entrée
-    h += Fn_HtmlZoneCollage(e);
-  });
-  h += '<div class="tres-petit" style="padding:4px 0 8px"><label><input type="checkbox" data-action="maj-notrans"'
-    + (rt.aucuneTransac ? ' checked' : '') + '> aucune transaction récente (remplace l’écran des ordres exécutés)</label></div>';
+  // Le panneau se lit en trois temps : deux choses à fournir, puis analyser.
+  // Empilées à plat, les cinq zones de collage laissaient croire qu'il fallait
+  // coller cinq fois — alors qu'un seul geste remplit les trois premières.
+  h += '<div class="etape etape-cle"><div class="etape-t">A · La capture — le geste normal</div>'
+    + Fn_HtmlZoneCapture() + '</div>';
   // Quatrième entrée : l'export, seul à faire foi sur quantités et identifiants.
   const x = rt.xlsx;
   const armeX = rt.armes['xlsx-effacer'];
-  h += '<div class="zone-collage"><div class="zone-tete"><div style="min-width:0">'
+  h += '<div class="etape etape-cle"><div class="etape-t">B · L’export du courtier — le fichier</div>'
+    + '<div class="zone-collage"><div class="zone-tete"><div style="min-width:0">'
     + '<div class="zt-nom">Export du courtier <span class="badge badge-crit">indispensable</span></div>'
     + '<div class="tres-petit muted">' + Fn_Gloss(Fn_Esc('Le fichier XLSX exporté depuis l’espace du courtier. Il fait foi sur les quantités, les identifiants ISIN et les devises, et le taux de change s’en déduit exactement (montant en euros ÷ montant en devise).')) + '</div>'
     + '<div class="tres-petit muted">Sa colonne de clôture porte la VEILLE quelle que soit l’heure d’export : elle n’est jamais utilisée comme cours. Les noms y sont tronqués à 32 caractères, donc les paramètres des produits à levier y sont perdus — c’est le collage de l’écran qui fait foi sur le nom.</div></div>'
@@ -3931,7 +4012,30 @@ function Fn_RenderAcquisition() {
     + (x ? '<button class="btn btn-danger' + (armeX ? ' arme' : '') + '" data-action="xlsx-effacer">' + (armeX ? 'Confirmer ?' : 'Retirer') + '</button>' : '')
     + '</div>';
   if (rt.xlsxErreur) h += '<div class="note note-crit tres-petit">' + Fn_Esc(rt.xlsxErreur) + '</div>';
+  h += '</div></div>';
+  // Les trois écrans. Compacts dès qu'une capture les a remplis — il n'y a alors
+  // rien à faire ici, seulement à vérifier. Complets sinon : c'est le repli.
+  const parCapture = !!rt.capture;
+  h += '<div class="etape"><div class="etape-t">' + (parCapture
+    ? 'Ce que la capture a rempli'
+    : 'Le repli — écran par écran, si la capture n’aboutit pas') + '</div>';
+  if (parCapture) {
+    h += '<div class="tres-petit muted" style="margin-bottom:5px">Rien à coller ici : la capture a alimenté ces trois entrées. Cette liste est là pour vérifier ce qui a été compris, et voir le texte brut quand une ligne surprend.</div>';
+  }
+  Cst_Entrees.forEach(e => {
+    if (e.cle === 'executes' && rt.aucuneTransac) return; // la case remplace l'entrée
+    h += Fn_HtmlZoneCollage(e, parCapture);
+  });
+  h += '<div class="tres-petit" style="padding:4px 0 0"><label><input type="checkbox" data-action="maj-notrans"'
+    + (rt.aucuneTransac ? ' checked' : '') + '> aucune transaction récente (remplace l’écran des ordres exécutés)</label>'
+    + (parCapture && rt.aucuneTransac && rt.capture.meta && /aucune\s+transaction/i.test(String(rt.capture.meta.historique || ''))
+      ? ' <span class="tres-petit muted">— cochée par la capture, l’écran l’annonçait</span>' : '')
+    + '</div>';
+  if (parCapture) {
+    h += '<div class="rang-btn"><button class="btn btn-mini" data-action="capture-detacher">Coller plutôt écran par écran</button></div>';
+  }
   h += '</div>';
+  h += '<div class="etape etape-cle"><div class="etape-t">C · Analyser</div>';
   // Bilan de la dernière analyse.
   if (rt.analyse) {
     const a = rt.analyse;
@@ -3946,7 +4050,8 @@ function Fn_RenderAcquisition() {
     + '</div>'
     + (pret ? '<div class="rang-btn"><button class="btn btn-danger' + (armeV ? ' arme' : '') + '" data-action="acq-vider">'
       + (armeV ? 'Confirmer ?' : 'Vider les entrées du jour') + '</button></div>' : '')
-    + '<div class="tres-petit muted" style="margin-top:4px">L’analyse apparie les deux sources, recalcule expositions, levier, distances aux barrières et portage, met le calendrier à jour, et produit une carte « à valider » par écart. Rien n’est intégré sans votre accord.</div>';
+    + '<div class="tres-petit muted" style="margin-top:4px">L’analyse apparie les deux sources, recalcule expositions, levier, distances aux barrières et portage, met le calendrier à jour, et produit une carte « à valider » par écart. Rien n’est intégré sans votre accord.</div>'
+    + '</div>';
   el.innerHTML = h + '</div>';
 }
 /* ================================================================
@@ -4042,11 +4147,46 @@ function Fn_ChargeDesk() {
   return { sansTexte, aDebriefer, sansProfil,
     unites: sansTexte.length + aDebriefer.length * 2 + Cst_DecouvertesVisees };
 }
+/* CE QUE LE DESK SAIT DÉJÀ DE VOS REVUES. Une mise à jour est une RÉÉVALUATION,
+   pas un premier avis : le desk reçoit son propre jugement précédent ligne par
+   ligne, les arbitrages que vous avez acceptés ou rejetés, vos déclarations de
+   thèse et la liste des découvertes déjà vues. Sans cette mémoire il redécouvrait
+   à chaque appel, et reproposait un arbitrage déjà rejeté — qu'il fallait rejeter
+   de nouveau, et repayer. Ces champs coûtent quelques milliers de jetons d'entrée,
+   mis en cache : c'est l'économie la plus rentable du cycle. */
+function Fn_MemoireDesk() {
+  const th = Var_State.theses || {};
+  return {
+    jugees: Var_State.positions.filter(p => p.desk && (p.desk.these || p.desk.tend || p.desk.valoRef)).length,
+    arbitrages: Var_State.actions.filter(a => a.statut !== 'a_valider').length,
+    theses: Object.keys(th).filter(k => th[k] && (th[k].ecrite || th[k].invalidation || th[k].objectif)).length,
+    decouvertes: Math.min(Var_State.decouvertes.length, 20)
+  };
+}
 function Fn_LignesAEnrichir() {
   return Var_State.positions.filter(p => {
     if (p.desk.niveau === 'ligne' || p.desk.niveau === 'derive') return false;
     return Fn_DonneePerimee(p.valo && p.valo.freshTs) || Fn_DonneePerimee(p.consensus && p.consensus.freshTs);
   });
+}
+/* ALERTE DU DERNIER APPEL. Placée EN TÊTE du panneau, et affichée MÊME PANNEAU
+   FERMÉ. Le message d'échec ne vivait qu'au fond du journal, sous le budget,
+   l'enrichissement et le bilan : il fallait ouvrir le panneau et faire défiler
+   pour apprendre qu'un appel avait échoué, et pourquoi. Un échec doit se lire là
+   où l'on clique pour relancer. Le message porte déjà son code et la conduite à
+   tenir : il n'est pas reformulé ici, il est remonté. */
+function Fn_HtmlAlerteAppel(journal) {
+  if (!journal || journal.statut === 'en cours') return '';
+  const echoue = journal.statut === 'echec' || journal.statut === 'interrompue';
+  if (!echoue && !journal.tronque) return '';
+  const titre = journal.statut === 'interrompue' ? 'Le dernier appel a été interrompu'
+    : (echoue ? 'Le dernier appel a échoué' : 'La réponse du dernier appel a été tronquée');
+  return '<div class="note ' + (echoue ? 'note-crit' : 'note-warn') + '" style="margin:6px 0 0">'
+    + '<b>' + titre + '</b> · ' + Fn_Esc(Fn_FmtHeure(journal.debutTs))
+    + ' · ' + Fn_Esc(journal.passe === 'enrichissement' ? 'enrichissement' : 'desk')
+    + (Fn_Num(journal.coutUsd) ? ' · <b>' + Fn_Esc(Fn_FmtUsd(journal.coutUsd)) + ' facturés quand même</b>' : '')
+    + '<div class="tres-petit" style="margin-top:4px">' + Fn_Gloss(Fn_Esc(journal.message || 'Aucun détail enregistré.')) + '</div>'
+    + '</div>';
 }
 function Fn_RenderMajPanel() {
   const el = document.getElementById('v-maj');
@@ -4057,7 +4197,7 @@ function Fn_RenderMajPanel() {
   const journal = Var_State.majJournaux[0] || null;
   const enCours = !!rt.enCours;
   let h = '<div class="carte">'
-    + '<button class="panneau-tete' + (ouvert ? ' ouvert' : '') + '" data-action="toggle" data-id="maj"><span>⟳ Mise à jour — le jugement du desk'
+    + '<button class="panneau-tete' + (ouvert ? ' ouvert' : '') + '" data-action="toggle" data-id="maj"><span>③ Mise à jour — le jugement du desk'
     + (journal && journal.statut === 'en cours' ? ' <span class="spinner"></span>' : '') + '</span><span class="chevron">▶</span></button>';
   if (journal) {
     const stLib = { 'en cours': 'en cours…', terminee: 'terminée', partielle: 'terminée (partielle)', echec: 'échec', interrompue: 'interrompue' }[journal.statut] || journal.statut;
@@ -4066,6 +4206,7 @@ function Fn_RenderMajPanel() {
       + Fn_Esc(journal.passe === 'enrichissement' ? 'enrichissement' : 'desk') + ' — <b style="color:' + stCls + '">' + Fn_Esc(stLib) + '</b>'
       + (journal.coutUsd != null ? ' — ' + Fn_Esc(Fn_FmtUsd(journal.coutUsd)) : '') + '</div>';
   }
+  h += Fn_HtmlAlerteAppel(journal);
   if (ouvert) {
     h += Fn_HtmlBanniereVersion();
     h += '<hr class="sep"><div class="petit"><b>Accès :</b> ' + Fn_Gloss(Fn_Esc(mode.libelle)) + '</div>';
@@ -4076,26 +4217,47 @@ function Fn_RenderMajPanel() {
       const budgetDesk = Fn_BudgetDesk(charge.aDebriefer.length);
       const aEnrichir = Fn_LignesAEnrichir();
       const budgetEnr = Fn_BudgetEnrichissement(aEnrichir.length);
-      h += '<div class="carte-titre" style="margin-top:10px">Ce que le desk aura à produire</div>'
+      const memoire = Fn_MemoireDesk();
+      // Le panneau se lit en trois temps : ce qui sera produit, ce que cela
+      // coûtera, le lancement. Empilés sans titres, les trois se confondaient en
+      // un seul mur de texte où le bouton se perdait.
+      h += '<div class="etape"><div class="etape-t">Ce que le desk aura à produire</div>'
         + '<div class="valo-grille">'
         + '<span class="met">textes d’événements <b>' + charge.sansTexte.length + '</b></span>'
         + '<span class="met">débriefs demandés <b>' + charge.aDebriefer.length + '</b></span>'
         + '<span class="met">profils à attribuer <b>' + charge.sansProfil.length + '</b></span>'
         + '<span class="met">découvertes visées <b>' + Cst_DecouvertesVisees + '</b></span>'
         + '</div>'
-        + '<div class="tres-petit muted">Le desk ne reçoit AUCUNE demande de chiffre : quantités, cours, expositions, distances aux barrières et écarts de contrôle lui sont fournis, déjà calculés. Il ne traite que les événements sans texte ou dont les chiffres ont matériellement bougé — les autres ne repartent pas, et ne sont donc pas repayés.</div>';
+        + '<div class="tres-petit muted">Le desk ne reçoit AUCUNE demande de chiffre : quantités, cours, expositions, distances aux barrières et écarts de contrôle lui sont fournis, déjà calculés. Il ne traite que les événements sans texte ou dont les chiffres ont matériellement bougé — les autres ne repartent pas, et ne sont donc pas repayés.</div>'
+        + '</div>';
+      // Ce que la vigie lui remet de ses revues passées : c'est ce qui distingue
+      // une réévaluation d'un premier avis, et ce qui l'empêche de reproposer un
+      // arbitrage déjà tranché.
+      h += '<div class="etape"><div class="etape-t">Ce que le desk sait déjà de vos revues</div>'
+        + '<div class="valo-grille">'
+        + '<span class="met">lignes déjà jugées <b>' + memoire.jugees + '</b></span>'
+        + '<span class="met">arbitrages tranchés <b>' + memoire.arbitrages + '</b></span>'
+        + '<span class="met">thèses déclarées <b>' + memoire.theses + '</b></span>'
+        + '<span class="met">découvertes déjà vues <b>' + memoire.decouvertes + '</b></span>'
+        + '</div>'
+        + '<div class="tres-petit muted">Son jugement précédent lui est rendu ligne par ligne, ainsi que les arbitrages que vous avez acceptés ou rejetés. Il réévalue au lieu de redécouvrir, et ne repropose pas un arbitrage rejeté sans fait nouveau — repayer deux fois la même conclusion est la dépense la plus facile à éviter.</div>'
+        + '</div>';
+      h += '<div class="etape"><div class="etape-t">Ce que cela coûtera</div>';
       if (!enCours) h += Fn_HtmlProjection('desk', charge.unites, budgetDesk, 'unités de travail');
       h += '<div class="tres-petit muted">Budget de recherche ÉTANCHE : <b class="mono">' + budgetDesk.decouvertes
         + '</b> recherches réservées aux découvertes, <b class="mono">' + budgetDesk.debriefs
-        + '</b> aux débriefs. Aucune collecte de cours ni de multiples n’est autorisée dans cette passe : c’est ce cloisonnement qui empêche le livrable à plus forte valeur d’être sacrifié en fin de budget.</div>';
+        + '</b> aux débriefs. Aucune collecte de cours ni de multiples n’est autorisée dans cette passe : c’est ce cloisonnement qui empêche le livrable à plus forte valeur d’être sacrifié en fin de budget.</div>'
+        + '</div>';
       h += '<div class="rang-btn">'
         + (enCours
           ? '<button class="btn btn-danger arme" data-action="maj-annuler">■ Annuler l’appel en cours</button>'
-          : '<button class="btn btn-accent btn-large" data-action="maj-lancer">Lancer le jugement de desk</button>')
+          : '<button class="btn btn-accent btn-large" data-action="maj-lancer">'
+            + (journal && (journal.statut === 'echec' || journal.statut === 'interrompue') ? 'Relancer le jugement de desk' : 'Lancer le jugement de desk')
+            + '</button>')
         + '</div>';
       // Passe d'enrichissement : distincte, hebdomadaire, et proposée seulement
       // quand elle a quelque chose à faire.
-      h += '<hr class="sep"><div class="carte-titre">Passe d’enrichissement — hebdomadaire</div>';
+      h += '<div class="etape" style="margin-top:10px"><div class="etape-t">Passe d’enrichissement — hebdomadaire, et séparée</div>';
       if (!aEnrichir.length) {
         h += '<div class="tres-petit muted">Rien à rafraîchir : toutes les lignes matérielles portent des données de moins de '
           + (Fn_Num(Var_State.seuils.fraicheurDonneesJours) || 7) + ' jours. Un champ frais n’est jamais recollecté — c’est là que se fait l’essentiel de l’économie.</div>';
@@ -4106,6 +4268,7 @@ function Fn_RenderMajPanel() {
         if (!enCours) h += Fn_HtmlProjection('enrichissement', aEnrichir.length, budgetEnr, 'lignes');
         h += '<div class="rang-btn"><button class="btn" data-action="maj-enrichir"' + (enCours ? ' disabled' : '') + '>Lancer l’enrichissement de ' + aEnrichir.length + ' ligne(s)</button></div>';
       }
+      h += '</div>';
       h += '<div class="tres-petit muted" style="margin-top:6px">Les données du portefeuille ne sont transmises qu’à api.anthropic.com, uniquement quand VOUS lancez un appel. Jamais d’identifiant de courtier.</div>';
     }
     if (journal) h += Fn_HtmlJournalMAJ(journal);
@@ -5087,6 +5250,28 @@ function Fn_RenderParametres() {
     return '<dl class="gloss-liste">' + Object.keys(Cst_Glossary).sort().map(k =>
       '<dt>' + Fn_Esc(Cst_Glossary[k].long) + '</dt><dd>' + Fn_Esc(Cst_Glossary[k].def) + '</dd>').join('') + '</dl>';
   });
+  // ---- Repartir d'une vigie neuve
+  h += Fn_Panneau('remiseAZero', 'Repartir d’une vigie neuve', () => {
+    const arme = Var_State._runtime.armes['etat-raz'];
+    const c = Var_State.cumulApi;
+    const efface = [
+      Var_State.positions.length + ' ligne(s) de portefeuille',
+      Var_State.calendrier.length + ' événement(s)',
+      Var_State.decouvertes.length + ' découverte(s)',
+      Var_State.actions.length + ' arbitrage(s)',
+      Var_State.controles.length + ' carte(s) à valider',
+      Var_State.majJournaux.length + ' journal(aux) d’appel'
+    ].join(' · ');
+    return '<div class="tres-petit">EFFACÉ, ici et au dépôt privé : ' + efface
+      + ' · les thèses déclarées · la marge · les taux de change · les collages du jour et l’export.</div>'
+      + '<div class="tres-petit muted">CONSERVÉ : la clé API et le jeton de dépôt (ils ont chacun leur bouton), les seuils, les tarifs, le modèle et l’effort, les sites de recherche — et le cumul de dépense (<b class="mono">'
+      + Fn_Esc(Fn_FmtUsd(c.coutUsd)) + '</b> sur ' + c.appels + ' appel(s)). Le détail par appel disparaît, le total reste : masquer ce qui a été payé n’est pas quelque chose que cette application se permet.</div>'
+      + '<div class="note note-crit tres-petit">La remise à zéro est POUSSÉE AU DÉPÔT PRIVÉ : elle vaut pour TOUS vos appareils, pas seulement celui-ci. Sans cela, le premier appareil synchronisé restaurerait tout. Il n’y a pas d’annulation — téléchargez d’abord une copie, « Restaurer un état » sait la relire.</div>'
+      + '<div class="rang-btn"><button class="btn btn-ok" data-action="etat-exporter">Télécharger une copie de l’état</button>'
+      + '<button class="btn btn-danger' + (arme ? ' arme' : '') + '" data-action="etat-raz">'
+      + (arme ? 'Confirmer — tout effacer ?' : 'Repartir d’une vigie neuve') + '</button></div>'
+      + (Var_State._runtime.razMessage ? '<div class="note note-ok tres-petit">' + Fn_Esc(Var_State._runtime.razMessage) + '</div>' : '');
+  });
   // ---- Version
   h += '<div class="carte"><div class="carte-titre">Version</div>'
     + Fn_HtmlBanniereVersion()
@@ -5455,6 +5640,21 @@ function Fn_ContratDesk() {
       if (!c.conso) manque.push('consensus');
     }
     if (manque.length) o.manque = manque;
+    // LE JUGEMENT PRÉCÉDENT de cette ligne, en abrégé, et ce que VOUS en avez
+    // déclaré. C'est ce qui fait d'une mise à jour une réévaluation : sans lui,
+    // le desk réécrivait chaque fois une thèse neuve, sans savoir ce qu'il avait
+    // dit ni ce que vous en aviez fait.
+    const dk = p.desk || {}, th = (Var_State.theses || {})[p.id] || {};
+    const prec = {};
+    if (dk.tend) prec.tend = dk.tend;
+    if (dk.these) prec.these = String(dk.these).slice(0, 220);
+    if (dk.valoRef) prec.valoRef = String(dk.valoRef).slice(0, 120);
+    if (dk.risques) prec.risques = String(dk.risques).slice(0, 160);
+    if (dk.ts) prec.le = Fn_DateISO(new Date(Fn_Num(dk.ts) || Date.now()));
+    if (Object.keys(prec).length) o.deskPrec = prec;
+    const declare = [th.ecrite ? 'these' : null, th.invalidation ? 'invalidation' : null,
+      th.objectif ? 'objectif' : null].filter(Boolean);
+    if (declare.length || th.derniereRevue) o.vous = { declare: declare, revue: th.derniereRevue || null };
     return o;
   });
   return {
@@ -5478,7 +5678,16 @@ function Fn_ContratDesk() {
     // Les dernières découvertes, UNE LIGNE chacune — jamais leur prose : c'est
     // l'anti-répétition, et elle ne coûte presque rien.
     decVues: Var_State.decouvertes.slice(-20).map(d => ({ c: d.cible, t: String(d.titre || '').slice(0, 60),
-      d: Fn_DateISO(new Date(Fn_Num(d.ts) || Date.now())), i: d.intention, statut: d.statut }))
+      d: Fn_DateISO(new Date(Fn_Num(d.ts) || Date.now())), i: d.intention, statut: d.statut })),
+    // Les arbitrages DÉJÀ TRANCHÉS, une ligne chacun. Même logique d'anti-répétition
+    // que les découvertes : un arbitrage rejeté ne se repropose pas sans fait
+    // nouveau, un arbitrage accepté est EN COURS et le desk doit en tenir compte
+    // au lieu de proposer son contraire.
+    arbitragesTranches: Var_State.actions.filter(a => a.statut !== 'a_valider').slice(-25)
+      .map(a => ({ id: a.isin, p: String(a.propo || '').slice(0, 90), statut: a.statut,
+        d: a.dateDecision || Fn_DateISO(new Date(Fn_Num(a.ts) || Date.now())) })),
+    arbitragesEnAttente: Var_State.actions.filter(a => a.statut === 'a_valider')
+      .map(a => ({ id: a.isin, p: String(a.propo || '').slice(0, 90) }))
   };
 }
 function Fn_ContratEnrichissement(lignes) {
@@ -5564,9 +5773,17 @@ function Fn_BuildPromptMAJ(ctx) {
   L.push('=== CONTEXTE ===');
   L.push('Date et heure de l’appel : ' + horodatage + '.');
   L.push('Portefeuille, marge, expositions nettes, écarts de contrôle déjà détectés, événements à traiter et découvertes déjà proposées — clés abrégées pour l’économie, légende ci-après.');
-  L.push('LÉGENDE : id=identifiant interne d’une ligne (à réutiliser TEL QUEL) · nom=libellé complet · qte=quantité · dev=devise · cours=dernier cours lu · varJour=variation du jour en % · expoEur=exposition en euros (delta pour un produit à levier) · pctVN=poids dans la valeur nette · poche=classement de gestion · fact=facteurs de risque · niveau=effort attendu sur cette ligne (complet / compact / ligne / derive) · profil=profil de valorisation · derive.sj=sous-jacent · derive.distBar=distance à la barrière en % · derive.portMens=portage mensuel en euros · valo/conso=ce qui est DÉJÀ connu, avec son âge · manque=ce qui n’a pas encore été collecté (ce n’est PAS ta mission dans cet appel) · marge.vl=valeur liquidative · marge.libre=marge disponible · marge.coussinPct=coussin en % · expoNetteFacteur=exposition NETTE par facteur, une jambe short compensant une jambe longue · gardeFous=plafonds chiffrés en vigueur · ecarts=écarts de contrôle déjà détectés par l’application · evSansTexte=les seuls événements dont tu dois écrire les textes · evADebriefer=les événements échus à débriefer · decVues=les dernières découvertes, une ligne chacune, pour ne pas les reproposer.');
+  L.push('LÉGENDE : id=identifiant interne d’une ligne (à réutiliser TEL QUEL) · nom=libellé complet · qte=quantité · dev=devise · cours=dernier cours lu · varJour=variation du jour en % · expoEur=exposition en euros (delta pour un produit à levier) · pctVN=poids dans la valeur nette · poche=classement de gestion · fact=facteurs de risque · niveau=effort attendu sur cette ligne (complet / compact / ligne / derive) · profil=profil de valorisation · derive.sj=sous-jacent · derive.distBar=distance à la barrière en % · derive.portMens=portage mensuel en euros · valo/conso=ce qui est DÉJÀ connu, avec son âge · manque=ce qui n’a pas encore été collecté (ce n’est PAS ta mission dans cet appel) · marge.vl=valeur liquidative · marge.libre=marge disponible · marge.coussinPct=coussin en % · expoNetteFacteur=exposition NETTE par facteur, une jambe short compensant une jambe longue · gardeFous=plafonds chiffrés en vigueur · ecarts=écarts de contrôle déjà détectés par l’application · evSansTexte=les seuls événements dont tu dois écrire les textes · evADebriefer=les événements échus à débriefer · decVues=les dernières découvertes, une ligne chacune, pour ne pas les reproposer · deskPrec=TON jugement précédent sur cette ligne, avec sa date · vous=ce que l’utilisateur a déclaré sur cette ligne (thèse écrite, invalidation définie, objectif défini) et la date de sa dernière revue · arbitragesTranches=les arbitrages que tu as proposés et que l’utilisateur a acceptés ou rejetés · arbitragesEnAttente=ceux qu’il n’a pas encore tranchés.');
   L.push(Fn_JsonCompact(contrat));
   L.push('Une clé ABSENTE vaut « inconnu » : elle a été omise pour ne pas consommer de jetons, jamais parce qu’elle vaut zéro.');
+  L.push('');
+  L.push('=== CE QUE TU AS DÉJÀ DIT, ET CE QUI EN A ÉTÉ FAIT ===');
+  L.push('Cet appel est une RÉÉVALUATION, pas un premier avis. Le champ deskPrec de chaque ligne porte ta lecture précédente et sa date ; arbitragesTranches porte les décisions de l’utilisateur sur tes propositions.');
+  L.push('1. RÉÉVALUE, ne redécouvre pas. Quand deskPrec existe, ta nouvelle lecture doit se situer PAR RAPPORT à elle : confirme-la, nuance-la ou renverse-la, et dis en quelques mots CE QUI A CHANGÉ depuis (un chiffre, un fait daté). Une thèse réécrite à l’identique sans le dire fait croire à un travail neuf qui n’a pas eu lieu ; une thèse renversée sans motif est une girouette.');
+  L.push('2. UN ARBITRAGE REJETÉ NE SE REPROPOSE PAS sans fait nouveau. L’utilisateur l’a lu et écarté. Le reproposer tel quel lui fait rejeter deux fois la même chose, et le fait payer deux fois. S’il reste selon toi le bon arbitrage, il faut le rouvrir EXPLICITEMENT : nomme le fait daté survenu depuis qui change la donne, sinon abstiens-toi.');
+  L.push('3. UN ARBITRAGE ACCEPTÉ EST EN COURS. Ne propose pas son contraire, ne le propose pas de nouveau. Tu peux en revanche signaler qu’il n’a pas produit son effet, ou que son déclencheur est atteint.');
+  L.push('4. UN ARBITRAGE EN ATTENTE n’est ni accepté ni rejeté : n’en propose pas de doublon, et ne le compte pas comme acquis.');
+  L.push('5. LES DÉCLARATIONS DE L’UTILISATEUR (champ vous) ne sont pas des thèses écrites : ce sont des cases qu’il a cochées. Une ligne sans invalidation définie et lourde au portefeuille est un défaut de discipline que tu peux relever ; une ligne dont la dernière revue est ancienne mérite d’être remise sur la table.');
   L.push('');
   L.push('=== TES QUATRE LIVRABLES ===');
   L.push('LIVRABLE 1 — TEXTES DES ÉVÉNEMENTS (' + nbTextes + ' à écrire, et EXACTEMENT ceux-là).');
@@ -5601,7 +5818,7 @@ function Fn_BuildPromptMAJ(ctx) {
   L.push('  · fact = les facteurs de risque communs à plusieurs lignes (secteur, thème, devise, sensibilité aux taux). Des lignes corrélées constituent UNE exposition, pas plusieurs : c’est de cette attribution que dépend tout l’indicateur d’exposition nette.');
   L.push('  · liqFaible = true si la ligne ne peut pas être soldée en une à deux séances.');
   L.push('  · these, valoRef, risques, tend : la lecture de desk. revue seulement si une publication est intervenue depuis ta dernière lecture.');
-  L.push('  · ACTIONS (bloc actions) : pour chaque position qui le justifie, la meilleure action envisageable, hiérarchisée (prio 1 = urgent, à 3), avec proposition concrète, déclencheur conditionnel, coût/bénéfice chiffré, horizon et condition d’invalidation. Une position sans action nécessaire le dit explicitement (« conserver, prochain point de décision : … ») — une entrée « conserver » vaut mieux qu’une ligne absente.');
+  L.push('  · ACTIONS (bloc actions) : pour chaque position qui le justifie, la meilleure action envisageable, hiérarchisée (prio 1 = urgent, à 3), avec proposition concrète, déclencheur conditionnel, coût/bénéfice chiffré, horizon et condition d’invalidation. Une position sans action nécessaire le dit explicitement (« conserver, prochain point de décision : … ») — une entrée « conserver » vaut mieux qu’une ligne absente. Confronte chaque action au bloc arbitragesTranches AVANT de l’écrire : si elle y figure déjà comme rejetée, soit tu nommes le fait daté qui la rouvre, soit tu ne l’écris pas.');
   L.push('');
   L.push('=== CE QUE TU N’ÉCRIS JAMAIS ===');
   L.push('Une quantité, un cours, une valeur en euros, une exposition, un pourcentage de valeur nette, un taux de change, une distance à une barrière, un portage. Ces champs te sont FOURNIS. Si tu en réémets un, il sera ignoré — et il aura été payé.');
@@ -6196,6 +6413,30 @@ function Fn_OnAction(e) {
         rt.collageErreur = 'Accès au presse-papier refusé. Collez à la main dans la zone ci-dessous — le traitement est identique.';
         Fn_RenderAcquisition();
       });
+      break;
+    }
+    case 'etat-exporter': {
+      rt.razMessage = Fn_TelechargerEtat()
+        ? 'Copie téléchargée. « Restaurer un état » sait la relire.'
+        : 'Téléchargement impossible dans ce navigateur : copiez plutôt le fichier etat.json du dépôt privé avant d’effacer.';
+      Fn_RenderParametres();
+      break;
+    }
+    case 'etat-raz': {
+      Fn_DoubleTap('etat-raz', () => {
+        Fn_RemiseAZero();
+        rt.razMessage = 'Vigie remise à zéro. L’état vide a été poussé au dépôt : vos autres appareils l’adopteront à leur prochaine synchronisation.';
+        Fn_RenderTout();
+      }, () => Fn_RenderParametres());
+      break;
+    }
+    case 'capture-detacher': {
+      // Oublie l'EN-TÊTE de la capture, jamais les textes qu'elle a posés : les
+      // trois zones retrouvent leur forme complète et redeviennent collables une
+      // par une, sans qu'il faille refaire quoi que ce soit.
+      rt.capture = null;
+      Fn_DocSupprimer('capture');
+      Fn_RenderAcquisition();
       break;
     }
     case 'capture-effacer': {

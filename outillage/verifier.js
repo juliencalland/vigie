@@ -538,6 +538,53 @@ setTimeout(() => {
     verifier('recoller la même capture ne crée rien de neuf',
       bilan2.nouvelles === 0 && apres.n === 9 && apres.o === 3 && apres.av === 0,
       JSON.stringify(bilan2) + ' → ' + JSON.stringify(apres));
+
+    /* --- Mémoire des revues : le desk réévalue, il ne redécouvre pas --- */
+    R('Var_State.positions[0].desk = { niveau: "complet", profil: "croissance", tend: "hausse",'
+      + ' these: "Thèse précédente à réévaluer.", valoRef: "12x", risques: "concentration", ts: Date.now() };'
+      + 'Var_State.theses[Var_State.positions[0].id] = { ecrite: true, invalidation: true, objectif: false, derniereRevue: "2026-08-01" };'
+      + 'Var_State.actions = ['
+      + ' { id: "a1", isin: Var_State.positions[0].id, propo: "Alléger de moitié", statut: "rejetee", dateDecision: "2026-08-10", prio: 2, ts: Date.now() },'
+      + ' { id: "a2", isin: Var_State.positions[1].id, propo: "Couvrir la jambe longue", statut: "acceptee", dateDecision: "2026-08-12", prio: 1, ts: Date.now() },'
+      + ' { id: "a3", isin: Var_State.positions[2].id, propo: "Poser une limite", statut: "a_valider", prio: 3, ts: Date.now() }];');
+    const mem = J('Fn_MemoireDesk()');
+    verifier('la mémoire des revues est comptée à l’écran',
+      mem.jugees === 1 && mem.arbitrages === 2 && mem.theses === 1, JSON.stringify(mem));
+    const contrat = J('Fn_ContratDesk()');
+    verifier('le desk reçoit son jugement PRÉCÉDENT ligne par ligne',
+      !!contrat.pos[0].deskPrec && contrat.pos[0].deskPrec.these === 'Thèse précédente à réévaluer.'
+      && contrat.pos[0].deskPrec.tend === 'hausse', JSON.stringify(contrat.pos[0].deskPrec));
+    verifier('le desk reçoit ce que l’utilisateur a déclaré sur la ligne',
+      !!contrat.pos[0].vous && contrat.pos[0].vous.declare.join(',') === 'these,invalidation'
+      && contrat.pos[0].vous.revue === '2026-08-01', JSON.stringify(contrat.pos[0].vous));
+    verifier('le desk reçoit les arbitrages déjà tranchés, et EUX SEULS comme tranchés',
+      contrat.arbitragesTranches.length === 2 && contrat.arbitragesEnAttente.length === 1
+      && contrat.arbitragesTranches.map(a => a.statut).sort().join(',') === 'acceptee,rejetee',
+      JSON.stringify(contrat.arbitragesTranches));
+    const texte = R('Fn_BuildPromptMAJ({ passe: "desk", contrat: Fn_ContratDesk(), budget: Fn_BudgetDesk(0), sitesAutorises: [] })');
+    verifier('la consigne de réévaluation est écrite noir sur blanc',
+      /RÉÉVALUATION, pas un premier avis/.test(texte) && /ARBITRAGE REJETÉ NE SE REPROPOSE PAS/.test(texte)
+      && /ARBITRAGE ACCEPTÉ EST EN COURS/.test(texte));
+
+    /* --- Repartir d'une vigie neuve --- */
+    R('Var_State.cumulApi = { appels: 7, jetonsEntree: 100, jetonsSortie: 50, jetonsCacheEcriture: 0, jetonsCacheLecture: 0, recherches: 3, lectures: 1, coutUsd: 1.25 };'
+      + 'Var_State.seuils.leverageMax = 1.9; Fn_RemiseAZero();');
+    const vide = J('({ n: Var_State.positions.length, o: Var_State.ordres.length, e: Var_State.calendrier.length,'
+      + ' a: Var_State.actions.length, c: Var_State.controles.length, j: Var_State.majJournaux.length,'
+      + ' t: Object.keys(Var_State.theses).length, m: Var_State.marge, cap: Var_State.captures.length,'
+      + ' col: Object.keys(Var_State._runtime.collages).length, capt: Var_State._runtime.capture })');
+    verifier('la remise à zéro vide TOUTES les données de portefeuille, collages compris',
+      vide.n === 0 && vide.o === 0 && vide.e === 0 && vide.a === 0 && vide.c === 0 && vide.j === 0
+      && vide.t === 0 && vide.m === null && vide.cap === 0 && vide.col === 0 && vide.capt === null,
+      JSON.stringify(vide));
+    const garde = J('({ cumul: Var_State.cumulApi, seuil: Var_State.seuils.leverageMax, modele: Var_State.modeleMAJ })');
+    verifier('la remise à zéro NE touche PAS la dépense cumulée ni les réglages',
+      garde.cumul.appels === 7 && garde.cumul.coutUsd === 1.25 && garde.seuil === 1.9 && !!garde.modele,
+      JSON.stringify(garde));
+    verifier('l’état vidé devient le plus récent, sinon la synchronisation le restaurerait',
+      J('Var_State.etatTs') > 0 && J('Date.now() - Var_State.etatTs') < 5000);
+    R('Fn_RenderTout();');
+    ok('la page se redessine entière après une remise à zéro');
   } catch (e) { ko('la chaîne entière', e.message); }
 
   /* --- Migration de l'état précédent --- */
