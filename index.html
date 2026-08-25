@@ -419,7 +419,7 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202608251715';
+const Cst_Version = 'vigie-202608251749';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -2182,12 +2182,22 @@ async function Fn_LireXlsx(fichier) {
   const reSi = /<si\b[\s\S]*?<\/si>/g;
   let m;
   while ((m = reSi.exec(brutSs)) !== null) partagees.push(Fn_XmlTexte(m[0]));
-  const lignes = [];
+  /* DEUX LECTURES DE LA MÊME CELLULE, et c'est la correction la plus importante
+     de ce lecteur. « lignes » garde le texte tel qu'il est écrit ; « nombres »
+     garde la valeur NUMÉRIQUE des seules cellules qui en portent une.
+     Un classeur écrit des nombres MACHINE : le point y est TOUJOURS une
+     décimale, jamais un séparateur de milliers. Fn_NombreFr, lui, arbitre pour
+     un écran français, où « 75.717 » vaut soixante-quinze mille — et transformait
+     donc tout montant du fichier à exactement trois décimales en sa valeur mille
+     fois trop grande : un cours de 0,085 devenait 85, un montant de 578,745 €
+     devenait 578 745 €. Les deux règles sont justes chacune dans son monde ; il
+     fallait cesser d'appliquer celle de l'écran au fichier. */
+  const lignes = [], nombres = [];
   const reLigne = /<row\b([^>]*)>([\s\S]*?)<\/row>/g;
   const reCell = /<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g;
   let mr;
   while ((mr = reLigne.exec(feuille)) !== null) {
-    const cellules = {};
+    const cellules = {}, nums = {};
     let mc;
     reCell.lastIndex = 0;
     while ((mc = reCell.exec(mr[2])) !== null) {
@@ -2195,16 +2205,23 @@ async function Fn_LireXlsx(fichier) {
       const ref = /r="([A-Z]+)\d+"/.exec(attrs);
       if (!ref) continue;
       const type = /t="([a-zA-Z]+)"/.exec(attrs);
-      let valeur = null;
+      let valeur = null, brut = null;
       const mv = /<v>([\s\S]*?)<\/v>/.exec(corps);
       if (type && type[1] === 's' && mv) valeur = partagees[Number(mv[1])] || '';
       else if (type && type[1] === 'inlineStr') valeur = Fn_XmlTexte(corps);
-      else if (mv) valeur = Fn_XmlTexte(mv[1]);
-      if (valeur !== null && String(valeur).trim() !== '') cellules[ref[1]] = String(valeur).trim();
+      else if (mv) { valeur = Fn_XmlTexte(mv[1]); brut = mv[1]; }
+      if (valeur === null || String(valeur).trim() === '') continue;
+      cellules[ref[1]] = String(valeur).trim();
+      // Le motif exige la forme d'un nombre machine : une cellule de formule
+      // rendant du texte (t="str") ou un booléen n'y entre pas.
+      if (brut !== null && /^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(String(brut).trim())) {
+        const n = Number(String(brut).trim());
+        if (!isNaN(n)) nums[ref[1]] = n;
+      }
     }
-    if (Object.keys(cellules).length) lignes.push(cellules);
+    if (Object.keys(cellules).length) { lignes.push(cellules); nombres.push(nums); }
   }
-  return { lignes, ts: Date.now(), nom: fichier.name || 'export', taille: fichier.size || 0 };
+  return { lignes, nombres, ts: Date.now(), nom: fichier.name || 'export', taille: fichier.size || 0 };
 }
 /* Interprétation métier du classeur. Sept colonnes : A produit · B ticker/ISIN ·
    C quantité · D clôture (VEILLE, inutilisable) · E devise · F montant en devise ·
@@ -2216,24 +2233,39 @@ function Fn_RegistreDepuisXlsx(xlsx) {
   const lignes = [], inconnues = [];
   let liquidites = null;
   const taux = {};
+  const nombres = xlsx.nombres || [];
   (xlsx.lignes || []).forEach((c, i) => {
+    // La valeur NUMÉRIQUE de la cellule fait foi ; le texte n'est relu que si la
+    // cellule n'en portait pas (état antérieur, cellule de texte). Voir le
+    // commentaire de Fn_LireXlsx : la règle de lecture d'un écran français n'a
+    // rien à faire dans un fichier.
+    const n = nombres[i] || {};
+    const val = cle => (n[cle] !== undefined ? n[cle] : Fn_NombreFr(c[cle]));
     const nom = c.A || '', code = c.B || '';
-    const qte = Fn_NombreFr(c.C), dev = (c.E || '').toUpperCase();
-    const montDev = Fn_NombreFr(c.F), montEur = Fn_NombreFr(c.G);
+    const estIsin = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/.test(code.toUpperCase());
+    const qte = val('C'), dev = (c.E || '').toUpperCase();
+    const montDev = val('F'), montEur = val('G');
     // Ligne d'en-tête : la colonne C ne contient pas un nombre.
     if (i === 0 && qte == null && nom) return;
     if (dev && dev !== 'EUR' && montDev && montEur != null && montDev !== 0) {
       taux[dev] = Math.round(Math.abs(montEur / montDev) * 1e6) / 1e6;
     }
-    if (!nom && qte == null && montEur != null) {
-      liquidites = { dev: dev || 'EUR', montantDev: montDev, montantEur: montEur };
+    /* LIGNE DE LIQUIDITÉS. Reconnue par sa FORME : un montant, aucune quantité,
+       aucun identifiant. Le courtier la nomme (« CASH & CASH FUND & FTX CASH
+       (EUR) ») — exiger un libellé VIDE la faisait tomber en « ligne non
+       reconnue » à chaque analyse, et le contrôle croisé des liquidités, qui
+       n'avait plus de terme à comparer, ne s'exécutait tout simplement jamais.
+       Une position porte toujours À LA FOIS un identifiant et une quantité :
+       la confusion est donc impossible dans l'autre sens. */
+    if (qte == null && montEur != null && !estIsin) {
+      liquidites = { nom: nom || 'liquidités', dev: dev || 'EUR', montantDev: montDev, montantEur: montEur };
       return;
     }
     if (nom && qte != null) {
       lignes.push({
         nom, nomNorm: Fn_NormNom(nom), code, qte, dev: dev || 'EUR',
-        clotureVeille: Fn_NombreFr(c.D), montantDev: montDev, montantEur: montEur,
-        isin: /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/.test(code.toUpperCase()) ? code.toUpperCase() : null
+        clotureVeille: val('D'), montantDev: montDev, montantEur: montEur,
+        isin: estIsin ? code.toUpperCase() : null
       });
       return;
     }
@@ -2772,14 +2804,37 @@ function Fn_AnalyserEntrees() {
         propo: 'Mouvement de trésorerie entre les deux horodatages (ordre exécuté, frais, dépôt) — à expliquer avant intégration.' });
     }
   }
+  /* VALEUR DES TITRES — comparer ce qui est comparable.
+     Ce contrôle sommait les montants de l'EXPORT, qui datent de la clôture de la
+     veille, et les opposait à la valeur des titres LUE SUR L'ÉCRAN, qui est celle
+     du jour. Les deux diffèrent légitimement de tout le mouvement de la séance :
+     sur une tolérance de 0,5 %, la carte se levait donc presque chaque jour sans
+     rien signaler de réel — un contrôle qui crie toujours ne se lit plus.
+     La somme est désormais recalculée AU COURS DU JOUR, sur la même base que
+     l'écran ; ce qui subsiste alors est un vrai écart : une ligne détenue que
+     l'export ignore, ou l'inverse. Une ligne dont le cours ou le taux manque est
+     comptée à son montant d'export et le contrôle le dit, plutôt que de la
+     compter zéro et d'inventer un écart. */
   if (margeCap && Fn_Num(margeCap.titres) != null && propositions.length) {
-    const somme = propositions.reduce((a, p) => a + (Fn_Num(p.montantEur) || 0), 0);
+    const tauxDe = d => {
+      if (!d || d === 'EUR') return 1;
+      const t = reg && reg.taux ? Fn_Num(reg.taux[d]) : null;
+      return t != null ? t : Fn_Taux(d);
+    };
+    let somme = 0, approchees = 0;
+    propositions.forEach(p => {
+      const q = Fn_Num(p.qte), c = Fn_Num(p.cloture), t = tauxDe(p.dev);
+      if (q != null && c != null && t != null) { somme += q * c * t; return; }
+      const repli = Fn_Num(p.montantEur);
+      if (repli != null) { somme += repli; approchees++; }
+    });
     const ecart = Fn_Num(margeCap.titres) - somme;
     if (somme > 0 && Math.abs(ecart) > Math.max(5, somme * 0.005)) {
       controles.push({ kind: 'ecart_valeur_titres',
         resume: 'Valeur des titres de l’écran (' + Fn_FmtEur(margeCap.titres) + ') différente de la somme des lignes valorisées (' + Fn_FmtEur(somme) + ') : écart de ' + Fn_FmtEur(ecart) + '.',
-        preuve: 'Somme calculée sur ' + propositions.length + ' ligne(s) de l’export, colonne montant en euros.',
-        propo: 'Ligne manquante dans l’export, ou valorisation d’écran postérieure à l’export — vérifier avant d’intégrer.' });
+        preuve: 'Somme calculée sur ' + propositions.length + ' ligne(s), au cours du jour et au taux de change déduit de l’export — même base que l’écran.'
+          + (approchees ? ' ' + approchees + ' ligne(s) sans cours ou sans taux comptée(s) à leur montant d’export, daté de la veille.' : ''),
+        propo: 'Ligne détenue absente de l’export, ligne de l’export qui n’est plus détenue, ou quantité périmée — vérifier avant d’intégrer.' });
     }
   }
   return { capPos, capOrd, capExe, reg, meta, propositions, controles,

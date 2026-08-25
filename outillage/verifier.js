@@ -763,7 +763,8 @@ setTimeout(async () => {
       return new Uint8Array(cl.concat(cc, fin));
     };
     const mots = ['Produit', 'Ticker/ISIN', 'Qté', 'Clôture', 'Devise', 'Montant', 'Montant EUR',
-      'Untel SA', 'XX0000000019', 'EUR', 'Autre Inc', 'XX0000000027', 'USD'];
+      'Untel SA', 'XX0000000019', 'EUR', 'Autre Inc', 'XX0000000027', 'USD',
+      'Tierce SA', 'XX0000000035', 'CASH & CASH FUND & FTX CASH (EUR)'];
     const ss = '<?xml version="1.0"?><sst count="' + mots.length + '" uniqueCount="' + mots.length + '">'
       + mots.map(m => '<si><t>' + m.replace(/&/g, '&amp;') + '</t></si>').join('') + '</sst>';
     const cs = (r, c, i) => '<c r="' + c + r + '" t="s"><v>' + i + '</v></c>';
@@ -772,9 +773,11 @@ setTimeout(async () => {
       + '<row r="1">' + ['A', 'B', 'C', 'D', 'E', 'F', 'G'].map((c, i) => cs(1, c, i)).join('') + '</row>'
       + '<row r="2">' + cs(2, 'A', 7) + cs(2, 'B', 8) + cn(2, 'C', 120) + cn(2, 'D', '12.1')
         + cs(2, 'E', 9) + cn(2, 'F', 1452) + cn(2, 'G', 1452) + '</row>'
-      + '<row r="3">' + cs(3, 'A', 10) + cs(3, 'B', 11) + cn(3, 'C', 50) + cn(3, 'D', 10)
-        + cs(3, 'E', 12) + cn(3, 'F', 500) + cn(3, 'G', 450) + '</row>'
-      + '<row r="4">' + cn(4, 'G', -1000) + '</row>'
+      + '<row r="3">' + cs(3, 'A', 10) + cs(3, 'B', 11) + cn(3, 'C', 5) + cn(3, 'D', '136.63')
+        + cs(3, 'E', 12) + cn(3, 'F', '683.15') + cn(3, 'G', '578.745') + '</row>'
+      + '<row r="4">' + cs(4, 'A', 13) + cs(4, 'B', 14) + cn(4, 'C', 23000) + cn(4, 'D', '0.085')
+        + cs(4, 'E', 9) + cn(4, 'F', 1955) + cn(4, 'G', 1955) + '</row>'
+      + '<row r="5">' + cs(5, 'A', 15) + cs(5, 'E', 9) + cn(5, 'F', -1000) + cn(5, 'G', -1000) + '</row>'
       + '</sheetData></worksheet>';
     const octets = faireZip([
       { nom: 'xl/sharedStrings.xml', contenu: ss },
@@ -783,24 +786,75 @@ setTimeout(async () => {
     ctx.__essaiXlsx = { name: 'export-essai.xlsx', size: octets.length,
       arrayBuffer: () => Promise.resolve(octets.buffer.slice(octets.byteOffset, octets.byteOffset + octets.byteLength)) };
     const lu = await vm.runInContext('Fn_LireXlsx(__essaiXlsx)', ctx);
-    verifier('classeur lu sans aucune bibliothèque : quatre lignes de cellules',
-      !!lu && lu.lignes.length === 4, lu ? lu.lignes.length + ' ligne(s)' : 'illisible');
+    verifier('classeur lu sans aucune bibliothèque : cinq lignes de cellules',
+      !!lu && lu.lignes.length === 5, lu ? lu.lignes.length + ' ligne(s)' : 'illisible');
     ctx.__essaiReg = lu;
     const reg = JSON.parse(JSON.stringify(vm.runInContext('Fn_RegistreDepuisXlsx(__essaiReg)', ctx)));
-    verifier('en-tête ignoré, deux positions retenues, aucune ligne rejetée',
-      reg.lignes.length === 2 && reg.inconnues.length === 0,
-      reg.lignes.length + ' position(s), ' + reg.inconnues.length + ' rejetée(s)');
+    verifier('en-tête ignoré, trois positions retenues, aucune ligne rejetée',
+      reg.lignes.length === 3 && reg.inconnues.length === 0,
+      reg.lignes.length + ' position(s), ' + reg.inconnues.length + ' rejetée(s) : '
+      + reg.inconnues.join(' | '));
+    /* La régression la plus coûteuse de ce lecteur : un classeur écrit des
+       nombres MACHINE, où le point est une décimale. Lus avec la règle d'un
+       écran français, « 578.745 » devenait 578 745 et « 0.085 » devenait 85 —
+       mille fois trop, en silence, sur le montant comme sur le cours. */
+    verifier('un montant du classeur à TROIS décimales n’est pas lu mille fois trop grand',
+      reg.lignes[1].montantEur === 578.745 && reg.lignes[1].montantDev === 683.15,
+      'montEur ' + reg.lignes[1].montantEur + ' (attendu 578,745) · montDev ' + reg.lignes[1].montantDev);
+    verifier('un cours du classeur à TROIS décimales non plus',
+      reg.lignes[2].clotureVeille === 0.085,
+      'clôture veille ' + reg.lignes[2].clotureVeille + ' (attendu 0,085)');
     verifier('quantités, devises et identifiants viennent du classeur, qui fait foi',
       reg.lignes[0].qte === 120 && reg.lignes[0].dev === 'EUR' && reg.lignes[0].isin === 'XX0000000019'
-      && reg.lignes[1].qte === 50 && reg.lignes[1].dev === 'USD' && reg.lignes[1].isin === 'XX0000000027',
+      && reg.lignes[1].qte === 5 && reg.lignes[1].dev === 'USD' && reg.lignes[1].isin === 'XX0000000027'
+      && reg.lignes[2].qte === 23000 && reg.lignes[2].dev === 'EUR' && reg.lignes[2].isin === 'XX0000000035',
       JSON.stringify(reg.lignes.map(l => l.qte + '/' + l.dev + '/' + l.isin)));
     verifier('la colonne de clôture est lue comme la VEILLE, jamais comme le cours du jour',
-      reg.lignes[0].clotureVeille === 12.1 && reg.lignes[1].clotureVeille === 10,
+      reg.lignes[0].clotureVeille === 12.1 && reg.lignes[1].clotureVeille === 136.63,
       JSON.stringify(reg.lignes.map(l => l.clotureVeille)));
     verifier('taux de change DÉDUIT du fichier : montant en euros ÷ montant en devise',
-      reg.taux.USD === 0.9 && reg.taux.EUR === undefined, JSON.stringify(reg.taux));
-    verifier('la ligne de liquidités est reconnue par sa FORME, jamais par son numéro',
-      !!reg.liquidites && reg.liquidites.montantEur === -1000, JSON.stringify(reg.liquidites));
+      Math.abs(reg.taux.USD - Math.round(578.745 / 683.15 * 1e6) / 1e6) < 1e-9 && reg.taux.EUR === undefined,
+      JSON.stringify(reg.taux));
+    /* La ligne de liquidités du courtier porte un LIBELLÉ. Exiger un libellé vide
+       la faisait tomber en « ligne non reconnue » à chaque analyse, et privait de
+       tout terme de comparaison le contrôle croisé des liquidités, qui ne
+       s’exécutait donc jamais. */
+    verifier('la ligne de liquidités est reconnue MALGRÉ son libellé — un montant, aucune quantité, aucun identifiant',
+      !!reg.liquidites && reg.liquidites.montantEur === -1000 && /CASH/.test(reg.liquidites.nom || ''),
+      JSON.stringify(reg.liquidites));
+
+    /* --- LE CONTRÔLE CROISÉ, sur la même base des deux côtés ---
+       L'écran donne la valeur des titres DU JOUR ; l'export donne des montants
+       de la VEILLE. Sommer l'export et l'opposer à l'écran faisait lever la carte
+       presque chaque jour pour tout le mouvement de la séance — un contrôle qui
+       crie toujours ne se lit plus. La somme est donc recalculée au cours du jour.
+       Le classeur d'essai ci-dessus est volontairement daté : 3 985,75 € de
+       montants d'export contre 4 162,95 € au cours du jour, soit 4,4 % — bien
+       au-delà de la tolérance de 0,5 %. */
+    const R2 = q => vm.runInContext(q, ctx);
+    const capture = [
+      ' Untel SA Untel SA UNT | € 12,50 120 120 XX0000000019 € 12,50 EUR 1 500,00 1 500,00 ',
+      ' Autre Inc Autre Inc AUT | $ 140,00 5 5 XX0000000027 $ 140,00 USD 592,95 592,95 ',
+      ' Tierce SA Tierce SA TIE | € 0,090 23 000 23 000 XX0000000035 € 0,090 EUR 2 070,00 2 070,00 ',
+      'Valeur des titres € 4 163,00',
+      'Liquidités € -1 000,00',
+      'Valeur liquidative du portefeuille € 3 163,00',
+      'Dernière mise à jour à 18:46:08'
+    ].join('\n');
+    const analyser = titres => {
+      R2('Var_State.positions = []; Var_State.controles = []; Var_State.fx = null;'
+        + 'Var_State._runtime.collages = { positions: { texte: ' + JSON.stringify(capture.replace('4 163,00', titres)) + ', ts: Date.now() } };'
+        + 'Var_State._runtime.xlsx = __essaiReg;');
+      return JSON.parse(JSON.stringify(R2('Fn_AnalyserEntrees().controles.map(c => c.kind)')));
+    };
+    const justes = analyser('4 163,00');
+    verifier('un export daté de la veille ne lève PLUS de faux écart de valeur des titres',
+      justes.indexOf('ecart_valeur_titres') < 0, justes.join(',') || 'aucun écart');
+    verifier('et les liquidités de l’export sont enfin comparables à celles de l’écran',
+      justes.indexOf('ecart_liquidites') < 0, justes.join(',') || 'aucun écart');
+    const fausses = analyser('6 000,00');
+    verifier('un écart RÉEL de valeur des titres est toujours signalé',
+      fausses.indexOf('ecart_valeur_titres') >= 0, fausses.join(',') || 'aucun écart');
     // Un fichier qui n'est pas une archive doit le dire, sans casser la page.
     ctx.__essaiPdf = { name: 'faux.pdf', size: 5,
       arrayBuffer: () => Promise.resolve(new Uint8Array([37, 80, 68, 70, 45]).buffer) };
