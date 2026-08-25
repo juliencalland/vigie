@@ -419,7 +419,7 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202608251749';
+const Cst_Version = 'vigie-202608251820';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -1970,7 +1970,7 @@ const Cst_AideActions = {
   'etat-raz': { t: 'Repartir d’une vigie neuve', d: 'Efface TOUTES les données de portefeuille — lignes, événements, découvertes, arbitrages, thèses, cartes à valider, journaux d’appel, collages du jour — deux appuis pour confirmer. L’état vide est POUSSÉ AU DÉPÔT PRIVÉ : l’effacement vaut pour tous vos appareils, sinon le premier synchronisé restaurerait tout. Sont conservés : la clé API, le jeton de dépôt, les seuils, les tarifs, le modèle, les sites de recherche, et le cumul de dépense. Il n’y a pas d’annulation : téléchargez une copie avant.' },
   'capture-effacer': { t: 'Effacer la capture', d: 'Oublie la capture et les trois entrées d’écran qu’elle avait remplies — deux appuis pour confirmer. L’export du courtier n’est pas touché, et les lignes déjà intégrées à l’état restent intactes : seules les sources du jour disparaissent.' },
   'collage-voir': { t: 'Voir le texte brut', d: 'Affiche ou masque le texte exactement tel qu’il a été collé. C’est la seule pièce qui permet de comprendre pourquoi une ligne n’a pas été reconnue. Rien n’est modifié.' },
-  'xlsx': { t: 'Charger l’export du courtier', d: 'Lit le classeur exporté et en tire les quantités, les identifiants, les devises et le taux de change du jour. Le fichier reste sur cet appareil. Sa colonne de clôture porte la veille : elle n’est jamais utilisée comme cours.' },
+  'xlsx': { t: 'Charger l’export du courtier', d: 'Lit le classeur exporté — .xlsx ou .xls ancien, reconnu à sa signature et non à son extension — et en tire les quantités, les identifiants, les devises et le taux de change du jour. Le fichier reste sur cet appareil, rien n’est envoyé. Sa colonne de clôture porte la veille : elle n’est jamais utilisée comme cours.' },
   'xlsx-effacer': { t: 'Retirer l’export', d: 'Oublie le classeur chargé — deux appuis pour confirmer. Les contrôles croisés quantité et liquidités ne pourront plus être faits tant qu’un nouvel export n’est pas fourni.' },
   'acq-integrer': { t: 'Analyser les entrées', d: 'Lit les collages et l’export, apparie les deux sources, recalcule toutes les grandeurs et produit une carte « à valider » par écart détecté. Ne coûte rien : aucun appel au modèle n’est émis. Rien n’est intégré sans votre validation.' },
   'acq-vider': { t: 'Vider les entrées du jour', d: 'Efface les collages et l’export de cet appareil — deux appuis pour confirmer. L’état du portefeuille déjà validé reste intact ; seules les sources du jour disparaissent.' },
@@ -2133,7 +2133,7 @@ async function Fn_ZipExtraire(octets, noms) {
   for (let i = octets.length - 22; i >= 0 && i > octets.length - 66000; i--) {
     if (octets[i] === 0x50 && octets[i + 1] === 0x4b && octets[i + 2] === 0x05 && octets[i + 3] === 0x06) { eocd = i; break; }
   }
-  if (eocd < 0) throw new Error('Fichier non reconnu comme un classeur : la signature d’archive est absente. Vérifiez que c’est bien l’export du courtier et non un PDF renommé.');
+  if (eocd < 0) throw new Error('Fichier non reconnu comme un classeur : ni archive .xlsx, ni classeur ancien .xls. Vérifiez que c’est bien l’export du courtier et non un PDF ou un CSV renommé.');
   const nb = Fn_Lire16(octets, eocd + 10);
   let p = Fn_Lire32(octets, eocd + 16);
   const dec = new TextDecoder('utf-8');
@@ -2165,6 +2165,204 @@ function Fn_XmlTexte(s) {
     .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
     .replace(/&apos;/g, '\'').replace(/&amp;/g, '&');
 }
+/* ---------- LE FORMAT ANCIEN DU COURTIER (.xls) ----------
+   Le courtier propose l'export en deux formats et rien ne signale lequel on a
+   pris : le .xlsx est une archive ZIP, le .xls ancien est un conteneur OLE2
+   (« Compound File »), qui n'est PAS une archive. Le refuser obligeait à
+   ré-exporter sans dire pourquoi ; il est donc lu, lui aussi, sans dépendance.
+   Bonne surprise : son contenu est en CLAIR — ce format ne réclame aucun
+   décompresseur, là où le .xlsx dépend de DecompressionStream. */
+
+// Numéro de colonne → lettre(s), comme dans une feuille de calcul.
+function Fn_ColLettre(i) {
+  let s = '';
+  for (let n = i; n >= 0; n = Math.floor(n / 26) - 1) s = String.fromCharCode(65 + (n % 26)) + s;
+  return s;
+}
+/* Un conteneur OLE2 est un petit système de fichiers : un en-tête, une table
+   d'allocation (FAT) qui chaîne les secteurs, un répertoire d'entrées nommées.
+   On n'en veut qu'une seule, le flux « Workbook ». Les flux de moins de
+   4 096 octets vivent à part, dans un « mini-flux » à secteurs de 64 octets —
+   un export de portefeuille tombe régulièrement sous ce seuil. */
+function Fn_OleFlux(octets, nomsVoulus) {
+  if (octets.length < 512) throw new Error('Fichier trop court pour être un classeur.');
+  const dv = new DataView(octets.buffer, octets.byteOffset, octets.byteLength);
+  const u16 = o => dv.getUint16(o, true), u32 = o => dv.getUint32(o, true);
+  const tSec = 1 << u16(30), tMini = 1 << u16(32);
+  if (tSec < 128 || tSec > 65536 || tMini < 16 || tMini > tSec) throw new Error('Classeur ancien illisible : en-tête inattendu.');
+  const pos = i => 512 + i * tSec;
+  const LIBRE = 0xfffffffe;
+
+  // DIFAT : 109 entrées dans l'en-tête, la suite chaînée secteur par secteur.
+  const difat = [];
+  for (let i = 0; i < 109; i++) { const v = u32(76 + i * 4); if (v < LIBRE) difat.push(v); }
+  let s = u32(68), garde = 0;
+  while (s < LIBRE && garde++ < 100000 && pos(s) + tSec <= octets.length) {
+    const b = pos(s), n = tSec / 4 - 1;
+    for (let i = 0; i < n; i++) { const v = u32(b + i * 4); if (v < LIBRE) difat.push(v); }
+    s = u32(b + n * 4);
+  }
+  const fat = [];
+  difat.forEach(d => { if (pos(d) + tSec > octets.length) return; const b = pos(d); for (let i = 0; i < tSec / 4; i++) fat.push(u32(b + i * 4)); });
+
+  const chaine = (debut, table) => {
+    const l = []; let c = debut, g = 0;
+    while (c < LIBRE && c < table.length && g++ < 1000000) { l.push(c); c = table[c]; }
+    return l;
+  };
+  const assembler = (liste, taille, base) => {
+    const out = new Uint8Array(liste.length * taille);
+    liste.forEach((c, i) => { const d = base(c); if (d + taille <= octets.length) out.set(octets.subarray(d, d + taille), i * taille); });
+    return out;
+  };
+
+  const dir = assembler(chaine(u32(48), fat), tSec, pos);
+  const entrees = [];
+  const lireU32 = (t, o) => t[o] | (t[o + 1] << 8) | (t[o + 2] << 16) | (t[o + 3] << 24);
+  for (let o = 0; o + 128 <= dir.length; o += 128) {
+    const lg = dir[o + 64] | (dir[o + 65] << 8);
+    if (!lg || lg > 64) continue;
+    let nom = '';
+    for (let i = 0; i + 1 < lg - 1; i += 2) nom += String.fromCharCode(dir[o + i] | (dir[o + i + 1] << 8));
+    entrees.push({ nom, type: dir[o + 66], debut: lireU32(dir, o + 116), taille: lireU32(dir, o + 120) >>> 0 });
+  }
+  const cible = entrees.filter(e => e.type === 2)
+    .find(e => nomsVoulus.some(n => n.toUpperCase() === e.nom.toUpperCase()));
+  if (!cible) throw new Error('Fichier reconnu comme un classeur ancien, mais sans feuille de calcul à l’intérieur : l’export ne correspond pas au format attendu.');
+
+  if (cible.taille < 4096) {
+    const racine = entrees.find(e => e.type === 5);
+    if (!racine) throw new Error('Classeur ancien incomplet : son répertoire n’a pas de racine.');
+    const mf = assembler(chaine(u32(60), fat), tSec, pos);
+    const miniFat = [];
+    for (let i = 0; i + 4 <= mf.length; i += 4) miniFat.push(lireU32(mf, i) >>> 0);
+    const store = assembler(chaine(racine.debut, fat), tSec, pos);
+    const liste = chaine(cible.debut, miniFat);
+    const out = new Uint8Array(liste.length * tMini);
+    liste.forEach((c, i) => out.set(store.subarray(c * tMini, (c + 1) * tMini), i * tMini));
+    return out.subarray(0, cible.taille);
+  }
+  return assembler(chaine(cible.debut, fat), tSec, pos).subarray(0, cible.taille);
+}
+/* BIFF8 : une suite d'enregistrements « identifiant · longueur · données ».
+   Seuls comptent ceux qui portent une valeur de cellule. Comme pour le .xlsx,
+   DEUX lectures sont conservées : le texte affiché et la valeur NUMÉRIQUE —
+   ici elle est native, le format stocke de vrais nombres binaires, donc aucune
+   ambiguïté de séparateur décimal ne peut s'y glisser. */
+function Fn_LireBiff(flux) {
+  const dv = new DataView(flux.buffer, flux.byteOffset, flux.byteLength);
+  const u8 = o => flux[o], u16 = o => dv.getUint16(o, true), u32 = o => dv.getUint32(o, true);
+  const f64 = o => dv.getFloat64(o, true);
+
+  // Un enregistrement trop long pour tenir sur 64 Ko se poursuit dans des
+  // CONTINUE, qu'on rattache au précédent au lieu de les traiter à part.
+  const recs = [];
+  let o = 0;
+  while (o + 4 <= flux.length) {
+    const id = u16(o), lg = u16(o + 2), deb = o + 4;
+    if (deb + lg > flux.length) break;
+    if (id === 0x003c && recs.length) recs[recs.length - 1].suites.push([deb, lg]);
+    else recs.push({ id: id, deb: deb, lg: lg, suites: [] });
+    o = deb + lg;
+  }
+
+  /* LA TABLE DES CHAÎNES (SST) est le seul endroit vraiment retors du format :
+     un libellé peut être coupé par un CONTINUE, et la moitié qui suit redéclare
+     À ELLE SEULE si elle est écrite sur un ou deux octets par caractère. Lire le
+     SST sans en tenir compte donne des noms tronqués — silencieusement, et donc
+     des lignes qui ne s'apparient plus avec le collage. */
+  const sst = [];
+  let recSst = null;
+  for (let i = 0; i < recs.length; i++) if (recs[i].id === 0x00fc) { recSst = recs[i]; break; }
+  if (recSst) {
+    const blocs = [[recSst.deb, recSst.lg]].concat(recSst.suites);
+    let bi = 0, bo = 8;                        // 8 octets d'en-tête (total, uniques)
+    const fin = () => blocs[bi][0] + blocs[bi][1];
+    const cur = () => blocs[bi][0] + bo;
+    const place = () => { while (bi < blocs.length && cur() >= fin()) { bi++; bo = 0; } return bi < blocs.length; };
+    const sauter = n => { let r = n; while (r > 0 && place()) { const d = Math.min(r, fin() - cur()); bo += d; r -= d; } };
+    const uniques = u32(recSst.deb + 4);
+    for (let k = 0; k < uniques && k < 200000 && place(); k++) {
+      const cch = u16(cur()); bo += 2;
+      const fl = u8(cur()); bo += 1;
+      let cRun = 0, cbExt = 0;
+      if (fl & 8) { cRun = u16(cur()); bo += 2; }
+      if (fl & 4) { cbExt = u32(cur()); bo += 4; }
+      let large = fl & 1, reste = cch, txt = '';
+      while (reste > 0 && place()) {
+        const dispo = Math.floor((fin() - cur()) / (large ? 2 : 1));
+        const n = Math.min(reste, dispo);
+        for (let i = 0; i < n; i++) {
+          txt += large ? String.fromCharCode(u16(cur())) : String.fromCharCode(u8(cur()));
+          bo += large ? 2 : 1;
+        }
+        reste -= n;
+        if (reste > 0) { bi++; bo = 0; if (bi >= blocs.length) break; large = u8(cur()) & 1; bo += 1; }
+      }
+      sauter(4 * cRun); sauter(cbExt);
+      sst.push(txt);
+    }
+  }
+
+  // Chaîne courte écrite en place (LABEL) : longueur sur deux octets, drapeaux
+  // sur un, puis les caractères — même codage que dans la table des chaînes.
+  const chaineEnPlace = p => {
+    const cch = u16(p), fl = u8(p + 2);
+    let t = '', q = p + 3;
+    if (fl & 8) q += 2;
+    if (fl & 4) q += 4;
+    for (let i = 0; i < cch && q < flux.length; i++) {
+      t += (fl & 1) ? String.fromCharCode(u16(q)) : String.fromCharCode(u8(q));
+      q += (fl & 1) ? 2 : 1;
+    }
+    return t;
+  };
+  /* Nombre « RK » : une compression maison du format. Deux drapeaux dans les bits
+     de poids faible — entier plutôt que flottant, et valeur à diviser par cent.
+     Un flottant y est un double amputé de ses 34 bits de poids faible. */
+  const tampon = new DataView(new ArrayBuffer(8));
+  const rk = v => {
+    let n;
+    if (v & 2) n = (v | 0) >> 2;
+    else { tampon.setUint32(0, 0, true); tampon.setUint32(4, v & 0xfffffffc, true); n = tampon.getFloat64(0, true); }
+    return (v & 1) ? n / 100 : n;
+  };
+
+  /* La PREMIÈRE feuille seulement : son décalage dans le flux est donné par
+     BOUNDSHEET. Si le repère manque, on lit tout plutôt que de ne rien rendre —
+     un classeur à une seule feuille reste alors parfaitement lu. */
+  let debutFeuille = -1;
+  for (let i = 0; i < recs.length; i++) if (recs[i].id === 0x0085) { debutFeuille = u32(recs[i].deb); break; }
+  let vuFeuille = false;
+  if (debutFeuille >= 0) for (let i = 0; i < recs.length; i++) if (recs[i].deb - 4 === debutFeuille) { vuFeuille = true; break; }
+  let dedans = !vuFeuille;
+
+  const parRang = {}, numParRang = {};
+  const poser = (r, c, texte, valeur) => {
+    const ref = Fn_ColLettre(c);
+    if (!parRang[r]) { parRang[r] = {}; numParRang[r] = {}; }
+    if (texte !== null && String(texte).trim() !== '') parRang[r][ref] = String(texte).trim();
+    if (valeur !== null && valeur !== undefined && !isNaN(valeur)) numParRang[r][ref] = valeur;
+  };
+  recs.forEach(r => {
+    if (vuFeuille && r.deb - 4 === debutFeuille) dedans = true;
+    if (!dedans) return;
+    const p = r.deb;
+    if (r.id === 0x00fd) { const i = u32(p + 6); poser(u16(p), u16(p + 2), sst[i] === undefined ? '' : sst[i], null); }
+    else if (r.id === 0x0204 || r.id === 0x00d6) poser(u16(p), u16(p + 2), chaineEnPlace(p + 6), null);
+    else if (r.id === 0x0203) { const n = f64(p + 6); poser(u16(p), u16(p + 2), String(n), n); }
+    else if (r.id === 0x027e) { const n = rk(u32(p + 6)); poser(u16(p), u16(p + 2), String(n), n); }
+    else if (r.id === 0x00bd) {
+      const lig = u16(p), c0 = u16(p + 2), nb = Math.floor((r.lg - 6) / 6);
+      for (let i = 0; i < nb; i++) { const n = rk(u32(p + 4 + i * 6 + 2)); poser(lig, c0 + i, String(n), n); }
+    } else if (r.id === 0x0006 && u16(p + 12) !== 0xffff) { const n = f64(p + 6); poser(u16(p), u16(p + 2), String(n), n); }
+  });
+
+  const rangs = Object.keys(parRang).map(Number).sort((a, b) => a - b);
+  const lignes = [], nombres = [];
+  rangs.forEach(r => { if (Object.keys(parRang[r]).length) { lignes.push(parRang[r]); nombres.push(numParRang[r]); } });
+  return { lignes: lignes, nombres: nombres };
+}
 // Lecture du classeur : renvoie les lignes brutes (par lettre de colonne), sans
 // interprétation métier — celle-ci est faite par Fn_RegistreDepuisXlsx.
 async function Fn_LireXlsx(fichier) {
@@ -2174,7 +2372,23 @@ async function Fn_LireXlsx(fichier) {
     l.onerror = () => rej(new Error('lecture du fichier impossible'));
     l.readAsArrayBuffer(fichier);
   }));
-  const entrees = await Fn_ZipExtraire(new Uint8Array(buf), Cst_XlsxEntrees);
+  const octets = new Uint8Array(buf);
+  const socle = { ts: Date.now(), nom: fichier.name || 'export', taille: fichier.size || 0 };
+  /* LE FORMAT EST RECONNU À SA SIGNATURE, JAMAIS À SON EXTENSION. Le courtier
+     nomme « .xls » un fichier qui est parfois un vrai .xlsx, et l'inverse se voit
+     aussi ; se fier au nom aurait fait refuser des fichiers parfaitement lisibles.
+     D0 CF 11 E0 : conteneur OLE2, donc classeur ancien. */
+  if (octets[0] === 0xd0 && octets[1] === 0xcf && octets[2] === 0x11 && octets[3] === 0xe0) {
+    const lu = Fn_LireBiff(Fn_OleFlux(octets, ['Workbook', 'Book']));
+    const lignesLues = lu.lignes;
+  /* Un classeur VIDE se lit sans erreur et ne donne rien : accepté tel quel, il
+     s'afficherait comme chargé, et les contrôles croisés qu'il alimente seraient
+     morts sans que rien ne le dise. Un export sans une seule ligne est donc
+     refusé, avec la marche à suivre. */
+  if (!lignesLues.length) throw new Error('Classeur lu, mais entièrement vide : aucune ligne à en tirer. Refaites l’export depuis l’espace du courtier, portefeuille affiché.');
+    return { lignes: lu.lignes, nombres: lu.nombres, ts: socle.ts, nom: socle.nom, taille: socle.taille };
+  }
+  const entrees = await Fn_ZipExtraire(octets, Cst_XlsxEntrees);
   const feuille = entrees['xl/worksheets/sheet1.xml'];
   if (!feuille) throw new Error('Classeur lu, mais sa première feuille est introuvable : l’export ne correspond pas au format attendu.');
   const partagees = [];
@@ -2221,32 +2435,113 @@ async function Fn_LireXlsx(fichier) {
     }
     if (Object.keys(cellules).length) { lignes.push(cellules); nombres.push(nums); }
   }
-  return { lignes, nombres, ts: Date.now(), nom: fichier.name || 'export', taille: fichier.size || 0 };
+  const lignesLues = lignes;
+  /* Un classeur VIDE se lit sans erreur et ne donne rien : accepté tel quel, il
+     s'afficherait comme chargé, et les contrôles croisés qu'il alimente seraient
+     morts sans que rien ne le dise. Un export sans une seule ligne est donc
+     refusé, avec la marche à suivre. */
+  if (!lignesLues.length) throw new Error('Classeur lu, mais entièrement vide : aucune ligne à en tirer. Refaites l’export depuis l’espace du courtier, portefeuille affiché.');
+  return { lignes, nombres, ts: socle.ts, nom: socle.nom, taille: socle.taille };
 }
-/* Interprétation métier du classeur. Sept colonnes : A produit · B ticker/ISIN ·
-   C quantité · D clôture (VEILLE, inutilisable) · E devise · F montant en devise ·
-   G montant en EUR. Aucune ligne n'est reconnue par son NUMÉRO : la ligne des
-   liquidités est celle qui porte un montant sans produit ni quantité, et une
-   ligne de position est celle qui porte un produit ET une quantité. Un export
-   dont l'ordre changerait resterait donc lisible. */
+/* Nombre écrit par une MACHINE : le point y est la décimale, jamais un
+   séparateur de milliers. Réservé aux cellules du classeur qui portent du texte
+   au lieu d'un nombre — ailleurs, la valeur numérique native fait foi. */
+function Fn_NombreMachine(s) {
+  const t = String(s == null ? '' : s).replace(/[\s\u00a0\u202f]/g, '');
+  if (!/^-?\d+(?:,\d{3})*(?:\.\d+)?$/.test(t)) return null;
+  const v = Number(t.replace(/,/g, ''));
+  return isNaN(v) ? null : v;
+}
+/* LES COLONNES SONT RECONNUES PAR LEUR EN-TÊTE, PAS PAR LEUR LETTRE.
+   Le principe qui interdit de reconnaître une LIGNE par son numéro vaut sur
+   l'autre axe, et pour la même raison : la disposition a déjà changé sous ce
+   lecteur. L'export ancien tient en six colonnes et fusionne la devise avec le
+   montant dans une seule cellule (« USD 5546.73 ») ; l'export actuel en compte
+   sept et les sépare. Lu à la lettre, l'ancien rendait des montants en euros
+   tous vides et une somme nulle — sans rien signaler.
+   Sans en-tête reconnaissable, on retombe sur la convention A…G : un classeur
+   sans ligne de titres reste lisible. */
+function Fn_ColonnesExport(lignes) {
+  const defaut = { nom: 'A', code: 'B', qte: 'C', cloture: 'D', dev: 'E', montDev: 'F', montEur: 'G', enTete: -1 };
+  const norme = s => String(s || '').toLowerCase().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+  for (let i = 0; i < Math.min(5, lignes.length); i++) {
+    const c = lignes[i], cles = Object.keys(c);
+    const vus = cles.map(k => ({ k: k, t: norme(c[k]) }));
+    if (!vus.some(v => /produit|libelle/.test(v.t)) || !vus.some(v => /quantit/.test(v.t))) continue;
+    const m = { nom: null, code: null, qte: null, cloture: null, dev: null, montDev: null, montEur: null, enTete: i };
+    vus.forEach(v => {
+      if (!m.nom && /produit|libelle/.test(v.t)) m.nom = v.k;
+      else if (!m.code && /isin|ticker/.test(v.t)) m.code = v.k;
+      else if (!m.qte && /quantit/.test(v.t)) m.qte = v.k;
+      else if (!m.cloture && /cloture|cours/.test(v.t)) m.cloture = v.k;
+      else if (!m.dev && /devise/.test(v.t)) m.dev = v.k;
+      else if (!m.montEur && /montant/.test(v.t) && /eur/.test(v.t)) m.montEur = v.k;
+      else if (!m.montDev && /montant|valeur/.test(v.t)) m.montDev = v.k;
+    });
+    // Une seule colonne de montant : c'est celle en EUROS.
+    if (!m.montEur && m.montDev) { m.montEur = m.montDev; m.montDev = null; }
+    /* Un en-tête à moitié compris est PIRE que pas d'en-tête : il laisse des
+       colonnes vides sans que rien ne le dise. Sans les rôles indispensables,
+       on retombe donc entièrement sur la convention de place. */
+    if (!m.nom || !m.qte || !m.montEur) return defaut;
+    /* LA COLONNE DU MONTANT EN DEVISE N'A PAS DE TITRE dans l'export du courtier :
+       sa case d'en-tête est vide. La chercher par son libellé la perdait, et avec
+       elle le taux de change, qui s'en déduit — le fichier se lisait alors
+       entièrement sauf ce qui convertit les devises. On la retrouve par sa place :
+       la colonne sans rôle située entre la devise et le montant en euros. */
+    const rang = L => { let v = 0; for (let j = 0; j < L.length; j++) v = v * 26 + (L.charCodeAt(j) - 64); return v; };
+    const entre = (apres, avant) => {
+      if (!apres || !avant) return null;
+      const pris = {};
+      Object.keys(m).forEach(k => { if (k !== 'enTete' && m[k]) pris[m[k]] = 1; });
+      const vues = {};
+      for (let j = i + 1; j < Math.min(i + 6, lignes.length); j++) Object.keys(lignes[j]).forEach(k => { vues[k] = 1; });
+      const libres = Object.keys(vues)
+        .filter(k => !pris[k] && rang(k) > rang(apres) && rang(k) < rang(avant))
+        .sort((x, y) => rang(x) - rang(y));
+      return libres.length ? libres[0] : null;
+    };
+    if (!m.montDev) m.montDev = entre(m.dev, m.montEur);
+    if (!m.cloture) m.cloture = entre(m.qte, m.dev);
+    return m;
+  }
+  return defaut;
+}
+/* Interprétation métier du classeur : produit · ticker/ISIN · quantité ·
+   clôture (VEILLE, inutilisable) · devise · montant en devise · montant en EUR.
+   Aucune ligne n'est reconnue par son NUMÉRO ni aucune colonne par sa LETTRE :
+   la ligne des liquidités est celle qui porte un montant sans quantité ni
+   identifiant, une ligne de position celle qui porte un produit ET une quantité,
+   et les colonnes viennent de l'en-tête. Un export dont l'ordre changerait —
+   c'est déjà arrivé — resterait donc lisible. */
 function Fn_RegistreDepuisXlsx(xlsx) {
   const lignes = [], inconnues = [];
   let liquidites = null;
   const taux = {};
   const nombres = xlsx.nombres || [];
+  const col = Fn_ColonnesExport(xlsx.lignes || []);
   (xlsx.lignes || []).forEach((c, i) => {
+    if (i === col.enTete) return;
     // La valeur NUMÉRIQUE de la cellule fait foi ; le texte n'est relu que si la
     // cellule n'en portait pas (état antérieur, cellule de texte). Voir le
     // commentaire de Fn_LireXlsx : la règle de lecture d'un écran français n'a
     // rien à faire dans un fichier.
     const n = nombres[i] || {};
-    const val = cle => (n[cle] !== undefined ? n[cle] : Fn_NombreFr(c[cle]));
-    const nom = c.A || '', code = c.B || '';
+    const val = cle => (!cle ? null : (n[cle] !== undefined ? n[cle] : Fn_NombreFr(c[cle])));
+    const nom = (col.nom && c[col.nom]) || '', code = (col.code && c[col.code]) || '';
     const estIsin = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/.test(code.toUpperCase());
-    const qte = val('C'), dev = (c.E || '').toUpperCase();
-    const montDev = val('F'), montEur = val('G');
-    // Ligne d'en-tête : la colonne C ne contient pas un nombre.
-    if (i === 0 && qte == null && nom) return;
+    const qte = val(col.qte);
+    /* CELLULE FUSIONNÉE « devise + montant » de l'export ancien : la devise seule
+       est gardée, le montant qui la suit sert de montant en devise — c'est de lui
+       que se déduit le taux de change, qui serait sinon introuvable. */
+    const devBrut = ((col.dev && c[col.dev]) || '').toUpperCase().trim();
+    const fusion = /^([A-Z]{3})\s+(-?[\d.,\s\u00a0]+)$/.exec(devBrut);
+    const dev = fusion ? fusion[1] : devBrut;
+    const montDev = fusion ? Fn_NombreMachine(fusion[2]) : val(col.montDev);
+    const montEur = val(col.montEur);
+    // Ligne d'en-tête non repérée : la colonne de quantité ne porte pas un nombre.
+    if (i === 0 && col.enTete < 0 && qte == null && nom) return;
     if (dev && dev !== 'EUR' && montDev && montEur != null && montDev !== 0) {
       taux[dev] = Math.round(Math.abs(montEur / montDev) * 1e6) / 1e6;
     }
@@ -2264,7 +2559,7 @@ function Fn_RegistreDepuisXlsx(xlsx) {
     if (nom && qte != null) {
       lignes.push({
         nom, nomNorm: Fn_NormNom(nom), code, qte, dev: dev || 'EUR',
-        clotureVeille: val('D'), montantDev: montDev, montantEur: montEur,
+        clotureVeille: val(col.cloture), montantDev: montDev, montantEur: montEur,
         isin: estIsin ? code.toUpperCase() : null
       });
       return;
@@ -4157,12 +4452,12 @@ function Fn_RenderAcquisition() {
   const armeX = rt.armes['xlsx-effacer'];
   h += '<div class="etape etape-cle"><div class="etape-t">B · L’export du courtier</div>'
     + '<div class="zone-tete"><div style="min-width:0">'
-    + '<div class="tres-petit muted">' + Fn_Gloss(Fn_Esc('Le fichier XLSX exporté depuis l’espace du courtier. Il fait foi sur les quantités, les identifiants ISIN et les devises, et le taux de change s’en déduit exactement (montant en euros ÷ montant en devise).')) + '</div>'
+    + '<div class="tres-petit muted">' + Fn_Gloss(Fn_Esc('Le classeur exporté depuis l’espace du courtier, au choix en .xlsx ou en .xls — les deux formats sont lus, et c’est la signature du fichier qui décide, pas son extension. Il fait foi sur les quantités, les identifiants ISIN et les devises, et le taux de change s’en déduit exactement (montant en euros ÷ montant en devise).')) + '</div>'
     + '<div class="tres-petit muted">Sa colonne de clôture porte la VEILLE quelle que soit l’heure d’export : elle n’est jamais utilisée comme cours. Les noms y sont tronqués à 32 caractères — c’est la capture qui fait foi sur le nom.</div></div>'
     + '<div class="zone-etat" style="color:var(' + (x ? '--ok' : '--muted') + ')">'
     + (x ? '✓ ' + Fn_Esc(x.nom) : 'à fournir') + '</div></div>'
     + '<div class="rang-btn"><label class="btn btn-accent">' + (x ? 'Remplacer le fichier' : 'Choisir le fichier')
-    + '<input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" data-action="xlsx" style="display:none"></label>'
+    + '<input type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" data-action="xlsx" style="display:none"></label>'
     + (x ? '<button class="btn btn-danger' + (armeX ? ' arme' : '') + '" data-action="xlsx-effacer">' + (armeX ? 'Confirmer ?' : 'Retirer') + '</button>' : '')
     + '</div>';
   if (rt.xlsxErreur) h += '<div class="note note-crit tres-petit">' + Fn_Esc(rt.xlsxErreur) + '</div>';

@@ -860,9 +860,214 @@ setTimeout(async () => {
       arrayBuffer: () => Promise.resolve(new Uint8Array([37, 80, 68, 70, 45]).buffer) };
     let refus = null;
     try { await vm.runInContext('Fn_LireXlsx(__essaiPdf)', ctx); } catch (e) { refus = String(e.message || e); }
-    verifier('un fichier qui n’est pas une archive est refusé avec un message lisible',
-      !!refus && /signature d’archive/.test(refus), refus || 'aucune erreur levée');
+    verifier('un fichier d’aucun des deux formats est refusé avec un message lisible',
+      !!refus && /ni archive/.test(refus) && /classeur ancien/.test(refus), refus || 'aucune erreur levée');
   } catch (e) { ko('lecture réelle d’un classeur', e.message); }
+
+
+  /* --- L'EXPORT ANCIEN (.xls), lu pour de bon lui aussi ---
+     Le courtier propose deux formats et rien ne dit lequel on a téléchargé. Le
+     .xls n'est pas une archive mais un conteneur OLE2 : deux lecteurs distincts,
+     donc deux jeux d'essai. Le fichier est construit ICI, à l'octet près —
+     conteneur, table d'allocation, répertoire, puis les enregistrements BIFF. */
+  console.log('\nG ter bis. Export ancien — conteneur OLE2 et enregistrements BIFF');
+  try {
+    const enc = new TextEncoder();
+    const p16 = (t, o, v) => { t[o] = v & 255; t[o + 1] = (v >> 8) & 255; };
+    const p32 = (t, o, v) => { t[o] = v & 255; t[o + 1] = (v >> 8) & 255; t[o + 2] = (v >> 16) & 255; t[o + 3] = (v >>> 24) & 255; };
+
+    // --- Un flux BIFF8 : globaux (table des chaînes) puis une feuille ---
+    const faireBiff = (chaines, cellules, remplissage) => {
+      const recs = [];
+      const rec = (id, data) => { const t = new Uint8Array(4 + data.length); p16(t, 0, id); p16(t, 2, data.length); t.set(data, 4); recs.push(t); return t; };
+      const bof = type => { const d = new Uint8Array(16); p16(d, 0, 0x0600); p16(d, 2, type); return d; };
+      rec(0x0809, bof(5));
+      // SST : total, uniques, puis chaque chaîne (longueur, drapeaux, caractères)
+      let corps = [];
+      /* Une chaîne du format s'écrit soit sur UN octet par caractère (Latin-1),
+         soit sur DEUX (UTF-16), et c'est un drapeau qui le dit — pas de l'UTF-8. */
+      chaines.forEach(s => {
+        const large = /[^ -ÿ]/.test(s), o = [];
+        for (let i = 0; i < s.length; i++) {
+          const cc = s.charCodeAt(i);
+          if (large) o.push(cc & 255, (cc >> 8) & 255); else o.push(cc);
+        }
+        corps = corps.concat([s.length & 255, (s.length >> 8) & 255, large ? 1 : 0], o);
+      });
+      const sst = new Uint8Array(8 + corps.length);
+      p32(sst, 0, chaines.length); p32(sst, 4, chaines.length); sst.set(corps, 8);
+      rec(0x00fc, sst);
+      const bs = new Uint8Array(8 + 5);
+      p16(bs, 4, 0); bs[6] = 5; bs[7] = 0; bs.set(Array.from(enc.encode('Sheet')), 8);
+      const recBs = rec(0x0085, bs.subarray(0, 13));
+      rec(0x000a, new Uint8Array(0));
+      const avant = recs.reduce((s, r) => s + r.length, 0);
+      p32(recBs, 4, avant);                       // position de la feuille dans le flux
+      rec(0x0809, bof(0x10));
+      cellules.forEach(c => {
+        if (c.t === 's') { const d = new Uint8Array(10); p16(d, 0, c.r); p16(d, 2, c.c); p32(d, 6, c.v); rec(0x00fd, d); }
+        else if (c.t === 'n') { const d = new Uint8Array(14); p16(d, 0, c.r); p16(d, 2, c.c); new DataView(d.buffer).setFloat64(6, c.v, true); rec(0x0203, d); }
+        else if (c.t === 'rk') { const d = new Uint8Array(10); p16(d, 0, c.r); p16(d, 2, c.c); p32(d, 6, c.v); rec(0x027e, d); }
+      });
+      rec(0x000a, new Uint8Array(0));
+      if (remplissage) rec(0x00ff, new Uint8Array(remplissage));   // bourrage inerte
+      const total = recs.reduce((s, r) => s + r.length, 0);
+      const flux = new Uint8Array(total);
+      let o = 0; recs.forEach(r => { flux.set(r, o); o += r.length; });
+      return flux;
+    };
+
+    /* --- Le conteneur OLE2. Sous 4 096 octets un flux vit dans un « mini-flux »
+       à secteurs de 64 octets, au-dessus dans les secteurs normaux de 512 : les
+       deux chemins existent réellement dans les exports du courtier, donc les
+       deux sont construits et lus. --- */
+    const faireOle = flux => {
+      const S = 512, MS = 64, FIN = 0xfffffffe, LIBRE = 0xffffffff, FATSEC = 0xfffffffd;
+      const mini = flux.length < 4096;
+      const entree = (t, o, nom, type, debut, taille) => {
+        for (let i = 0; i < nom.length; i++) p16(t, o + i * 2, nom.charCodeAt(i));
+        p16(t, o + 64, nom.length * 2 + 2);
+        t[o + 66] = type; t[o + 67] = 1;
+        p32(t, o + 116, debut); p32(t, o + 120, taille);
+      };
+      let secteurs, dirSec, fatSec, miniFatSec = -1, racineDebut = FIN, racineTaille = 0, wbDebut, wbSecteurs;
+      if (mini) {
+        const M = Math.ceil(flux.length / MS), C = Math.ceil(M * MS / S);
+        miniFatSec = C; dirSec = C + 1; fatSec = C + 2;
+        secteurs = C + 3; wbDebut = 0; wbSecteurs = C;
+        racineDebut = 0; racineTaille = M * MS;
+        var Mmini = M;
+      } else {
+        const W = Math.ceil(flux.length / S);
+        dirSec = W; fatSec = W + 1; secteurs = W + 2; wbDebut = 0; wbSecteurs = W;
+      }
+      const out = new Uint8Array(512 + secteurs * S);
+      const sec = i => 512 + i * S;
+      // En-tête
+      out.set([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1], 0);
+      p16(out, 24, 0x003e); p16(out, 26, 0x0003); p16(out, 28, 0xfffe);
+      p16(out, 30, 9); p16(out, 32, 6);                    // 2^9 = 512, 2^6 = 64
+      p32(out, 44, 1); p32(out, 48, dirSec); p32(out, 56, 4096);
+      p32(out, 60, mini ? miniFatSec : FIN); p32(out, 64, mini ? 1 : 0);
+      p32(out, 68, FIN); p32(out, 72, 0);
+      for (let i = 0; i < 109; i++) p32(out, 76 + i * 4, i === 0 ? fatSec : LIBRE);
+      // Contenu du flux, en secteurs normaux ou en mini-secteurs
+      if (mini) out.set(flux, sec(0)); else out.set(flux, sec(0));
+      // Table d'allocation
+      for (let i = 0; i < S / 4; i++) p32(out, sec(fatSec) + i * 4, LIBRE);
+      for (let i = 0; i < wbSecteurs; i++) p32(out, sec(fatSec) + i * 4, i === wbSecteurs - 1 ? FIN : i + 1);
+      p32(out, sec(fatSec) + dirSec * 4, FIN);
+      p32(out, sec(fatSec) + fatSec * 4, FATSEC);
+      if (mini) {
+        p32(out, sec(fatSec) + miniFatSec * 4, FIN);
+        for (let i = 0; i < S / 4; i++) p32(out, sec(miniFatSec) + i * 4, LIBRE);
+        for (let i = 0; i < Mmini; i++) p32(out, sec(miniFatSec) + i * 4, i === Mmini - 1 ? FIN : i + 1);
+      }
+      // Répertoire
+      entree(out, sec(dirSec), 'Root Entry', 5, racineDebut, racineTaille);
+      entree(out, sec(dirSec) + 128, 'Workbook', 2, wbDebut, flux.length);
+      return out;
+    };
+
+    const fichier = (octets, nom) => ({ name: nom, size: octets.length,
+      arrayBuffer: () => Promise.resolve(octets.buffer.slice(octets.byteOffset, octets.byteOffset + octets.byteLength)) });
+
+    /* Sept colonnes, comme l'export courant — et la case d'en-tête du montant en
+       devise VOLONTAIREMENT VIDE, parce qu'elle l'est dans le vrai fichier. */
+    const mots7 = ['Produit', 'Ticker/ISIN', 'Quantité', 'Clôture', 'Devise', 'Montant en EUR',
+      'Œuvre SA', 'XX0000000019', 'EUR', 'Autre Inc', 'XX0000000027', 'USD',
+      'CASH & CASH FUND & FTX CASH (EUR)'];
+    const cel7 = [
+      { t: 's', r: 0, c: 0, v: 0 }, { t: 's', r: 0, c: 1, v: 1 }, { t: 's', r: 0, c: 2, v: 2 },
+      { t: 's', r: 0, c: 3, v: 3 }, { t: 's', r: 0, c: 4, v: 4 }, { t: 's', r: 0, c: 6, v: 5 },
+      { t: 's', r: 1, c: 0, v: 6 }, { t: 's', r: 1, c: 1, v: 7 }, { t: 'n', r: 1, c: 2, v: 23000 },
+      { t: 'n', r: 1, c: 3, v: 0.085 }, { t: 's', r: 1, c: 4, v: 8 },
+      { t: 'n', r: 1, c: 5, v: 1955 }, { t: 'n', r: 1, c: 6, v: 1955 },
+      { t: 's', r: 2, c: 0, v: 9 }, { t: 's', r: 2, c: 1, v: 10 }, { t: 'rk', r: 2, c: 2, v: (5 << 2) | 2 },
+      { t: 'n', r: 2, c: 3, v: 136.63 }, { t: 's', r: 2, c: 4, v: 11 },
+      { t: 'n', r: 2, c: 5, v: 683.15 }, { t: 'n', r: 2, c: 6, v: 578.745 },
+      { t: 's', r: 3, c: 0, v: 12 }, { t: 's', r: 3, c: 4, v: 8 },
+      { t: 'rk', r: 3, c: 5, v: ((-100000 << 2) | 3) >>> 0 }, { t: 'n', r: 3, c: 6, v: -1000 }
+    ];
+    const biff7 = faireBiff(mots7, cel7, 0);
+    ctx.__xlsMini = fichier(faireOle(biff7), 'export-ancien.xls');
+    const lu7 = await vm.runInContext('Fn_LireXlsx(__xlsMini)', ctx);
+    verifier('classeur ancien lu sans bibliothèque : le flux vit dans le MINI-flux (moins de 4 Ko)',
+      biff7.length < 4096 && lu7.lignes.length === 4, biff7.length + ' octets, ' + (lu7 ? lu7.lignes.length : 0) + ' ligne(s)');
+    ctx.__xlsReg = lu7;
+    const reg7 = JSON.parse(JSON.stringify(vm.runInContext('Fn_RegistreDepuisXlsx(__xlsReg)', ctx)));
+    verifier('deux positions et les liquidités, aucune ligne rejetée',
+      reg7.lignes.length === 2 && !!reg7.liquidites && reg7.inconnues.length === 0,
+      reg7.lignes.length + ' position(s), ' + reg7.inconnues.length + ' rejetée(s) : ' + reg7.inconnues.join(' | '));
+    /* Le format ancien stocke de VRAIS nombres binaires : aucune règle de
+       séparateur décimal ne s'y applique, et 0,085 doit rester 0,085. */
+    verifier('les libellés sont décodés dans LES DEUX écritures du format, un et deux octets',
+      reg7.lignes[0].nom === 'Œuvre SA' && reg7.lignes[1].nom === 'Autre Inc',
+      reg7.lignes.map(l => l.nom).join(' | '));
+    verifier('les nombres du classeur ancien sont natifs, jamais relus à la française',
+      reg7.lignes[0].clotureVeille === 0.085 && reg7.lignes[1].montantEur === 578.745,
+      'clôture ' + reg7.lignes[0].clotureVeille + ' · montant ' + reg7.lignes[1].montantEur);
+    // « RK » : la compression maison du format, entier ou centièmes.
+    verifier('un nombre compressé « RK » est décodé, entier comme centièmes',
+      reg7.lignes[1].qte === 5 && reg7.liquidites.montantDev === -1000,
+      'qte ' + reg7.lignes[1].qte + ' · liquidités en devise ' + reg7.liquidites.montantDev);
+    /* La colonne du montant en devise n'a PAS de titre dans l'export du courtier.
+       Cherchée par son libellé elle disparaissait, et le taux de change avec. */
+    verifier('la colonne de montant SANS TITRE est retrouvée par sa place, donc le taux aussi',
+      Math.abs(reg7.taux.USD - Math.round(578.745 / 683.15 * 1e6) / 1e6) < 1e-9, JSON.stringify(reg7.taux));
+
+    // Le même classeur au-dessus de 4 096 octets : secteurs normaux cette fois.
+    const biffGros = faireBiff(mots7, cel7, 4096);
+    ctx.__xlsGros = fichier(faireOle(biffGros), 'export-ancien-gros.xls');
+    const luG = await vm.runInContext('Fn_LireXlsx(__xlsGros)', ctx);
+    verifier('au-dessus de 4 Ko le flux passe en secteurs normaux, et se lit pareil',
+      biffGros.length >= 4096 && luG.lignes.length === 4, biffGros.length + ' octets, ' + luG.lignes.length + ' ligne(s)');
+
+    /* SIX COLONNES — la disposition d'avant, où la devise et le montant tiennent
+       dans UNE SEULE cellule (« USD 683.15 »). Lue à la lettre, elle rendait des
+       montants en euros tous vides et une somme nulle, sans rien signaler. */
+    const mots6 = ['Produit', 'Ticker/ISIN', 'Quantité', 'Clôture', 'Devise', 'Montant en EUR',
+      'Autre Inc', 'XX0000000027', 'USD 683.15', 'CASH & CASH FUND & FTX CASH (EUR)', 'EUR -1000.00'];
+    const cel6 = [
+      { t: 's', r: 0, c: 0, v: 0 }, { t: 's', r: 0, c: 1, v: 1 }, { t: 's', r: 0, c: 2, v: 2 },
+      { t: 's', r: 0, c: 3, v: 3 }, { t: 's', r: 0, c: 4, v: 4 }, { t: 's', r: 0, c: 5, v: 5 },
+      { t: 's', r: 1, c: 0, v: 6 }, { t: 's', r: 1, c: 1, v: 7 }, { t: 'n', r: 1, c: 2, v: 5 },
+      { t: 'n', r: 1, c: 3, v: 136.63 }, { t: 's', r: 1, c: 4, v: 8 }, { t: 'n', r: 1, c: 5, v: 578.745 },
+      { t: 's', r: 2, c: 0, v: 9 }, { t: 's', r: 2, c: 4, v: 10 }, { t: 'n', r: 2, c: 5, v: -1000 }
+    ];
+    ctx.__xls6 = fichier(faireOle(faireBiff(mots6, cel6, 0)), 'export-six-colonnes.xls');
+    const lu6 = await vm.runInContext('Fn_LireXlsx(__xls6)', ctx);
+    ctx.__xls6Reg = lu6;
+    const reg6 = JSON.parse(JSON.stringify(vm.runInContext('Fn_RegistreDepuisXlsx(__xls6Reg)', ctx)));
+    verifier('une disposition à SIX colonnes reste lisible : les colonnes viennent de l’en-tête',
+      reg6.lignes.length === 1 && reg6.lignes[0].montantEur === 578.745 && reg6.inconnues.length === 0,
+      reg6.lignes.length + ' position(s), montant ' + (reg6.lignes[0] || {}).montantEur);
+    verifier('devise et montant FUSIONNÉS dans une cellule sont séparés, et le taux s’en déduit',
+      reg6.lignes[0].dev === 'USD' && reg6.lignes[0].montantDev === 683.15
+      && Math.abs(reg6.taux.USD - Math.round(578.745 / 683.15 * 1e6) / 1e6) < 1e-9,
+      reg6.lignes[0].dev + ' / ' + reg6.lignes[0].montantDev + ' · ' + JSON.stringify(reg6.taux));
+    verifier('la ligne de liquidités de cette disposition est reconnue elle aussi',
+      !!reg6.liquidites && reg6.liquidites.montantEur === -1000 && reg6.liquidites.montantDev === -1000,
+      JSON.stringify(reg6.liquidites));
+
+    /* Un classeur VIDE se lit sans erreur et ne donne rien : accepté, il
+       s'afficherait comme chargé pendant que les contrôles croisés seraient morts. */
+    ctx.__xlsVide = fichier(faireOle(faireBiff(['Produit'], [], 0)), 'vide.xls');
+    let refusVide = null;
+    try { await vm.runInContext('Fn_LireXlsx(__xlsVide)', ctx); } catch (e) { refusVide = String(e.message || e); }
+    verifier('un classeur entièrement vide est REFUSÉ, avec la marche à suivre',
+      !!refusVide && /vide/i.test(refusVide) && /export/i.test(refusVide), refusVide || 'accepté en silence');
+
+    // Un fichier à signature ancienne mais illisible doit le dire, sans casser la page.
+    ctx.__xlsPdf = { name: 'faux.xls', size: 8,
+      arrayBuffer: () => Promise.resolve(new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 1, 2, 3, 4]).buffer) };
+    let refusPdf = null;
+    try { await vm.runInContext('Fn_LireXlsx(__xlsPdf)', ctx); } catch (e) { refusPdf = String(e.message || e); }
+    verifier('un fichier à signature ancienne mais tronqué est refusé lisiblement',
+      !!refusPdf && /classeur/i.test(refusPdf), refusPdf || 'accepté en silence');
+  } catch (e) {
+    verifier('section G ter bis exécutée', false, String((e && e.stack) || e));
+  }
 
   /* --- LE CYCLE DE VIE D'UN ÉVÉNEMENT, et l'économie qu'il porte ---
      Un événement dont les chiffres n'ont pas bougé ne doit JAMAIS repartir au
