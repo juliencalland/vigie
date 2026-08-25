@@ -1187,6 +1187,68 @@ setTimeout(async () => {
     ctx.localStorage.getItem = vraiLs;
   } catch (e) { ko('l’arbitrage de synchronisation', e.message); }
 
+  /* --- UNE CARTE PAR FAIT, PAS UNE PAR LANCEMENT ---
+     Le dédoublonnage comparait l'identifiant ENTRANT d'un contrôle à
+     l'identifiant de STOCKAGE du contrôle rangé — or celui-ci est engendré à
+     l'écriture, donc jamais porté par l'entrant. Tout contrôle sans identifiant
+     métier échappait ainsi à la comparaison, et « Analyser les entrées »
+     empilait un jeu complet de doublons à chaque lancement : invisible à
+     l'écran, qui n'en montre qu'un, mais bien présent dans l'état synchronisé
+     et laissé derrière par un « tout accepter ». */
+  console.log('\nG sexies. Cartes à valider — une carte par fait');
+  try {
+    const J = q => JSON.parse(JSON.stringify(vm.runInContext(q, ctx)));
+    const R = q => vm.runInContext(q, ctx);
+    const poser = (obj, fois) => {
+      R('Var_State.controles = [];');
+      for (let i = 0; i < fois; i++) R('Fn_AjouterControle(' + JSON.stringify(obj) + ');');
+      return J('Var_State.controles.length');
+    };
+    // Le cas qui a mordu : aucun identifiant métier, seulement un payload.
+    const ligne = { kind: 'nouvelle_ligne', payload: { id: 'pos-abc', nom: 'Untel SA' },
+      resume: 'Nouvelle ligne détectée : Untel SA — 60 titres, 1 452 €.' };
+    verifier('trois analyses de suite ne laissent QU’UNE carte « nouvelle ligne »',
+      poser(ligne, 3) === 1, poser(ligne, 3) + ' carte(s) pour un seul fait');
+    // Un contrôle de portefeuille est unique par nature, et ses chiffres bougent.
+    R('Var_State.controles = [];');
+    R('Fn_AjouterControle({ kind: "ecart_valeur_titres", resume: "écart de 8 958 €." });');
+    R('Fn_AjouterControle({ kind: "ecart_valeur_titres", resume: "écart de 9 102 €." });');
+    const uniq = J('Var_State.controles');
+    verifier('un écart de portefeuille reste UNE carte, et ses chiffres sont RAFRAÎCHIS',
+      uniq.length === 1 && /9 102/.test(uniq[0].resume),
+      uniq.length + ' carte(s) · ' + (uniq[0] || {}).resume);
+    // Deux faits distincts restent deux cartes — le repli ne doit pas trop replier.
+    R('Var_State.controles = [];');
+    R('Fn_AjouterControle({ kind: "ecart_quantite", id: "pos-un", resume: "quantité divergente sur Untel SA." });');
+    R('Fn_AjouterControle({ kind: "ecart_quantite", id: "pos-deux", resume: "quantité divergente sur Autre Inc." });');
+    R('Fn_AjouterControle({ kind: "ligne_absente_capture", resume: "Ligne absente de la capture : Untel SA." });');
+    R('Fn_AjouterControle({ kind: "ligne_absente_capture", resume: "Ligne absente de la capture : Autre Inc." });');
+    verifier('deux faits distincts font toujours deux cartes, avec ou sans identifiant métier',
+      J('Var_State.controles.length') === 4, J('Var_State.controles.length') + ' carte(s) pour quatre faits');
+    // Une carte déjà tranchée ne bloque pas la réapparition du même écart.
+    R('Var_State.controles = [];');
+    R('Fn_AjouterControle({ kind: "ecart_liquidites", resume: "écart de -8 999 €." });');
+    R('Var_State.controles[0].statut = "rejete";');
+    R('Fn_AjouterControle({ kind: "ecart_liquidites", resume: "écart de -8 999 €." });');
+    verifier('une carte déjà tranchée n’empêche pas le même écart de revenir',
+      J('Var_State.controles.length') === 2, J('Var_State.controles.length') + ' carte(s)');
+    /* Repli d'un état ANTÉRIEUR : les doublons déjà écrits doivent disparaître au
+       chargement, sinon la correction ne nettoie jamais ce qu'elle a laissé. */
+    R('Var_State.controles = ['
+      + '{ id: "ctl-1", statut: "a_valider", kind: "nouvelle_ligne", payload: { id: "pos-abc" }, resume: "vieille" },'
+      + '{ id: "ctl-2", statut: "a_valider", kind: "nouvelle_ligne", payload: { id: "pos-abc" }, resume: "récente" },'
+      + '{ id: "ctl-3", statut: "a_valider", kind: "ecart_valeur_titres", resume: "8 958 €" },'
+      + '{ id: "ctl-4", statut: "a_valider", kind: "ecart_valeur_titres", resume: "8 958 €" },'
+      + '{ id: "ctl-5", statut: "accepte", kind: "nouvelle_ligne", payload: { id: "pos-abc" }, resume: "tranchée" }];');
+    const replies = J('Fn_FusionnerControlesDoublons()');
+    const apres = J('Var_State.controles');
+    verifier('un état déjà pollué est replié au chargement, la carte la plus FRAÎCHE gagnant',
+      replies === 2 && apres.length === 3 && apres[0].resume === 'récente'
+      && apres.filter(c => c.statut === 'accepte').length === 1,
+      replies + ' repliée(s), reste ' + apres.length + ' : ' + apres.map(c => c.statut + '/' + c.resume).join(' | '));
+    R('Var_State.controles = [];');
+  } catch (e) { ko('l’unicité des cartes à valider', String((e && e.stack) || e)); }
+
   /* --- Le texte envoyé au modèle --- */
   console.log('\nH. Contrat d’appel');
   try {

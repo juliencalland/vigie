@@ -419,7 +419,7 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202608251820';
+const Cst_Version = 'vigie-202608251837';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -964,6 +964,7 @@ async function Fn_Load() {
     if (!Var_State.calendrier.some(e => e.id === ev.id)) Var_State.calendrier.push(JSON.parse(JSON.stringify(ev)));
   });
   Fn_ReparerJournauxOrphelins();
+  Fn_FusionnerControlesDoublons();
   Fn_MajStatutsCalendrier();
   Fn_ElaguerEtat();
   Fn_Recalculer();
@@ -979,6 +980,7 @@ function Fn_AdopterEtat(s) {
   // d'une session morte : il serait affiché comme un appel vivant que rien ne
   // termine. Même règle qu'au chargement — seule une exécution locale fait foi.
   Fn_ReparerJournauxOrphelins();
+  Fn_FusionnerControlesDoublons();
   Fn_MajStatutsCalendrier();
   Fn_Recalculer();
   try { Fn_StorageSet(Fn_SerialiserEtat()); } catch (e) { /* session seulement */ }
@@ -986,6 +988,25 @@ function Fn_AdopterEtat(s) {
 // Un journal « en cours » n'est PAS une preuve qu'un appel tourne : le statut est
 // persisté (et synchronisé), alors que la requête HTTP meurt avec le contexte de
 // la page. Seul _runtime.enCours atteste qu'un appel vit dans CET onglet.
+/* Les états écrits avant la correction de Fn_CleControle portent un jeu complet
+   de cartes en double par analyse lancée. Elles ne s'affichent pas — l'écran
+   n'en montre qu'un exemplaire — mais elles sont bien là, poussées au dépôt à
+   chaque enregistrement, et un « tout accepter » en laisserait derrière. On les
+   replie donc au chargement ET à l'adoption, en gardant la DERNIÈRE de chaque
+   clé : c'est elle qui porte les chiffres les plus frais. */
+function Fn_FusionnerControlesDoublons() {
+  const gardees = [], parCle = {};
+  let replies = 0;
+  (Var_State.controles || []).forEach(c => {
+    if (c.statut !== 'a_valider') { gardees.push(c); return; }
+    const cle = Fn_CleControle(c);
+    if (parCle[cle] === undefined) { parCle[cle] = gardees.length; gardees.push(c); return; }
+    gardees[parCle[cle]] = c;   // la plus récente remplace, l'identifiant suit
+    replies++;
+  });
+  if (replies) Var_State.controles = gardees;
+  return replies;
+}
 function Fn_ReparerJournauxOrphelins() {
   if (Var_State._runtime.enCours) return 0;
   let n = 0;
@@ -3255,11 +3276,38 @@ function Fn_MajProduitLevier(pos, levier, ts) {
       propo: 'Les saisir à la main, ou recoller la ligne complète depuis l’écran du courtier.' });
   }
 }
+/* Contrôles dont il ne peut exister QU'UNE carte en attente : ils portent sur le
+   portefeuille entier, pas sur une ligne. Leurs chiffres bougent d'une analyse à
+   l'autre, donc leur résumé aussi — les distinguer par leur texte en empilerait
+   un par lancement. */
+const Cst_ControlesUniques = ['capture_degradee', 'ecart_ordres', 'ecart_liquidites', 'ecart_valeur_titres'];
+/* IDENTITÉ D'UN CONTRÔLE — ce qu'il dit, jamais où il est rangé.
+   L'identifiant de stockage est engendré À L'ÉCRITURE : un contrôle entrant ne
+   peut pas le porter. L'ancienne clé le comparait pourtant à lui, si bien que la
+   comparaison échouait toujours pour tout contrôle sans identifiant métier —
+   nouvelle ligne, écart de liquidités, écart de valeur des titres. « Analyser
+   les entrées » empilait alors un jeu COMPLET de doublons à chaque lancement,
+   invisible à l'écran (qui n'en montre qu'un) mais bien présent dans l'état
+   synchronisé, et laissé derrière par un « tout accepter ». */
+function Fn_CleControle(c) {
+  if (Cst_ControlesUniques.indexOf(c.kind) >= 0) return c.kind;
+  const metier = (c.payload && c.payload.id)
+    || (c.id && String(c.id).indexOf('ctl-') !== 0 ? c.id : '');
+  return (c.kind || '') + '|' + (metier || String(c.resume || '').slice(0, 80));
+}
 function Fn_AjouterControle(c) {
-  const cle = (c.kind || '') + '|' + (c.id || '') + '|' + String(c.resume || '').slice(0, 60);
-  if (Var_State.controles.some(x => x.statut === 'a_valider'
-    && ((x.kind || '') + '|' + (x.id || '') + '|' + String(x.resume || '').slice(0, 60)) === cle)) return false;
-  Var_State.controles.push(Object.assign({ id: Fn_Uid('ctl'), statut: 'a_valider' }, c));
+  const cle = Fn_CleControle(c);
+  const dejaLa = Var_State.controles.find(x => x.statut === 'a_valider' && Fn_CleControle(x) === cle);
+  /* Une nouvelle analyse RAFRAÎCHIT la carte en attente plutôt que d'en ajouter
+     une seconde : mêmes faits, chiffres à jour. Sauter l'écriture laisserait au
+     contraire la carte afficher des chiffres périmés. L'identifiant de stockage
+     ne bouge pas — un double appui commencé sur cette carte reste valide. */
+  if (dejaLa) {
+    Object.keys(c).forEach(k => { if (k !== 'id' && k !== 'statut') dejaLa[k] = c[k]; });
+    dejaLa.cle = cle;
+    return false;
+  }
+  Var_State.controles.push(Object.assign({ id: Fn_Uid('ctl'), statut: 'a_valider' }, c, { cle: cle }));
   return true;
 }
 
