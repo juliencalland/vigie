@@ -59,10 +59,14 @@ main{padding-top:10px}
 /* Étape d'un panneau. Trois blocs empilés sans séparation se lisaient comme un
    seul mur de texte où le bouton d'action se perdait : chacun porte désormais un
    liseré et son titre, et l'œil retrouve où il en est. */
-.etape{border-left:2px solid var(--line);padding:2px 0 2px 9px;margin:10px 0}
-.etape-t{font-size:12px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
-.etape-cle{border-left-color:var(--accent)}
+.etape{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin:9px 0}
+.etape-t{font-size:12px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.etape-cle{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
 .etape-cle .etape-t{color:var(--accent)}
+/* Le bouton d'une étape vit DANS sa boîte, collé à son paragraphe : c'est la
+   seule disposition où l'œil n'a pas à chercher à quoi l'action se rapporte. */
+.etape .rang-btn{margin-top:8px;margin-bottom:0}
+.etape > :last-child{margin-bottom:0}
 .panneau-tete{display:flex;align-items:center;justify-content:space-between;width:100%;background:none;border:none;color:var(--txt);font:inherit;font-weight:700;font-size:13.5px;padding:2px 0;cursor:pointer;min-height:36px;text-align:left}
 .panneau-tete .chevron{color:var(--muted);font-size:12px;transition:transform .15s}
 .panneau-tete.ouvert .chevron{transform:rotate(90deg)}
@@ -220,6 +224,18 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent);vertical-
 .entree-n{font-weight:600;font-size:12.5px;min-width:0;flex:1 1 9rem}
 .entree-e{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
 .btn-mini{padding:3px 8px;font-size:11px;min-height:0}
+/* Cellules de budget : libellé au-dessus, valeur en dessous. La grille « met »
+   plaçait les deux côte à côte avec une valeur non sécable dans une case de
+   8,5 rem — la valeur débordait et cassait l’alignement de la rangée. */
+.budget-grille{display:grid;grid-template-columns:repeat(auto-fit,minmax(10.5rem,1fr));gap:6px;margin:6px 0}
+.budget-c{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:6px 9px;min-width:0}
+.budget-c .bc-l{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);overflow-wrap:anywhere}
+.budget-c .bc-v{display:block;font-family:var(--mono);font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
+.budget-c .bc-s{display:block;font-size:10.5px;color:var(--muted);overflow-wrap:anywhere}
+/* Astérisque des champs indispensables : couleur ET symbole, jamais la couleur
+   seule — un liseré coloré ne se voit pas sur tous les écrans. */
+.champ-req{color:var(--crit);font-weight:800}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
 .zone-collage{border:1px solid var(--line);border-radius:10px;padding:9px 10px;margin-bottom:8px;background:var(--panel2)}
 .zone-tete{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap}
 .zone-tete .zt-nom{font-weight:700;font-size:13px}
@@ -403,7 +419,7 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202608241822';
+const Cst_Version = 'vigie-202608250547';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -467,8 +483,15 @@ const Cst_VersionEtat = 3;
 const Cst_RecherchesParDecouverte = 4;   // une piste = un fait daté à sourcer, puis à recouper
 const Cst_LecturesParDecouverte = 2;
 const Cst_DecouvertesVisees = 5;         // objectif haut de la fourchette 3–5 du cahier
-const Cst_RecherchesParDebrief = 3;      // un débrief = chiffres publiés vs consensus attendu
-const Cst_LecturesParDebrief = 2;
+/* UN DÉBRIEF SE PAIE EN DEUX TEMPS. Établir ce qui s'est passé — chiffres
+   publiés contre consensus attendu — puis regarder CE QUI A CHANGÉ DEPUIS sur
+   cette ligne. Le second temps n'existait pas : le débrief était borné à
+   l'événement, et une nouvelle survenue entre-temps ne pouvait pas être vue,
+   faute d'enveloppe pour la chercher. C'est pourtant au moment où l'on rouvre un
+   dossier que l'actualité qui l'entoure coûte le moins cher à collecter. */
+const Cst_RecherchesParDebrief = 3;      // établir les faits de l'événement
+const Cst_RecherchesActualiteParDebrief = 2; // ce qui a changé depuis, sur cette ligne
+const Cst_LecturesParDebrief = 3;
 const Cst_RecherchesParLigneLourde = 3;  // passe d'enrichissement : cotation, valorisation, agenda
 const Cst_LecturesParLigneLourde = 2;
 const Cst_RecherchesPlancher = 8;        // couvre le coût fixe (macro) d'un portefeuille minuscule
@@ -477,11 +500,15 @@ const Cst_LecturesPlancher = 6;
 // collecte de cours ni de multiples n'y est autorisée (§ 6 du cahier).
 function Fn_BudgetDesk(nbDebriefs) {
   const d = Math.max(0, Math.round(Fn_Num(nbDebriefs) || 0));
+  const parDebrief = Cst_RecherchesParDebrief + Cst_RecherchesActualiteParDebrief;
   return {
-    recherches: Math.max(Cst_RecherchesPlancher, Cst_DecouvertesVisees * Cst_RecherchesParDecouverte + d * Cst_RecherchesParDebrief),
+    recherches: Math.max(Cst_RecherchesPlancher, Cst_DecouvertesVisees * Cst_RecherchesParDecouverte + d * parDebrief),
     lectures: Math.max(Cst_LecturesPlancher, Cst_DecouvertesVisees * Cst_LecturesParDecouverte + d * Cst_LecturesParDebrief),
     decouvertes: Cst_DecouvertesVisees * Cst_RecherchesParDecouverte,
-    debriefs: d * Cst_RecherchesParDebrief
+    debriefs: d * parDebrief,
+    // Part du budget de débrief explicitement ouverte à l'actualité de la ligne,
+    // et non aux seuls chiffres de l'événement.
+    debriefsActualite: d * Cst_RecherchesActualiteParDebrief
   };
 }
 // Budget de la passe ENRICHISSEMENT : proportionnel au nombre de lignes
@@ -592,16 +619,14 @@ const Cst_StatutsCalendrier = {
   classe: { lib: 'classé sans suite', badge: 'badge-neutre', auModele: false }
 };
 // Les quatre entrées d'acquisition (§ 4.1). L'ordre est celui de la saisie.
+/* LES TROIS SECTIONS D'ÉCRAN d'une capture, dans l'ordre où elles arrivent.
+   Elles ne sont plus des zones de collage : la capture unique les alimente
+   toutes les trois. Cette table sert à les nommer à l'écran, à les parcourir
+   pour le journal des entrées, et à borner ce que le découpeur accepte. */
 const Cst_Entrees = [
-  { cle: 'positions', nom: 'Positions ouvertes', obligatoire: true,
-    quoi: 'la liste des lignes détenues telle qu’elle s’affiche à l’écran, ET le bloc « espace libre » (valeur des titres, liquidités, valeur liquidative, risque, marge disponible).',
-    pourquoi: 'C’est la seule source du cours du jour, du nom complet des produits à levier et des grandeurs de marge.' },
-  { cle: 'ordres', nom: 'Ordres en cours', obligatoire: false,
-    quoi: 'l’écran des ordres en attente.',
-    pourquoi: 'Un ordre en attente réserve de la marge et peut basculer une poche s’il s’exécute.' },
-  { cle: 'executes', nom: 'Derniers ordres exécutés', obligatoire: false,
-    quoi: 'l’écran des dernières transactions.',
-    pourquoi: 'Explique les écarts de quantité entre deux relevés sans avoir à les deviner.' }
+  { cle: 'positions', nom: 'Positions ouvertes et bloc de marge' },
+  { cle: 'ordres', nom: 'Ordres en cours' },
+  { cle: 'executes', nom: 'Derniers ordres exécutés' }
 ];
 // Sources de recherche proposées (onglet Paramètres). Cocher des sites RESTREINT
 // la recherche à ceux-ci ; n'en cocher aucun la laisse libre. `abo` = accès
@@ -735,6 +760,9 @@ function Fn_SerialiserEtat() {
 // dépôt distant et l'écraserait.
 function Fn_Save() {
   try {
+    // Un seuil modifié change les zones du profil sans passer par le recalcul :
+    // le cache tombe ici aussi, sur le seul point d'écriture de l'application.
+    if (typeof Fn_OublierAgregats === 'function') Fn_OublierAgregats();
     Var_State.etatTs = Date.now();
     Fn_StorageSet(Fn_SerialiserEtat());
     Fn_SyncPlanifier();
@@ -794,7 +822,7 @@ function Fn_MigrerEtat(s) {
       detention: {
         nom: p.libelle || p.ticker || '', qte: Fn_Num(p.quantite), dev: p.devise || 'EUR',
         cloture: Fn_Num(p.cours), clotureVeille: Fn_Num(qq.clotPrec), var: Fn_Num(qq.chgPct),
-        valDev: null, valEur: Fn_Num(p.valeurEur), pctVN: Fn_Num(p.pctVN),
+        valDev: null, valEurExport: Fn_Num(p.valeurEur), valEur: null, pctVN: Fn_Num(p.pctVN),
         poche: p.categorie || null, facteurs: Array.isArray(p.facteurs) ? p.facteurs : [],
         liqFaible: !!p.liquiditeFaible, ts, src: p.src || 'état v2'
       },
@@ -905,6 +933,15 @@ function Fn_AppliquerEtat(s) {
     if (!Array.isArray(Var_State[c])) Var_State[c] = [];
   });
   if (!Var_State.theses || typeof Var_State.theses !== 'object') Var_State.theses = {};
+  // Le montant venu de l'export s'écrivait autrefois dans valEur, qui porte
+  // désormais la valeur du JOUR, recalculée depuis le cours du jour. Un état
+  // antérieur voit donc son montant recopié dans son champ propre : sans cela,
+  // une ligne dont le taux de change est encore inconnu perdrait tout son poids
+  // au premier recalcul, et avec lui sa part de valeur nette.
+  Var_State.positions.forEach(p => {
+    const d = p && p.detention;
+    if (d && d.valEurExport === undefined) d.valEurExport = (d.valEur === undefined ? null : d.valEur);
+  });
 }
 async function Fn_Load() {
   // Une seule source d'état local : le stockage de CE navigateur. Le partage entre
@@ -1550,6 +1587,13 @@ function Fn_DateISO(d) {
   return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
 }
 function Fn_AujISO() { return Fn_DateISO(Fn_Auj()); }
+// Deux horodatages tombent-ils le même jour ? Sert à ne pas faire glisser la
+// clôture de référence quand la même séance est analysée deux fois.
+function Fn_MemeJour(a, b) {
+  const x = Fn_Num(a), y = Fn_Num(b);
+  if (x == null || y == null) return false;
+  return Fn_DateISO(new Date(x)) === Fn_DateISO(new Date(y));
+}
 function Fn_JoursDepuis(iso) {
   const d = Fn_ParseDate(iso);
   if (!d) return null;
@@ -1724,7 +1768,8 @@ const Cst_RolesSvap = {
   faits: { cls: 'svap-surv', ico: '▣', lib: 'Ce qui s’est passé' },
   ecart: { cls: 'svap-arb', ico: '≠', lib: 'Écart à l’anticipation' },
   these: { cls: 'svap-prat', ico: '≡', lib: 'Effet sur la thèse' },
-  action: { cls: 'svap-crit', ico: '→', lib: 'Action' }
+  action: { cls: 'svap-crit', ico: '→', lib: 'Action' },
+  suite: { cls: 'svap-surv', ico: '⟳', lib: 'Ce qui a changé depuis' }
 };
 function Fn_HtmlSvap(role, texte, libelleForce) {
   if (!texte) return '';
@@ -1878,11 +1923,11 @@ const Cst_AideOnglets = {
 };
 const Cst_AidePanneaux = {
   acquisition: 'la zone de collage des écrans du courtier et de l’export du jour : c’est l’étage qui alimente tout le reste, et il ne coûte rien.',
-  maj: 'le panneau de mise à jour : ce qui sera demandé au modèle, le budget de recherche, le lancement, le suivi en direct et le bilan.',
+  maj: 'le panneau de mise à jour : ce qui sera demandé au modèle, ce qu’il sait déjà de vos revues, la projection de dépense, le lancement, le suivi en direct et le bilan.',
   journal: 'l’historique des derniers appels : durée, recherches menées, jetons, coût et issue de chacun.',
   formAjout: 'le formulaire d’ajout d’un événement au calendrier, sans passer par un appel au modèle.',
-  regles: 'les règles de gestion que l’application applique à vos données, recalculées à chaque changement.',
-  etageAcquisition: 'l’état de l’étage d’acquisition : horodatage de chaque collage, lignes reconnues et non reconnues, accès au texte brut.',
+  regles: 'l’ordre de réduction décidé à froid, et la provenance datée des chiffres. Les indicateurs à seuil sont dans l’onglet Discipline.',
+  etageAcquisition: 'l’état de l’étage d’acquisition : les taux de change qu’il a déduits de l’export, et la provenance datée de la dernière capture. Le décompte des lignes lues et le texte brut sont sur la carte « Entrées du jour » de l’onglet Vigie.',
   etageEnrichissement: 'la couverture des données par ligne : ce qui vient des captures, ce qui vient de la recherche, et ce qui manque.',
   etageDesk: 'les réglages du jugement : modèle appelé, effort, et budget de recherche réservé aux découvertes.',
   etageCalendrier: 'l’état du calendrier : horizon, règles dérivées actives et nombre d’événements par statut.',
@@ -1894,7 +1939,7 @@ const Cst_AidePanneaux = {
   sitesParam: 'le choix des sites autorisés pour les recherches du modèle.',
   erreursParam: 'la liste des codes d’erreur d’appel, avec leur cause et la conduite à tenir.',
   remiseAZero: 'la remise à zéro complète : ce qui serait effacé, ce qui serait conservé, et la copie de sauvegarde à télécharger avant.',
-  cadreExpo: 'le cadre d’exposition : les chiffres contre lesquels chaque découverte est jugée.'
+  cadreExpo: 'le cadre d’exposition : ce que vos contraintes INTERDISENT à une idée nouvelle. Les valeurs et leurs seuils se lisent dans l’onglet Discipline.'
 };
 const Cst_AideThese = {
   ecrite: { t: 'Thèse écrite', d: 'Vous déclarez avoir formalisé, quelque part, la raison de détenir cette ligne. C’est une déclaration : aucun texte n’est rédigé ni stocké ici. Elle alimente l’indicateur « Fraîcheur des thèses ». Décochable à tout moment.' },
@@ -1906,11 +1951,7 @@ const Cst_AideActions = {
   'capture-saisie': { t: 'Zone de capture manuelle', d: 'Repli quand l’accès au presse-papier est refusé ou indisponible — c’est le cas en fichier local. Le texte est traité exactement comme s’il venait du presse-papier : découpé en sections, horodaté, conservé verbatim. Un texte sans borne de section est refusé ici plutôt que versé au hasard dans une entrée.' },
   'etat-exporter': { t: 'Télécharger une copie de l’état', d: 'Enregistre l’état complet du portefeuille dans un fichier, sur cet appareil. C’est le format que « Restaurer un état » sait relire : c’est la seule marche arrière avant une remise à zéro. Rien n’est envoyé nulle part, rien n’est modifié.' },
   'etat-raz': { t: 'Repartir d’une vigie neuve', d: 'Efface TOUTES les données de portefeuille — lignes, événements, découvertes, arbitrages, thèses, cartes à valider, journaux d’appel, collages du jour — deux appuis pour confirmer. L’état vide est POUSSÉ AU DÉPÔT PRIVÉ : l’effacement vaut pour tous vos appareils, sinon le premier synchronisé restaurerait tout. Sont conservés : la clé API, le jeton de dépôt, les seuils, les tarifs, le modèle, les sites de recherche, et le cumul de dépense. Il n’y a pas d’annulation : téléchargez une copie avant.' },
-  'capture-detacher': { t: 'Coller plutôt écran par écran', d: 'Rend aux trois entrées leur forme complète, avec leur bouton et leur zone de saisie, pour coller un écran à la main. Les textes déjà posés par la capture ne sont PAS effacés : seul l’en-tête de capture est oublié, et vous pouvez remplacer l’écran de votre choix sans refaire les autres.' },
   'capture-effacer': { t: 'Effacer la capture', d: 'Oublie la capture et les trois entrées d’écran qu’elle avait remplies — deux appuis pour confirmer. L’export du courtier n’est pas touché, et les lignes déjà intégrées à l’état restent intactes : seules les sources du jour disparaissent.' },
-  'coller': { t: 'Coller depuis le presse-papier', d: 'Lit le presse-papier et dépose son contenu dans cette zone, horodaté à la seconde. Le texte reste sur cet appareil et n’est jamais synchronisé. Si le navigateur refuse l’accès au presse-papier, collez à la main dans la zone de texte.' },
-  'collage-saisie': { t: 'Zone de collage manuelle', d: 'Repli quand l’accès au presse-papier est refusé ou indisponible — c’est le cas en fichier local. Le texte saisi est traité exactement comme un collage, horodaté et conservé verbatim pour pouvoir diagnostiquer une erreur de lecture.' },
-  'collage-effacer': { t: 'Effacer ce collage', d: 'Retire le texte de cette entrée — deux appuis pour confirmer. Les lignes déjà intégrées à l’état ne sont pas supprimées : seul le texte source disparaît, et l’entrée redevient à fournir.' },
   'collage-voir': { t: 'Voir le texte brut', d: 'Affiche ou masque le texte exactement tel qu’il a été collé. C’est la seule pièce qui permet de comprendre pourquoi une ligne n’a pas été reconnue. Rien n’est modifié.' },
   'xlsx': { t: 'Charger l’export du courtier', d: 'Lit le classeur exporté et en tire les quantités, les identifiants, les devises et le taux de change du jour. Le fichier reste sur cet appareil. Sa colonne de clôture porte la veille : elle n’est jamais utilisée comme cours.' },
   'xlsx-effacer': { t: 'Retirer l’export', d: 'Oublie le classeur chargé — deux appuis pour confirmer. Les contrôles croisés quantité et liquidités ne pourront plus être faits tant qu’un nouvel export n’est pas fourni.' },
@@ -2747,17 +2788,23 @@ function Fn_IntegrerEntrees(an) {
     }
     // Ligne connue : seules les valeurs de marché sont rafraîchies.
     const d = pos.detention;
-    if (p.cloture != null) {
-      if (d.cloture != null && d.cloture !== p.cloture) d.clotureVeille = d.cloture;
-      d.cloture = p.cloture;
-    } else if (p.clotureVeille != null && d.clotureVeille == null) {
-      d.clotureVeille = p.clotureVeille;
-    }
+    /* CLÔTURE DE LA VEILLE. L'export la porte explicitement et fait foi : sa
+       colonne de clôture est celle de la séance précédente, quelle que soit
+       l'heure d'export. Sans lui, on se rabat sur le cours précédemment retenu —
+       mais SEULEMENT s'il datait d'un autre jour. Deux analyses le même jour
+       faisaient sinon glisser la référence sur le cours du matin, et la
+       « variation du jour » devenait une variation depuis le petit-déjeuner. */
+    if (p.clotureVeille != null) d.clotureVeille = p.clotureVeille;
+    else if (p.cloture != null && d.cloture != null && d.cloture !== p.cloture
+      && (d.ts == null || !Fn_MemeJour(d.ts, ts))) d.clotureVeille = d.cloture;
+    if (p.cloture != null) d.cloture = p.cloture;
     if (p.dev) d.dev = p.dev;
     if (p.nom && p.nom.length > String(d.nom || '').length) d.nom = p.nom; // la capture porte le nom complet
     if (p.ticker && !pos.ticker) pos.ticker = p.ticker; // relevé sur l'écran, jamais deviné
     if (p.montantDev != null) d.valDev = p.montantDev;
-    if (p.montantEur != null) d.valEur = p.montantEur;
+    // Le montant de l'export est rangé À PART : il date de la veille. La valeur
+    // du jour est recalculée par Fn_Recalculer depuis le cours du jour.
+    if (p.montantEur != null) d.valEurExport = p.montantEur;
     d.ts = ts;
     if (p.levier) Fn_MajProduitLevier(pos, p.levier, ts);
     majees++;
@@ -2863,40 +2910,64 @@ function Fn_Taux(dev) {
   return t == null ? null : t;
 }
 function Fn_ValeurNette() {
+  const rt = Var_State._runtime;
+  if (rt.memoVN !== undefined) return rt.memoVN;
   const m = Var_State.marge;
-  if (m && Fn_Num(m.vl) != null) return { vn: Fn_Num(m.vl), src: 'valeur liquidative lue sur l’écran de marge [relevé]', approx: false };
-  const pos = Var_State.positions;
-  if (pos.length && pos.every(p => Fn_Num(p.detention.valEur) != null)) {
-    return { vn: pos.reduce((a, p) => a + Fn_Num(p.detention.valEur), 0),
-      src: 'somme des lignes [calcul] — approximation : liquidités et dette non incluses, coller l’écran de marge', approx: true };
+  let r = null;
+  if (m && Fn_Num(m.vl) != null) r = { vn: Fn_Num(m.vl), src: 'valeur liquidative lue sur l’écran de marge [relevé]', approx: false };
+  else {
+    const pos = Var_State.positions;
+    if (pos.length && pos.every(p => Fn_Num(p.detention.valEur) != null)) {
+      r = { vn: pos.reduce((a, p) => a + Fn_Num(p.detention.valEur), 0),
+        src: 'somme des lignes [calcul] — approximation : liquidités et dette non incluses, coller le bloc de marge', approx: true };
+    }
   }
-  return null;
+  rt.memoVN = r;
+  return r;
 }
 // Recalcul complet. Appelé après CHAQUE mutation de données : c'est le seul
 // endroit où ces grandeurs sont produites, et il est idempotent.
 function Fn_Recalculer() {
-  const vnObj = Fn_ValeurNette();
-  const vn = vnObj ? vnObj.vn : null;
+  // Les agrégats mémorisés tombent AVANT tout recalcul : ils dérivent des champs
+  // qui vont changer juste en dessous.
+  Fn_OublierAgregats();
   const s = Var_State.seuils;
+  // DEUX PASSES, et c'est nécessaire. Sans bloc de marge, la valeur nette est la
+  // SOMME des valeurs de ligne : la calculer avant de les avoir recalculées
+  // rapportait chaque poids à la valeur nette de la veille.
   Var_State.positions.forEach(p => {
     const d = p.detention, pr = p.produit || (p.produit = {});
     const taux = Fn_Taux(d.dev);
-    // Valeur en euros : depuis l'export si disponible, sinon quantité × cours × taux.
-    if (d.valEur == null && Fn_Num(d.qte) != null && Fn_Num(d.cloture) != null && taux != null) {
-      d.valEur = Fn_Num(d.qte) * Fn_Num(d.cloture) * taux;
-    }
-    d.pctVN = (vn && Fn_Num(d.valEur) != null && vn !== 0) ? Fn_Num(d.valEur) / vn * 100 : null;
-    d.var = (Fn_Num(d.cloture) != null && Fn_Num(d.clotureVeille) != null && Fn_Num(d.clotureVeille) !== 0)
-      ? (Fn_Num(d.cloture) - Fn_Num(d.clotureVeille)) / Fn_Num(d.clotureVeille) * 100 : null;
+    /* VALEUR EN EUROS — recalculée à CHAQUE fois, jamais reprise de l'export.
+       L'export vaut la VEILLE : le prendre pour la valeur du jour gelait toute
+       l'exposition à la séance précédente, alors que le cours affiché juste à
+       côté, lui, était celui du jour. Le poids d'une ligne, sa part de valeur
+       nette et toute l'exposition par facteur en découlaient d'un jour de retard.
+       Le montant de l'export reste conservé à part (valEurExport) : il sert au
+       contrôle croisé avec l'écran, et de repli quand le cours manque. */
+    const q = Fn_Num(d.qte), c = Fn_Num(d.cloture);
+    d.valEur = (q != null && c != null && taux != null) ? q * c * taux : Fn_Num(d.valEurExport);
+    d.var = (c != null && Fn_Num(d.clotureVeille) != null && Fn_Num(d.clotureVeille) !== 0)
+      ? (c - Fn_Num(d.clotureVeille)) / Fn_Num(d.clotureVeille) * 100 : null;
     // Produit à levier : delta, distance à la barrière et portage.
     if (pr.type === 'derive') {
-      const coursSj = Fn_CoursSousJacent(p);
-      if (Fn_Num(d.qte) != null && Fn_Num(pr.parite) != null && Fn_Num(pr.parite) !== 0 && coursSj != null) {
-        const expo = Fn_Num(d.qte) / Fn_Num(pr.parite) * coursSj * (taux == null ? 1 : taux);
+      const sj = Fn_CoursSousJacent(p);
+      const coursSj = sj ? sj.cours : null;
+      // Le cours du sous-jacent est dans SA devise, pas dans celle du produit :
+      // un turbo coté en euros sur un sous-jacent américain se convertissait au
+      // taux de l'euro, donc pas du tout, et son exposition était fausse du taux
+      // de change entier.
+      const tauxSj = sj ? Fn_Taux(sj.dev) : null;
+      if (q != null && Fn_Num(pr.parite) != null && Fn_Num(pr.parite) !== 0 && coursSj != null && tauxSj != null) {
+        const expo = q / Fn_Num(pr.parite) * coursSj * tauxSj;
         pr.deltaEur = pr.sens === 'short' ? -expo : expo;
+      } else {
+        pr.deltaEur = null;
       }
       if (coursSj != null && Fn_Num(pr.barriere) != null && coursSj !== 0) {
         pr.distBarriere = (pr.sens === 'short' ? (Fn_Num(pr.barriere) - coursSj) : (coursSj - Fn_Num(pr.barriere))) / coursSj * 100;
+      } else {
+        pr.distBarriere = null;
       }
       pr.portageMensuel = Fn_PortageMensuel(p);
     } else {
@@ -2905,14 +2976,37 @@ function Fn_Recalculer() {
     // Niveau de traitement : l'effort suit l'exposition. Il est AFFICHÉ sur la
     // carte — c'est une information, pas une lacune.
     p.desk = p.desk || {};
-    p.desk.niveau = Fn_NiveauTraitement(p, s);
   });
-  // Grandeurs de marge dérivées.
+  // Grandeurs de marge dérivées. Elles précèdent la valeur nette, qui les lit.
   const m = Var_State.marge;
   if (m) {
     m.levier = (Fn_Num(m.vl) && Fn_Num(m.titres) != null) ? Fn_Num(m.titres) / Fn_Num(m.vl) : null;
     m.coussinPct = (Fn_Num(m.vl) && Fn_Num(m.libre) != null) ? Fn_Num(m.libre) / Fn_Num(m.vl) * 100 : null;
   }
+  // SECONDE PASSE : tout ce qui se rapporte à la valeur nette, une fois toutes
+  // les valeurs de ligne à jour. Le niveau de traitement en dépend aussi — il se
+  // décide sur le poids de la ligne.
+  Fn_OublierAgregats();
+  const vnObj = Fn_ValeurNette();
+  const vn = vnObj ? vnObj.vn : null;
+  Var_State.positions.forEach(p => {
+    const d = p.detention;
+    d.pctVN = (vn && Fn_Num(d.valEur) != null && vn !== 0) ? Fn_Num(d.valEur) / vn * 100 : null;
+    p.desk.niveau = Fn_NiveauTraitement(p, s);
+  });
+  Fn_OublierAgregats(); // le profil d'exposition repart des valeurs qu'on vient d'écrire
+}
+/* AGRÉGATS MÉMORISÉS. La valeur nette et le profil d'exposition étaient
+   recalculés à l'identique par le héros, la discipline, les règles, le cadre des
+   découvertes et le contrat du desk — cinq parcours complets du portefeuille pour
+   un seul et même résultat, à chaque re-rendu. Ils sont calculés UNE fois et
+   oubliés au seul endroit qui puisse les changer : le recalcul et l'enregistrement.
+   Le cache vit dans _runtime : il n'est ni persisté, ni synchronisé. */
+function Fn_OublierAgregats() {
+  const rt = Var_State._runtime;
+  rt.memoProfil = null;
+  rt.memoVN = undefined;
+  rt.memoInds = null;
 }
 // Cours du sous-jacent : celui de la ligne détenue qui porte ce sous-jacent, ou
 // à défaut celui d'une position dont le nom correspond. Un produit à levier n'a
@@ -2924,13 +3018,22 @@ function Fn_CoursSousJacent(p) {
   const cible = Fn_NormNom(sj);
   const autre = Var_State.positions.find(x => x !== p && x.produit.type !== 'derive'
     && (Fn_NormNom(x.detention.nom).indexOf(cible) === 0 || String(x.ticker || '').toUpperCase() === sj.toUpperCase()));
-  if (autre && Fn_Num(autre.detention.cloture) != null) return Fn_Num(autre.detention.cloture);
+  // La DEVISE voyage avec le cours : un turbo coté en euros peut porter sur un
+  // sous-jacent coté en dollars, et convertir son exposition au taux du produit
+  // revenait à ne pas la convertir du tout.
+  if (autre && Fn_Num(autre.detention.cloture) != null) {
+    return { cours: Fn_Num(autre.detention.cloture), dev: autre.detention.dev || 'EUR',
+      src: 'ligne détenue « ' + String(autre.detention.nom || '').slice(0, 30) + ' »' };
+  }
   // Repli : le strike du jour et le prix du produit donnent le cours implicite.
+  // Strike et prix sont alors supposés dans la MÊME devise — c'est le cas chez
+  // l'émetteur, qui exprime ses paramètres dans la devise de cotation du produit.
   const pr = p.produit, d = p.detention;
   if (Fn_Num(pr.strike) != null && Fn_Num(pr.parite) != null && Fn_Num(d.cloture) != null) {
-    return pr.sens === 'short'
+    const c = pr.sens === 'short'
       ? Fn_Num(pr.strike) - Fn_Num(pr.parite) * Fn_Num(d.cloture)
       : Fn_Num(pr.strike) + Fn_Num(pr.parite) * Fn_Num(d.cloture);
+    return { cours: c, dev: d.dev || 'EUR', src: 'déduit du strike et du prix du produit [calcul]' };
   }
   return null;
 }
@@ -2943,13 +3046,23 @@ function Fn_CoursSousJacent(p) {
 function Fn_PortageMensuel(p) {
   const h = (p.produit && p.produit.histBarriere) || [];
   if (h.length < 2) return null;
-  const a = h[0], b = h[h.length - 1];
+  const b = h[h.length - 1];
+  // Fenêtre de mesure : la plus RÉCENTE qui couvre au moins une semaine. Prendre
+  // la toute première observation contre la dernière étalait la mesure sur des
+  // mois et mélangeait des régimes de financement ; prendre les deux dernières
+  // rendait le portage sensible au bruit d'une seule journée.
+  let a = h[0];
+  for (let i = h.length - 2; i >= 0; i--) {
+    a = h[i];
+    if ((Fn_ParseDate(b.d) - Fn_ParseDate(h[i].d)) / 86400000 >= 7) break;
+  }
   const va = Fn_Num(a.str) != null ? Fn_Num(a.str) : Fn_Num(a.bar);
   const vb = Fn_Num(b.str) != null ? Fn_Num(b.str) : Fn_Num(b.bar);
   if (va == null || vb == null) return null;
   const jours = Math.round((Fn_ParseDate(b.d) - Fn_ParseDate(a.d)) / 86400000);
   if (!jours) return null;
-  const coursSj = Fn_CoursSousJacent(p);
+  const sj = Fn_CoursSousJacent(p);
+  const coursSj = sj ? sj.cours : null;
   if (coursSj == null || coursSj === 0) return null;
   // Un short paie quand le financement DESCEND vers lui ; un long paie quand il
   // monte. Le signe est ramené à un coût positif.
@@ -2980,6 +3093,8 @@ const Cst_LibNiveau = {
    signée) par ligne, facteur, devise et poche. C'est l'exposition NETTE qui
    compte : une jambe longue et une jambe short du même facteur se compensent. */
 function Fn_ProfilExposition() {
+  const rt = Var_State._runtime;
+  if (rt.memoProfil) return rt.memoProfil;
   const vnObj = Fn_ValeurNette();
   const base = vnObj ? vnObj.vn : null;
   const m = Var_State.marge;
@@ -2999,7 +3114,7 @@ function Fn_ProfilExposition() {
   const pct = v => (base ? Math.round(v / base * 1000) / 10 : null);
   const trier = o => Object.keys(o).sort((a, b) => Math.abs(o[b]) - Math.abs(o[a]))
     .map(k => ({ cle: k, deltaEur: Math.round(o[k]), pctVN: pct(o[k]) }));
-  return {
+  return (rt.memoProfil = {
     valeurNetteEur: base != null ? Math.round(base) : null,
     valeurNetteSrc: vnObj ? vnObj.src : 'valeur nette inconnue (écran de marge non collé) — toute taille en % VN est alors incalculable',
     coussinMargePct: m && m.coussinPct != null ? Math.round(m.coussinPct * 10) / 10 : null,
@@ -3018,7 +3133,7 @@ function Fn_ProfilExposition() {
     expositionBruteParFacteur: trier(brutFacteur),
     expositionParDevise: trier(parDevise),
     expositionParPoche: trier(parPoche)
-  };
+  });
 }
 // Impact d'un gap sur la valeur nette : amplitude × exposition × levier.
 // Calcul, jamais une demande au modèle.
@@ -3305,73 +3420,41 @@ function Fn_GenererSquelette() {
 }
 /* RÈGLES PERMANENTES — recalculées depuis les données réelles. Ce sont des
    lectures continues, distinctes du calendrier qui, lui, est daté. */
+/* RÈGLES PERMANENTES — ce que l'application décide À PARTIR de vos chiffres, et
+   que personne d'autre n'affiche.
+   Ce panneau montrait aussi le coussin, le levier, l'exposition par facteur et
+   par devise, la distance à la barrière de chaque produit et le cycle de vie du
+   calendrier. Tous ont un foyer ailleurs, mieux outillé : la Discipline pour les
+   indicateurs à seuil, la fiche de ligne de l'onglet Cours pour la barrière et le
+   portage d'un produit, l'étage ④ des Paramètres pour le cycle de vie. Les
+   répéter ici obligeait à tenir plusieurs versions du même chiffre d'accord, et
+   c'est exactement ce qu'une revue de code doit supprimer.
+   Ne restent que les DEUX choses qui n'existent nulle part ailleurs : l'ORDRE
+   dans lequel réduire, et la PROVENANCE datée du bloc de marge. */
 function Fn_ReglesPermanentes() {
   const regles = [];
-  const s = Var_State.seuils;
   const m = Var_State.marge;
   const parPoche = Fn_PositionsParPoche();
-  const vnObj = Fn_ValeurNette();
-  let h = '';
-  if (m && m.coussinPct != null) {
-    const zone = Fn_ZoneSeuil(m.coussinPct, s.coussinVert, s.coussinRouge, 'bas');
-    h += '<div><span class="pastille p-' + (zone || 'neutre') + '"></span>Coussin de marge : <b class="mono">' + Fn_Esc(Fn_FmtPct(m.coussinPct, 1)) + '</b> '
-      + '[calcul : marge disponible ' + Fn_Esc(Fn_FmtEur(m.libre)) + ' ÷ valeur liquidative ' + Fn_Esc(Fn_FmtEur(m.vl)) + '] '
-      + '· levier brut <b class="mono">' + Fn_Esc(Fn_FmtX(m.levier)) + '</b> · seuils : vert ≥ ' + s.coussinVert + ' %, rouge &lt; ' + s.coussinRouge + ' %.</div>'
-      + '<div class="tres-petit muted">Écran de marge lu à ' + Fn_Esc(m.as || 'heure non lue sur la capture') + ', collé le ' + Fn_Esc(Fn_FmtHeure(m.ts)) + '.</div>';
-  } else {
-    h += '<div>Coussin et levier : <b>—</b> — donnée manquante : <b>le bloc « espace libre » de l’écran des positions</b> (valeur des titres, liquidités, valeur liquidative, risque, marge disponible). Il fait partie du même collage que les lignes.</div>';
-  }
   const plan = Cst_OrdreReduction.filter(c => (parPoche[c] || []).length);
-  h += plan.length
-    ? '<div class="petit" style="margin-top:4px">Plan de réduction ordonné : ' + plan.map((c, i) => (i + 1) + '. ' + Fn_Esc(c)
-      + ' (' + parPoche[c].map(p => Fn_Esc(String(p.detention.nom || '').slice(0, 18)) + ' ' + Fn_Esc(Fn_FmtEur(p.detention.valEur, 0))).join(', ') + ')').join(' → ') + '.</div>'
-    : '<div class="petit muted">Plan de réduction : établi dès que les lignes porteront une poche (attribuée au prochain jugement de desk).</div>';
-  regles.push({ titre: 'Marge & plan de réduction', html: h });
-  const derives = Var_State.positions.filter(p => p.produit.type === 'derive');
-  let hb = '';
-  if (!derives.length) {
-    hb = '<div class="muted">Aucun produit à levier détenu — cette règle liste, pour chacun, sa distance à la barrière et son portage dès la première analyse des entrées.</div>';
-  } else {
-    hb = derives.map(p => {
-      const pr = p.produit;
-      if (Fn_Num(pr.distBarriere) == null) {
-        return '<div>' + Fn_Esc(String(p.detention.nom).slice(0, 40)) + ' : distance à la barrière <b>—</b> — donnée manquante : '
-          + (pr.barriere == null ? 'barrière (recoller la ligne complète depuis l’écran)' : 'cours du sous-jacent (' + Fn_Esc(pr.sousJacent || 'non identifié') + ')') + '.</div>';
-      }
-      const zone = Fn_ZoneSeuil(pr.distBarriere, s.barriereVert, s.barriereRouge, 'bas');
-      return '<div><span class="pastille p-' + (zone || 'neutre') + '"></span>' + Fn_Esc(String(p.detention.nom).slice(0, 40))
-        + ' (' + Fn_Esc(pr.sens) + ' ' + Fn_Esc(pr.sousJacent || '?') + ') : distance à la barrière <b class="mono">' + Fn_Esc(Fn_FmtPct(pr.distBarriere, 1))
-        + '</b> [calcul] · portage ' + (pr.portageMensuel != null ? '<b class="mono">' + Fn_Esc(Fn_FmtEur(pr.portageMensuel, 0)) + '/mois</b> [calcul sur ' + ((pr.histBarriere || []).length) + ' observations de financement]' : '<b>—</b> (deux observations de barrière datées sont nécessaires : elles s’accumulent à chaque analyse)')
-        + '.</div>';
-    }).join('');
-  }
-  regles.push({ titre: 'Produits à levier — barrière et portage', html: hb });
-  const prof = Fn_ProfilExposition();
-  let hf = '';
-  if (!Var_State.positions.length) {
-    hf = '<div class="muted">Aucune position — l’exposition nette par facteur s’affichera ici. C’est elle qui porte le risque réel : des lignes corrélées constituent UNE exposition, pas plusieurs.</div>';
-  } else {
-    const net = prof.expositionNetteParFacteur.slice(0, 6);
-    hf = net.length
-      ? '<div>Exposition NETTE par facteur [calcul : somme algébrique des deltas, une jambe short compensant une jambe longue du même facteur] : '
-        + net.map(f => {
-          const z = Fn_ZoneSeuil(f.pctVN == null ? null : Math.abs(f.pctVN), s.expoFacteurVert, s.expoFacteurRouge, 'haut');
-          return '<span class="met' + (z === 'crit' || z === 'warn' ? ' z-' + z : '') + '">' + Fn_Esc(f.cle) + ' → <b>' + Fn_Esc(Fn_FmtPct(f.pctVN, 1)) + '</b></span>';
-        }).join(' ') + '</div>'
-      : '<div>Facteurs : <b>—</b> — donnée manquante : facteurs de risque par ligne, attribués au prochain jugement de desk.</div>';
-    const dev = prof.expositionParDevise.filter(d => d.cle !== 'EUR');
-    hf += dev.length
-      ? '<div class="petit" style="margin-top:4px">Devises hors euro : ' + dev.map(d => Fn_Esc(d.cle) + ' <b class="mono">' + Fn_Esc(Fn_FmtPct(d.pctVN, 1)) + '</b>').join(' · ')
-        + (Var_State.fx ? ' · taux déduit de l’export du ' + Fn_Esc(Fn_FmtDateCourt(Fn_DateISO(new Date(Var_State.fx.ts)))) : ' · taux de change inconnu') + '.</div>'
-      : '<div class="petit muted" style="margin-top:4px">Aucune exposition hors euro détectée.</div>';
-  }
-  regles.push({ titre: 'Exposition nette par facteur et par devise', html: hf });
-  const nb = { prevu: 0, imminent: 0, echu: 0, debriefe: 0, classe: 0 };
-  Var_State.calendrier.forEach(e => { nb[e.statut] = (nb[e.statut] || 0) + 1; });
-  regles.push({ titre: 'Cycle de vie du calendrier', html:
-    '<div>' + Object.keys(Cst_StatutsCalendrier).map(k => Fn_Esc(Cst_StatutsCalendrier[k].lib) + ' <b class="mono">' + (nb[k] || 0) + '</b>').join(' · ') + '.</div>'
-    + '<div class="petit muted" style="margin-top:3px">Seuls les événements prévus, imminents et échus sont transmis au modèle. Les débriefés et les classés sont archivés, consultables, et ne repartent jamais — c’est ce qui empêche le calendrier de gonfler indéfiniment et d’être repayé à chaque appel.</div>'
-    + '<div class="petit muted">Horizon d’affichage : ' + Cst_HorizonSemaines + ' semaines. Un événement bascule en « imminent » à J−' + (Fn_Num(Var_State.seuils.horizonImminentJours) || 5) + '.</div>' });
+  let h = plan.length
+    ? '<div>' + plan.map((c, i) => (i + 1) + '. <b>' + Fn_Esc(c) + '</b> ('
+      + parPoche[c].map(p => Fn_Esc(String(p.detention.nom || '').slice(0, 18)) + ' ' + Fn_Esc(Fn_FmtEur(p.detention.valEur, 0))).join(', ') + ')').join(' → ') + '.</div>'
+      + '<div class="tres-petit muted">Décidé à froid, pour n’avoir pas à le décider sous contrainte : si le coussin de marge passe au rouge, c’est dans cet ordre que les lignes s’allègent, en commençant par ce qui coûte le moins cher à la thèse.</div>'
+    : '<div class="muted">Plan de réduction : établi dès que les lignes porteront une poche, attribuée au prochain jugement de desk. Sans poches, aucun ordre de réduction ne peut être décidé à froid.</div>';
+  regles.push({ titre: 'Plan de réduction — l’ordre décidé à froid', html: h });
+  let hp = m
+    ? '<div>Bloc de marge lu à <b class="mono">' + Fn_Esc(m.as || 'heure absente de la capture')
+      + '</b>, intégré le ' + Fn_Esc(Fn_FmtHeure(m.ts)) + '.</div>'
+      + '<div class="tres-petit muted">C’est cette heure, et non celle de l’analyse, qui date la valeur liquidative, le coussin et le levier affichés dans l’onglet Discipline. Un écart de plusieurs heures avec les cours des lignes explique la plupart des incohérences apparentes.</div>'
+    : '<div>Bloc de marge : <b>absent</b>. La valeur nette est alors la somme des lignes — liquidités et dette non incluses — et tout pourcentage de valeur nette est approché.</div>'
+      + '<div class="tres-petit muted">Il n’est à l’écran du courtier que si le bandeau « Aperçu de la marge disponible » a été ouvert avant la capture.</div>';
+  // Les taux de change eux-mêmes vivent à l'étage ① des Paramètres, qui les
+  // déduit : ici, seul leur EXISTENCE compte pour dater les valeurs en euros.
+  hp += Var_State.fx
+    ? '<div class="tres-petit muted">Valeurs en euros converties aux taux déduits de l’export du '
+      + Fn_Esc(Fn_FmtDateCourt(Fn_DateISO(new Date(Var_State.fx.ts)))) + ' (Paramètres → ① Acquisition).</div>'
+    : '<div class="tres-petit muted">Aucun taux de change déduit : toute ligne en devise étrangère reste sans valeur en euros tant que l’export n’est pas joint.</div>';
+  regles.push({ titre: 'Provenance et datation des chiffres', html: hp });
   return regles;
 }
 
@@ -3408,6 +3491,10 @@ function Fn_AppliquerCouverture(couv, zone, manquant, quoiManque) {
   };
 }
 function Fn_IndicateursDiscipline() {
+  // Mémorisé comme le profil : le héros, la discipline et le score les demandent
+  // tous les trois, et le calcul parcourt le portefeuille entier.
+  const rt = Var_State._runtime;
+  if (rt.memoInds) return rt.memoInds;
   const s = Var_State.seuils;
   const m = Var_State.marge;
   const vnObj = Fn_ValeurNette();
@@ -3748,7 +3835,7 @@ function Fn_IndicateursDiscipline() {
       seuils: 'vert ≥ ' + s.barriereVert + ' % · rouge < ' + s.barriereRouge + ' % (échelle 0–50 %)',
       pratique: 'La barrière se touche EN SÉANCE, même brièvement : la distance se juge sur le plus bas intraséance plausible, jamais sur la clôture.' });
   })();
-  return inds;
+  return (rt.memoInds = inds);
 }
 function Fn_ScoreDiscipline(inds) {
   const parBloc = {};
@@ -3837,7 +3924,6 @@ function Fn_RenderHero() {
   const ev = Fn_ProchaineEcheance();
   const nAV = Fn_NbAValider();
   const prof = Fn_ProfilExposition();
-  const s = Var_State.seuils;
   const g = (lib, val, zone) => '<div class="hero-g"><span class="hg-lib">' + Fn_Esc(lib) + '</span>'
     + '<span class="hg-val"' + (zone ? ' style="color:var(--' + zone + ')"' : '') + '>' + Fn_Esc(val) + '</span></div>';
   let h = '<div class="hero">';
@@ -3851,17 +3937,31 @@ function Fn_RenderHero() {
       + '<div class="hero-titre">Aucune échéance suivie</div>'
       + '<div class="petit muted">Collez l’écran des positions (avec le bloc « espace libre »), l’écran des ordres, et joignez l’export du courtier. L’analyse des entrées est gratuite : classement, calculs et squelette du calendrier se font sans le moindre appel au modèle.</div>';
   }
+  /* UNE SEULE grandeur ici, et c'est la base de toutes les autres : la valeur
+     nette. Le coussin de marge, le levier brut et le nombre de lignes vivaient
+     aussi sur ce bandeau — mais chacun a son foyer ailleurs, avec son seuil, sa
+     zone, sa donnée manquante et sa règle professionnelle : la Discipline pour
+     les deux premiers, l'onglet Cours pour le décompte des lignes. Les répéter
+     ici donnait trois versions du même chiffre à tenir d'accord.
+     Ce qui reste du risque sur ce bandeau, c'est le RENVOI : combien
+     d'indicateurs sont dégradés, et où aller les lire. */
   h += '<div class="hero-grandeurs">'
     + g('valeur nette', prof.valeurNetteEur != null ? Fn_FmtEur(prof.valeurNetteEur, 0) : '—')
-    + g('coussin de marge', Fn_FmtPct(prof.coussinMargePct, 1),
-      Fn_ZoneSeuil(prof.coussinMargePct, s.coussinVert, s.coussinRouge, 'bas'))
-    + g('levier brut', Fn_FmtX(prof.levierBrut), Fn_ZoneSeuil(prof.levierBrut, s.levierVert, s.levierRouge, 'haut'))
-    + g('lignes suivies', String(Var_State.positions.length))
-    + '</div>';
+    + '</div>'
+    + '<div class="tres-petit muted">' + Fn_Gloss(Fn_Esc(prof.valeurNetteSrc)) + '.</div>';
+  const inds = Fn_IndicateursDiscipline();
+  const rouges = inds.filter(i => i.zone === 'crit').length;
+  const ambres = inds.filter(i => i.zone === 'warn').length;
+  if (rouges || ambres) {
+    h += '<div class="note ' + (rouges ? 'note-crit' : 'note-warn') + ' tres-petit" style="margin:8px 0 0">'
+      + (rouges ? '<b>' + rouges + ' indicateur(s) en rouge</b>' : '')
+      + (rouges && ambres ? ' · ' : '') + (ambres ? ambres + ' en ambre' : '')
+      + ' — <b>' + Fn_Esc(inds.filter(i => i.zone === 'crit').concat(inds.filter(i => i.zone === 'warn'))[0].nom) + '</b> en tête. '
+      + 'Valeurs, seuils et conduite à tenir : onglet Discipline.</div>';
+  }
   h += '<div class="rang-btn">'
-    + '<button class="btn btn-accent" data-action="toggle" data-id="acquisition">Entrées du jour</button>'
-    + '<button class="btn" data-action="toggle" data-id="maj">Mise à jour</button>'
     + (nAV ? '<button class="btn btn-ok" data-action="aller-avalider">' + nAV + ' à valider</button>' : '')
+    + ((rouges || ambres) ? '<button class="btn" data-action="onglet" data-id="discipline">Voir la discipline</button>' : '')
     + '</div></div>';
   el.innerHTML = h;
 }
@@ -3876,107 +3976,82 @@ function Fn_RenderHero() {
    été COMPRIS : c'est le seul endroit où l'écart entre les deux se voit avant
    l'analyse. Les trois zones écran par écran restent en dessous — un collage à
    l'ancienne reste valide, et c'est le repli quand la capture échoue. */
+/* LA CAPTURE UNIQUE — le seul chemin d'entrée des trois écrans du courtier.
+   Elle affiche ce que l'écran ANNONÇAIT (ordres ouverts, historique vide, nœuds
+   lus) en regard de ce qui a été COMPRIS : c'est le seul endroit où l'écart
+   entre les deux se voit avant l'analyse.
+   Le repli « écran par écran » a été retiré : trois zones de collage
+   supplémentaires, avec chacune son bouton et sa zone de texte, laissaient croire
+   qu'il fallait coller quatre fois. Le repli qui compte — celui du presse-papier
+   refusé, ou du fichier local — reste la zone de saisie manuelle ci-dessous, qui
+   accepte le même document. Le texte brut de chaque section reste consultable :
+   c'est la seule pièce qui permette de diagnostiquer une lecture fautive. */
 function Fn_HtmlZoneCapture() {
   const rt = Var_State._runtime;
   const c = rt.capture;
   const m = (c && c.meta) || {};
   const arme = rt.armes['capture'];
   const heure = m.capture ? String(m.capture).slice(11, 19) : (c ? Fn_HeureSeule(c.ts) : null);
-  let h = '<div class="zone-collage"><div class="zone-tete"><div style="min-width:0">'
-    + '<div class="zt-nom">Capture unique <span class="badge badge-crit">recommandé</span></div>'
-    + '<div class="tres-petit muted">' + Fn_Gloss(Fn_Esc('Un seul collage alimente les trois écrans : positions, ordres en cours et derniers ordres exécutés. Le document porte ses propres bornes de section, il n’y a rien à découper à la main.')) + '</div>'
-    + '<div class="tres-petit muted">Une capture remplace les entrées du jour : une section vide efface l’entrée correspondante, pour qu’un ordre annulé ne survive pas au relevé suivant.</div></div>'
+  let h = '<div class="zone-tete"><div style="min-width:0">'
+    + '<div class="tres-petit muted">' + Fn_Gloss(Fn_Esc('Un seul collage alimente les trois écrans : positions ouvertes, ordres en cours et derniers ordres exécutés. Le document porte ses propres bornes de section, il n’y a rien à découper à la main.')) + '</div>'
+    + '<div class="tres-petit muted">Une capture REMPLACE les entrées du jour : une section vide efface l’entrée correspondante, pour qu’un ordre annulé ne survive pas au relevé suivant.</div></div>'
     + '<div class="zone-etat" style="color:var(' + (c ? '--ok' : '--muted') + ')">'
     + (c ? '✓ capturé ' + Fn_Esc(Fn_FmtHeure(c.ts)) : 'à fournir') + '</div></div>';
-  if (c) {
-    const ligne = [];
-    if (heure) ligne.push('lecture à ' + Fn_Esc(heure));
-    if (m.maj_degiro) ligne.push('courtier à jour à ' + Fn_Esc(m.maj_degiro));
-    if (m.duree_s) ligne.push(Fn_Esc(m.duree_s) + ' s de lecture');
-    if (m.version) ligne.push('format v' + Fn_Esc(m.version));
-    h += '<div class="tres-petit" style="margin-top:4px">'
-      + '<span class="badge ' + (m.statut && !/^ok$/i.test(m.statut) ? 'badge-warn' : 'badge-ok') + '">'
-      + Fn_Esc(m.statut || 'lu') + '</span> ' + ligne.join(' · ') + '</div>';
-    const s = c.sections || {};
-    const dit = [];
-    if (m.ordres_ouverts != null) dit.push(Fn_Esc(m.ordres_ouverts) + ' ordre(s) en attente annoncé(s)');
-    if (/aucune\s+transaction/i.test(String(m.historique || ''))) dit.push('aucune transaction sur la période');
-    else if (m.ordres_executes != null) dit.push(Fn_Esc(m.ordres_executes) + ' transaction(s) annoncée(s)');
-    if (m.noeuds_positions != null) dit.push(Fn_Esc(m.noeuds_positions) + ' nœuds lus sur l’écran des positions');
-    h += '<div class="tres-petit muted" style="margin-top:3px">Ce que l’écran annonçait : ' + (dit.length ? dit.join(' · ') : '—') + '.</div>'
-      + '<div class="tres-petit muted">Sections reçues : '
-      + ['positions', 'ordres', 'executes'].map(k => k + (s[k] ? '' : ' (vide)')).join(' · ') + '.</div>';
-    // Gage et facilité de crédit sont LUS mais jamais consommés : aucun calcul de
-    // l'application ne s'appuie dessus. Ils sont montrés parce qu'ils sont sur
-    // l'écran du courtier, pas parce qu'ils entrent quelque part.
-    if (m.valeur_gage || m.facilite_credit) {
-      h += '<div class="tres-petit muted">Relevé sans emploi dans les calculs : valeur de gage ' + Fn_Esc(m.valeur_gage || '—')
-        + ' · facilité de crédit ' + Fn_Esc(m.facilite_credit || '—') + '.</div>';
-    }
-  }
   h += '<div class="rang-btn">'
     + '<button class="btn btn-accent" data-action="capture-coller">Coller la capture</button>'
     + (c ? '<button class="btn btn-danger' + (arme ? ' arme' : '') + '" data-action="capture-effacer">' + (arme ? 'Confirmer ?' : 'Effacer') + '</button>' : '')
     + '</div>'
     + '<textarea data-action="capture-saisie" placeholder="…ou collez la capture ici à la main (Ctrl+V / appui long puis Coller)"></textarea>';
   if (rt.collageErreur) h += '<div class="note note-crit tres-petit">' + Fn_Esc(rt.collageErreur) + '</div>';
-  return h + '</div>';
-}
-/* UNE DES TROIS ENTRÉES D'ÉCRAN, en deux formes.
-   COMPACTE dès qu'une capture les a remplies : une ligne d'état par écran, et
-   rien d'autre. Cinq zones de collage ouvertes, chacune avec son bouton et sa
-   grande zone de texte, laissaient croire qu'il fallait coller cinq fois alors
-   qu'un seul geste suffit désormais.
-   COMPLÈTE sinon : c'est le repli écran par écran, et il doit rester évident. */
-function Fn_HtmlZoneCollage(entree, compact) {
-  const rt = Var_State._runtime;
-  const c = rt.collages[entree.cle];
-  const cap = Var_State.captures.find(x => x.type === entree.cle);
-  const arme = rt.armes['collage-' + entree.cle];
-  const ouvert = rt['voir-' + entree.cle];
-  if (compact) {
-    let x = '<div class="entree-l"><span class="entree-n">' + Fn_Esc(entree.nom) + '</span>'
-      + '<span class="entree-e">' + (c
-        ? '<span class="badge badge-ok">rempli par la capture</span>'
-          + (cap ? ' <span class="tres-petit mono">' + cap.lignesOk + ' ligne(s)</span>' : '')
-          + (cap && cap.lignesKo ? ' <span class="badge badge-warn">' + cap.lignesKo + ' non reconnue(s)</span>' : '')
-        : '<span class="badge badge-neutre">section vide</span>') + '</span>'
-      + (c ? '<button class="btn btn-mini" data-action="collage-voir" data-id="' + entree.cle + '">' + (ouvert ? 'Masquer' : 'Voir') + ' le brut</button>' : '')
+  if (!c) return h;
+  const ligne = [];
+  if (heure) ligne.push('lecture à ' + Fn_Esc(heure));
+  if (m.maj_degiro) ligne.push('courtier à jour à ' + Fn_Esc(m.maj_degiro));
+  if (m.duree_s) ligne.push(Fn_Esc(m.duree_s) + ' s de lecture');
+  if (m.version) ligne.push('format v' + Fn_Esc(m.version));
+  h += '<div class="tres-petit" style="margin-top:8px">'
+    + '<span class="badge ' + (m.statut && !/^ok$/i.test(m.statut) ? 'badge-warn' : 'badge-ok') + '">'
+    + Fn_Esc(m.statut || 'lu') + '</span> ' + ligne.join(' · ') + '</div>';
+  const dit = [];
+  if (m.ordres_ouverts != null) dit.push(Fn_Esc(m.ordres_ouverts) + ' ordre(s) en attente annoncé(s)');
+  if (/aucune\s+transaction/i.test(String(m.historique || ''))) dit.push('aucune transaction sur la période');
+  else if (m.ordres_executes != null) dit.push(Fn_Esc(m.ordres_executes) + ' transaction(s) annoncée(s)');
+  if (m.noeuds_positions != null) dit.push(Fn_Esc(m.noeuds_positions) + ' nœuds lus sur l’écran des positions');
+  if (dit.length) h += '<div class="tres-petit muted">Ce que l’écran annonçait : ' + dit.join(' · ') + '.</div>';
+  // Gage et facilité de crédit sont LUS mais jamais consommés : aucun calcul ne
+  // s'appuie dessus. Ils sont montrés parce qu'ils sont sur l'écran du courtier.
+  if (m.valeur_gage || m.facilite_credit) {
+    h += '<div class="tres-petit muted">Relevé sans emploi dans les calculs : valeur de gage ' + Fn_Esc(m.valeur_gage || '—')
+      + ' · facilité de crédit ' + Fn_Esc(m.facilite_credit || '—') + '.</div>';
+  }
+  // Ce que chaque section a donné : une ligne par écran, jamais une zone de plus.
+  const sec = c.sections || {};
+  h += '<div style="margin-top:6px">' + Cst_Entrees.map(e => {
+    const doc = rt.collages[e.cle];
+    const cap = Var_State.captures.find(x => x.type === e.cle);
+    const ouvert = rt['voir-' + e.cle];
+    let x = '<div class="entree-l"><span class="entree-n">' + Fn_Esc(e.nom) + '</span>'
+      + '<span class="entree-e">' + (doc
+        ? (cap
+          ? '<span class="badge badge-ok">' + cap.lignesOk + ' ligne(s) lue(s)</span>'
+            + (cap.lignesKo ? ' <span class="badge badge-warn">' + cap.lignesKo + ' non reconnue(s)</span>' : '')
+          : '<span class="badge badge-neutre">reçue, pas encore analysée</span>')
+        : '<span class="badge badge-neutre">' + (sec[e.cle] === 0 ? 'section vide' : 'absente') + '</span>') + '</span>'
+      + (doc ? '<button class="btn btn-mini" data-action="collage-voir" data-id="' + e.cle + '">' + (ouvert ? 'Masquer' : 'Voir') + ' le brut</button>' : '')
       + '</div>';
     if (cap && cap.lignesKo && cap.inconnues && cap.inconnues.length) {
       x += '<div class="tres-petit muted" style="padding:0 0 4px">Non reconnues : '
         + cap.inconnues.map(l => '« ' + Fn_Esc(String(l).slice(0, 60)) + ' »').join(' · ') + '</div>';
     }
-    if (ouvert && c) x += '<div class="src mono" style="max-height:220px;overflow:auto">' + Fn_Esc(c.texte) + '</div>';
+    if (ouvert && doc) x += '<div class="src mono" style="max-height:220px;overflow:auto">' + Fn_Esc(doc.texte) + '</div>';
     return x;
-  }
-  let h = '<div class="zone-collage"><div class="zone-tete"><div style="min-width:0">'
-    + '<div class="zt-nom">' + Fn_Esc(entree.nom) + ' '
-    + (entree.obligatoire ? '<span class="badge badge-crit">indispensable</span>' : '<span class="badge badge-neutre">recommandé</span>') + '</div>'
-    + '<div class="tres-petit muted">À coller : ' + Fn_Gloss(Fn_Esc(entree.quoi)) + '</div>'
-    + '<div class="tres-petit muted">' + Fn_Gloss(Fn_Esc(entree.pourquoi)) + '</div></div>'
-    + '<div class="zone-etat" style="color:var(' + (c ? '--ok' : '--muted') + ')">'
-    + (c ? '✓ collé ' + Fn_Esc(Fn_FmtHeure(c.ts)) + ' à ' + Fn_Esc(Fn_HeureSeule(c.ts)) : 'à fournir') + '</div></div>';
-  if (cap) {
-    h += '<div class="tres-petit" style="margin-top:4px">'
-      + '<span class="badge badge-ok">' + cap.lignesOk + ' ligne(s) reconnue(s)</span> '
-      + (cap.lignesKo ? '<span class="badge badge-warn">' + cap.lignesKo + ' non reconnue(s)</span>' : '')
-      + '</div>';
-    if (cap.lignesKo && cap.inconnues && cap.inconnues.length) {
-      h += '<div class="tres-petit muted" style="margin-top:3px">Non reconnues : '
-        + cap.inconnues.map(l => '« ' + Fn_Esc(String(l).slice(0, 60)) + ' »').join(' · ') + '</div>';
-    }
-  }
-  h += '<div class="rang-btn">'
-    + '<button class="btn btn-accent" data-action="coller" data-id="' + entree.cle + '">Coller</button>'
-    + (c ? '<button class="btn" data-action="collage-voir" data-id="' + entree.cle + '">' + (ouvert ? 'Masquer' : 'Voir') + ' le texte brut</button>' : '')
-    + (c ? '<button class="btn btn-danger' + (arme ? ' arme' : '') + '" data-action="collage-effacer" data-id="' + entree.cle + '">' + (arme ? 'Confirmer ?' : 'Effacer') + '</button>' : '')
-    + '</div>'
-    // Repli manuel toujours présent : l'accès au presse-papier exige HTTPS et une
-    // autorisation, et n'existe pas du tout en fichier local.
-    + '<textarea data-action="collage-saisie" data-id="' + entree.cle + '" placeholder="…ou collez ici à la main (Ctrl+V / appui long puis Coller)"></textarea>';
-  if (ouvert && c) h += '<div class="src mono" style="max-height:220px;overflow:auto">' + Fn_Esc(c.texte) + '</div>';
-  return h + '</div>';
+  }).join('') + '</div>';
+  h += '<div class="tres-petit" style="padding:6px 0 0"><label><input type="checkbox" data-action="maj-notrans"'
+    + (rt.aucuneTransac ? ' checked' : '') + '> aucune transaction récente</label>'
+    + (rt.aucuneTransac && /aucune\s+transaction/i.test(String(m.historique || ''))
+      ? ' <span class="tres-petit muted">— cochée par la capture, l’écran l’annonçait</span>' : '')
+    + '</div>';
+  return h;
 }
 function Fn_RenderAcquisition() {
   const el = document.getElementById('v-acquisition');
@@ -3986,72 +4061,49 @@ function Fn_RenderAcquisition() {
   let h = '<div class="carte"><button class="panneau-tete' + (ouvert ? ' ouvert' : '') + '" data-action="toggle" data-id="acquisition">'
     + '<span>① Entrées du jour — gratuit, aucun appel au modèle</span><span class="chevron">▶</span></button>';
   if (!ouvert) {
-    const n = Cst_Entrees.filter(e => rt.collages[e.cle]).length + (rt.xlsx ? 1 : 0);
-    h += '<div class="tres-petit muted maj-resume">' + (rt.capture ? 'capture reçue · ' : '') + n + ' entrée(s) sur 4 fournie(s)'
-      + (Var_State.captures.length ? ' · dernière analyse : ' + Fn_Esc(Fn_FmtHeure(Math.max.apply(null, Var_State.captures.map(c => c.ts)))) : ' · jamais analysées') + '.</div>';
+    // La DATE de dernière analyse est portée par l'en-tête de page, visible sur
+    // tous les onglets : ce résumé ne dit que ce qui reste À FOURNIR.
+    h += '<div class="tres-petit muted maj-resume">'
+      + (rt.capture ? 'capture reçue' : '<b>capture à fournir</b>') + ' · '
+      + (rt.xlsx ? 'export chargé' : '<b>export à fournir</b>') + '.</div>';
     return void (el.innerHTML = h + '</div>');
   }
-  h += '<div class="tres-petit muted">Tout arrive en texte : aucune image n’est analysée, aucun identifiant de courtier n’est demandé, stocké ni transmis. Les textes restent sur cet appareil et ne sont jamais synchronisés.</div>';
-  // Le panneau se lit en trois temps : deux choses à fournir, puis analyser.
-  // Empilées à plat, les cinq zones de collage laissaient croire qu'il fallait
-  // coller cinq fois — alors qu'un seul geste remplit les trois premières.
-  h += '<div class="etape etape-cle"><div class="etape-t">A · La capture — le geste normal</div>'
+  /* Deux choses à fournir, puis analyser. Chaque étape est une BOÎTE qui porte
+     son titre, son explication ET son bouton : le bouton d'une action doit se
+     lire dans le même cadre que le paragraphe qui la décrit, sinon l'œil doit
+     faire l'aller-retour pour savoir à quoi il touche. */
+  h += '<div class="etape etape-cle"><div class="etape-t">A · La capture des trois écrans</div>'
     + Fn_HtmlZoneCapture() + '</div>';
-  // Quatrième entrée : l'export, seul à faire foi sur quantités et identifiants.
   const x = rt.xlsx;
   const armeX = rt.armes['xlsx-effacer'];
-  h += '<div class="etape etape-cle"><div class="etape-t">B · L’export du courtier — le fichier</div>'
-    + '<div class="zone-collage"><div class="zone-tete"><div style="min-width:0">'
-    + '<div class="zt-nom">Export du courtier <span class="badge badge-crit">indispensable</span></div>'
+  h += '<div class="etape etape-cle"><div class="etape-t">B · L’export du courtier</div>'
+    + '<div class="zone-tete"><div style="min-width:0">'
     + '<div class="tres-petit muted">' + Fn_Gloss(Fn_Esc('Le fichier XLSX exporté depuis l’espace du courtier. Il fait foi sur les quantités, les identifiants ISIN et les devises, et le taux de change s’en déduit exactement (montant en euros ÷ montant en devise).')) + '</div>'
-    + '<div class="tres-petit muted">Sa colonne de clôture porte la VEILLE quelle que soit l’heure d’export : elle n’est jamais utilisée comme cours. Les noms y sont tronqués à 32 caractères, donc les paramètres des produits à levier y sont perdus — c’est le collage de l’écran qui fait foi sur le nom.</div></div>'
+    + '<div class="tres-petit muted">Sa colonne de clôture porte la VEILLE quelle que soit l’heure d’export : elle n’est jamais utilisée comme cours. Les noms y sont tronqués à 32 caractères — c’est la capture qui fait foi sur le nom.</div></div>'
     + '<div class="zone-etat" style="color:var(' + (x ? '--ok' : '--muted') + ')">'
-    + (x ? '✓ ' + Fn_Esc(x.nom) + ' (' + Fn_FmtHeure(x.ts) + ')' : 'à fournir') + '</div></div>'
-    + '<div class="rang-btn"><label class="btn btn-accent">' + (x ? 'Remplacer' : 'Choisir le fichier')
+    + (x ? '✓ ' + Fn_Esc(x.nom) : 'à fournir') + '</div></div>'
+    + '<div class="rang-btn"><label class="btn btn-accent">' + (x ? 'Remplacer le fichier' : 'Choisir le fichier')
     + '<input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" data-action="xlsx" style="display:none"></label>'
     + (x ? '<button class="btn btn-danger' + (armeX ? ' arme' : '') + '" data-action="xlsx-effacer">' + (armeX ? 'Confirmer ?' : 'Retirer') + '</button>' : '')
     + '</div>';
   if (rt.xlsxErreur) h += '<div class="note note-crit tres-petit">' + Fn_Esc(rt.xlsxErreur) + '</div>';
-  h += '</div></div>';
-  // Les trois écrans. Compacts dès qu'une capture les a remplis — il n'y a alors
-  // rien à faire ici, seulement à vérifier. Complets sinon : c'est le repli.
-  const parCapture = !!rt.capture;
-  h += '<div class="etape"><div class="etape-t">' + (parCapture
-    ? 'Ce que la capture a rempli'
-    : 'Le repli — écran par écran, si la capture n’aboutit pas') + '</div>';
-  if (parCapture) {
-    h += '<div class="tres-petit muted" style="margin-bottom:5px">Rien à coller ici : la capture a alimenté ces trois entrées. Cette liste est là pour vérifier ce qui a été compris, et voir le texte brut quand une ligne surprend.</div>';
-  }
-  Cst_Entrees.forEach(e => {
-    if (e.cle === 'executes' && rt.aucuneTransac) return; // la case remplace l'entrée
-    h += Fn_HtmlZoneCollage(e, parCapture);
-  });
-  h += '<div class="tres-petit" style="padding:4px 0 0"><label><input type="checkbox" data-action="maj-notrans"'
-    + (rt.aucuneTransac ? ' checked' : '') + '> aucune transaction récente (remplace l’écran des ordres exécutés)</label>'
-    + (parCapture && rt.aucuneTransac && rt.capture.meta && /aucune\s+transaction/i.test(String(rt.capture.meta.historique || ''))
-      ? ' <span class="tres-petit muted">— cochée par la capture, l’écran l’annonçait</span>' : '')
-    + '</div>';
-  if (parCapture) {
-    h += '<div class="rang-btn"><button class="btn btn-mini" data-action="capture-detacher">Coller plutôt écran par écran</button></div>';
-  }
   h += '</div>';
-  h += '<div class="etape etape-cle"><div class="etape-t">C · Analyser</div>';
-  // Bilan de la dernière analyse.
+  const pret = !!rt.collages.positions || !!rt.xlsx;
+  const armeV = rt.armes['acq-vider'];
+  h += '<div class="etape etape-cle"><div class="etape-t">C · Analyser — gratuit</div>'
+    + '<div class="tres-petit muted">L’analyse apparie les deux sources, recalcule expositions, levier, distances aux barrières et portage, met le calendrier à jour, et produit une carte « à valider » par écart. Aucun appel au modèle, aucune dépense. Rien n’est intégré sans votre accord.</div>';
   if (rt.analyse) {
     const a = rt.analyse;
     h += '<div class="note ' + (a.controles ? 'note-warn' : 'note-ok') + ' tres-petit">Dernière analyse : '
       + a.majees + ' ligne(s) rafraîchie(s), ' + a.nouvelles + ' nouvelle(s) en attente de validation, '
-      + a.controles + ' écart(s) détecté(s). Aucun appel au modèle n’a été émis, aucune dépense engagée.</div>';
+      + a.controles + ' écart(s) détecté(s).</div>';
   }
-  const pret = !!rt.collages.positions || !!rt.xlsx;
-  const armeV = rt.armes['acq-vider'];
   h += '<div class="rang-btn">'
-    + '<button class="btn btn-accent btn-large" data-action="acq-integrer"' + (pret ? '' : ' disabled') + '>Analyser les entrées (gratuit)</button>'
-    + '</div>'
-    + (pret ? '<div class="rang-btn"><button class="btn btn-danger' + (armeV ? ' arme' : '') + '" data-action="acq-vider">'
-      + (armeV ? 'Confirmer ?' : 'Vider les entrées du jour') + '</button></div>' : '')
-    + '<div class="tres-petit muted" style="margin-top:4px">L’analyse apparie les deux sources, recalcule expositions, levier, distances aux barrières et portage, met le calendrier à jour, et produit une carte « à valider » par écart. Rien n’est intégré sans votre accord.</div>'
-    + '</div>';
+    + '<button class="btn btn-accent btn-large" data-action="acq-integrer"' + (pret ? '' : ' disabled') + '>Analyser les entrées</button>'
+    + (pret ? '<button class="btn btn-danger' + (armeV ? ' arme' : '') + '" data-action="acq-vider">'
+      + (armeV ? 'Confirmer ?' : 'Vider les entrées du jour') + '</button>' : '')
+    + '</div></div>';
+  h += '<div class="tres-petit muted">Tout arrive en texte : aucune image n’est analysée, aucun identifiant de courtier n’est demandé, stocké ni transmis. Les textes restent sur cet appareil et ne sont jamais synchronisés.</div>';
   el.innerHTML = h + '</div>';
 }
 /* ================================================================
@@ -4242,19 +4294,23 @@ function Fn_RenderMajPanel() {
         + '</div>'
         + '<div class="tres-petit muted">Son jugement précédent lui est rendu ligne par ligne, ainsi que les arbitrages que vous avez acceptés ou rejetés. Il réévalue au lieu de redécouvrir, et ne repropose pas un arbitrage rejeté sans fait nouveau — repayer deux fois la même conclusion est la dépense la plus facile à éviter.</div>'
         + '</div>';
-      h += '<div class="etape"><div class="etape-t">Ce que cela coûtera</div>';
+      /* Le bouton et sa projection de dépense vivent dans la MÊME boîte : la
+         projection est la dernière chose à lire avant de cliquer.
+         Le détail du budget de recherche — combien de recherches par découverte,
+         par débrief, par ligne enrichie — n'est plus répété ici : il est réglé et
+         documenté dans Paramètres → ⑤ Desk, et le redire deux fois obligeait à
+         tenir deux textes d'accord. La projection, elle, reste : elle est propre
+         À CET APPEL, calée sur ce qui a été réellement facturé, et n'existe
+         nulle part ailleurs. */
+      h += '<div class="etape etape-cle"><div class="etape-t">Lancer</div>';
       if (!enCours) h += Fn_HtmlProjection('desk', charge.unites, budgetDesk, 'unités de travail');
-      h += '<div class="tres-petit muted">Budget de recherche ÉTANCHE : <b class="mono">' + budgetDesk.decouvertes
-        + '</b> recherches réservées aux découvertes, <b class="mono">' + budgetDesk.debriefs
-        + '</b> aux débriefs. Aucune collecte de cours ni de multiples n’est autorisée dans cette passe : c’est ce cloisonnement qui empêche le livrable à plus forte valeur d’être sacrifié en fin de budget.</div>'
-        + '</div>';
       h += '<div class="rang-btn">'
         + (enCours
           ? '<button class="btn btn-danger arme" data-action="maj-annuler">■ Annuler l’appel en cours</button>'
           : '<button class="btn btn-accent btn-large" data-action="maj-lancer">'
             + (journal && (journal.statut === 'echec' || journal.statut === 'interrompue') ? 'Relancer le jugement de desk' : 'Lancer le jugement de desk')
             + '</button>')
-        + '</div>';
+        + '</div></div>';
       // Passe d'enrichissement : distincte, hebdomadaire, et proposée seulement
       // quand elle a quelque chose à faire.
       h += '<div class="etape" style="margin-top:10px"><div class="etape-t">Passe d’enrichissement — hebdomadaire, et séparée</div>';
@@ -4406,7 +4462,7 @@ function Fn_RenderDebrief() {
 function Fn_HtmlDebrief(d) {
   if (!d) return '';
   return '<div class="svap">' + Fn_HtmlSvap('faits', d.faits) + Fn_HtmlSvap('ecart', d.ecart)
-    + Fn_HtmlSvap('these', d.these) + Fn_HtmlSvap('action', d.action) + '</div>'
+    + Fn_HtmlSvap('these', d.these) + Fn_HtmlSvap('action', d.action) + Fn_HtmlSvap('suite', d.suite) + '</div>'
     + '<div class="tres-petit muted">Débrief du ' + Fn_Esc(Fn_FmtHeure(d.ts)) + '.</div>';
 }
 function Fn_HtmlMetriques(e) {
@@ -4577,6 +4633,24 @@ function Fn_RenderTimeline() {
   });
   el.innerHTML = h;
 }
+/* AJOUT MANUEL D'UN ÉVÉNEMENT.
+   Deux champs suffisent — une date et un libellé — et ce sont les seuls que le
+   gestionnaire exige. L'écran le dit désormais : l'astérisque marque
+   l'indispensable, et le bouton reste INACTIF tant qu'il manque, puis passe au
+   vert. Auparavant il était vert d'emblée et un clic prématuré ne produisait
+   rien du tout, sans un mot d'explication. */
+function Fn_FormAjoutPret() {
+  const v = id => String(((document.getElementById(id) || {}).value) || '').trim();
+  return !!(v('f-date') && v('f-titre'));
+}
+function Fn_MajBoutonFormAjout() {
+  const b = document.querySelector('[data-action="form-ajouter"]');
+  if (!b) return;
+  const pret = Fn_FormAjoutPret();
+  b.disabled = !pret;
+  b.className = 'btn' + (pret ? ' btn-ok' : '');
+  b.textContent = pret ? 'Ajouter au calendrier' : 'Renseignez la date et le libellé';
+}
 function Fn_RenderFormAjout() {
   const el = document.getElementById('v-form');
   if (!el) return;
@@ -4584,17 +4658,27 @@ function Fn_RenderFormAjout() {
   let h = '<div class="carte"><button class="panneau-tete' + (ouvert ? ' ouvert' : '') + '" data-action="toggle" data-id="formAjout">'
     + '<span>Ajouter un événement</span><span class="chevron">▶</span></button>';
   if (ouvert) {
-    h += '<div class="form-grille" style="margin-top:8px">'
-      + '<div><label class="champ">Date</label><input id="f-date" type="date" value="' + Fn_AujISO() + '"></div>'
+    const req = ' <span class="champ-req" title="indispensable">*</span>';
+    h += '<div class="tres-petit muted" style="margin-top:6px">Les champs marqués <span class="champ-req">*</span> sont indispensables ; les autres peuvent être complétés plus tard, ou par le desk.</div>'
+      + '<div class="form-grille" style="margin-top:8px">'
+      + '<div><label class="champ">Date' + req + '</label><input id="f-date" type="date" value="' + Fn_AujISO() + '"></div>'
       + '<div><label class="champ">Sévérité</label><select id="f-sev"><option>Info</option><option>Warn</option><option>Crit</option></select></div>'
       + '<div><label class="champ">Étiquettes (séparées par des virgules)</label><input id="f-tags" type="text"></div>'
-      + '<div class="col3"><label class="champ">Libellé (qui + quoi, lisible seul)</label><input id="f-titre" type="text"></div>'
+      + '<div class="col3"><label class="champ">Libellé — qui + quoi, lisible seul' + req + '</label><input id="f-titre" type="text"></div>'
       + '<div class="col3"><label class="champ">Surveiller</label><textarea id="f-surv"></textarea></div>'
       + '<div class="col3"><label class="champ">Arbitrage</label><textarea id="f-arb"></textarea></div>'
       + '<div class="col3"><label class="champ">Pratique</label><textarea id="f-prat"></textarea></div></div>'
-      + '<div class="rang-btn"><button class="btn btn-ok" data-action="form-ajouter">Ajouter au calendrier</button></div>';
+      + '<div class="rang-btn"><button class="btn" disabled data-action="form-ajouter">Renseignez la date et le libellé</button></div>';
   }
   el.innerHTML = h + '</div>';
+  if (ouvert) Fn_MajBoutonFormAjout();
+}
+/* Frappe au clavier : un seul écouteur délégué, aucune mutation d'état, aucun
+   re-rendu de la zone en cours de saisie. */
+function Fn_OnSaisie(e) {
+  const el = e.target;
+  if (!el || !el.id) return;
+  if (el.id === 'f-date' || el.id === 'f-titre') Fn_MajBoutonFormAjout();
 }
 function Fn_RenderRegles() {
   const el = document.getElementById('v-regles');
@@ -4851,48 +4935,61 @@ const Cst_VerdictsDec = {
   'sous conditions': { badge: 'badge-warn', cls: ' opp-conditions' },
   'incohérente': { badge: 'badge-crit', cls: ' opp-incoherente' }
 };
+/* CADRE D'EXPOSITION — les CONTRAINTES contre lesquelles chaque découverte est
+   jugée, et rien d'autre.
+   Ce panneau reproduisait la valeur nette, le coussin, le levier, la marge
+   disponible et l'exposition par facteur, par devise et par poche : les mêmes
+   chiffres que le bandeau de l'onglet Vigie et que l'onglet Discipline, avec
+   leurs propres arrondis et leurs propres couleurs. Trois versions à tenir
+   d'accord pour une seule vérité.
+   Ce qui compte ici n'est pas la VALEUR d'un indicateur — la Discipline la donne
+   avec son seuil, sa jauge et sa conduite à tenir — mais ce qu'elle INTERDIT à
+   une idée nouvelle. Le panneau ne garde donc que les interdits actifs, et le
+   renvoi vers l'endroit où les chiffres se lisent. */
 function Fn_HtmlCadreExposition() {
   const p = Fn_ProfilExposition();
   const s = Var_State.seuils;
   const ouvert = !!Var_State.panneaux.cadreExpo;
+  const inds = Fn_IndicateursDiscipline();
+  const degrades = inds.filter(i => i.zone === 'crit' || i.zone === 'warn');
   let h = '<div class="carte"><button type="button" class="panneau-tete' + (ouvert ? ' ouvert' : '') + '" data-action="toggle" data-id="cadreExpo">'
-    + '<span>Cadre d’exposition — la grille de lecture de chaque découverte</span><span class="chevron">▶</span></button>';
-  if (!ouvert) return h + '</div>';
-  const zoneMarge = (p.margeDisponibleEur == null) ? null : (p.margeDisponibleEur <= 0 ? 'crit' : null);
-  const mets = [
-    ['valeur nette', p.valeurNetteEur != null ? Fn_FmtEur(p.valeurNetteEur, 0) : '— (coller le bloc « espace libre »)', null],
-    ['coussin de marge', Fn_FmtPct(p.coussinMargePct, 1), Fn_ZoneSeuil(p.coussinMargePct, s.coussinVert, s.coussinRouge, 'bas')],
-    ['levier brut', Fn_FmtX(p.levierBrut), Fn_ZoneSeuil(p.levierBrut, s.levierVert, s.levierRouge, 'haut')],
-    ['marge disponible', Fn_FmtEur(p.margeDisponibleEur, 0), zoneMarge]
-  ];
-  h += '<div class="mets">' + mets.map(m => '<span class="met' + (m[2] ? ' z-' + m[2] : '') + '">'
-    + Fn_Gloss(Fn_Esc(m[0])) + ' → <b>' + Fn_Gloss(Fn_Esc(m[1])) + '</b></span>').join('') + '</div>';
-  const bloc = (titre, liste, vert, rouge, n) => {
-    if (!liste.length) return '';
-    return '<div class="cours-ligne expo-ligne"><span class="lib">' + Fn_Esc(titre) + '</span> '
-      + liste.slice(0, n).map(x => {
-        const z = Fn_ZoneSeuil(x.pctVN == null ? null : Math.abs(x.pctVN), vert, rouge, 'haut');
-        return '<span class="met' + (z === 'crit' || z === 'warn' ? ' z-' + z : '') + '">'
-          + Fn_Gloss(Fn_Esc(x.cle)) + ' → <b>' + Fn_Esc(Fn_FmtPct(x.pctVN, 1)) + '</b></span>';
-      }).join(' ') + '</div>';
-  };
-  h += '<div class="mets" style="display:block">'
-    + bloc('Exposition NETTE par facteur', p.expositionNetteParFacteur, s.expoFacteurVert, s.expoFacteurRouge, 6)
-    + bloc('Devises', p.expositionParDevise, s.deviseVert, s.deviseRouge, 4)
-    + bloc('Poches', p.expositionParPoche, null, null, 6)
-    + '</div>';
+    + '<span>Cadre d’exposition — ce que vos contraintes interdisent</span><span class="chevron">▶</span></button>';
+  if (!ouvert) {
+    return h + '<div class="tres-petit muted maj-resume">'
+      + (degrades.length ? degrades.length + ' contrainte(s) dégradée(s) à respecter.' : 'Aucune contrainte dégradée.')
+      + '</div></div>';
+  }
+  const interdits = [];
   const chaudes = p.lignes.filter(l => l.pctVN != null && Math.abs(l.pctVN) > s.concLigneRouge);
   if (chaudes.length) {
-    h += '<div class="note note-crit">Concentration par ligne déjà au-dessus du plafond rouge ('
-      + Fn_Esc(Fn_FmtPct(s.concLigneRouge, 0)) + ' de la valeur nette) : '
-      + chaudes.map(l => Fn_Esc(String(l.nom || l.id).slice(0, 20)) + ' ' + Fn_Esc(Fn_FmtPct(l.pctVN, 1))).join(' · ')
-      + ' — aucune découverte ne doit renforcer ces lignes ni leur facteur.</div>';
+    interdits.push('Ne rien ajouter à ' + chaudes.map(l => '<b>' + Fn_Esc(String(l.nom || l.id).slice(0, 22)) + '</b>').join(', ')
+      + ' ni à leur facteur : ces lignes sont déjà au-dessus du plafond de concentration.');
+  }
+  const facteursChauds = p.expositionNetteParFacteur.filter(f => f.pctVN != null && Math.abs(f.pctVN) > s.expoFacteurRouge);
+  if (facteursChauds.length) {
+    interdits.push('Ne pas renforcer ' + facteursChauds.map(f => '<b>' + Fn_Esc(f.cle) + '</b>').join(', ')
+      + ' : l’exposition nette y dépasse le plafond. Une idée qui la RÉDUIT reste recevable.');
+  }
+  const devChaudes = p.expositionParDevise.filter(d => d.cle !== 'EUR' && d.pctVN != null && Math.abs(d.pctVN) > s.deviseRouge);
+  if (devChaudes.length) {
+    interdits.push('Toute idée en ' + devChaudes.map(d => '<b>' + Fn_Esc(d.cle) + '</b>').join(', ')
+      + ' ajoute à une exposition de change déjà au plafond : elle doit le dire et se justifier.');
   }
   if (p.coussinMargePct != null && p.coussinMargePct < s.coussinRouge) {
-    h += '<div class="note note-crit">' + Fn_Gloss(Fn_Esc('Coussin de marge sous le seuil rouge : toute découverte retenue doit être auto-financée — vendre avant d’acheter —, jamais ajoutée au brut.')) + '</div>';
+    interdits.push('Coussin de marge sous le seuil rouge : toute découverte retenue doit être <b>auto-financée</b> — vendre avant d’acheter — et nommer la ligne à alléger. Aucune augmentation du brut n’est recevable.');
   }
-  h += '<div class="tres-petit muted" style="margin-top:6px">Base : ' + Fn_Gloss(Fn_Esc(p.valeurNetteSrc || '—'))
-    + '. Les couleurs sont calculées ici même, en comparant ces chiffres à vos seuils (Paramètres → Seuils), en valeur absolue : une exposition vendeuse concentre autant qu’une acheteuse. Les poches restent neutres — leur répartition relève de votre choix de gestion, pas d’une limite de risque.</div>';
+  if (p.margeDisponibleEur != null && p.margeDisponibleEur <= 0) {
+    interdits.push('Marge disponible épuisée : aucune position nouvelle ne peut être ouverte sans en solder une autre.');
+  }
+  if (p.valeurNetteEur == null) {
+    interdits.push('Valeur nette inconnue — le bloc de marge n’a pas été capturé. Aucun dimensionnement en pourcentage de valeur nette n’est calculable : toute taille proposée reste à vérifier à la main.');
+  }
+  h += interdits.length
+    ? '<div class="note note-crit">' + interdits.map(x => '<div style="margin:3px 0">· ' + Fn_Gloss(x) + '</div>').join('') + '</div>'
+    : '<div class="note note-ok tres-petit">Aucune contrainte au plafond : une idée cohérente peut être dimensionnée normalement, dans la limite du plafond de concentration par ligne ('
+      + Fn_Esc(Fn_FmtPct(s.concLigneRouge, 0)) + ' de la valeur nette).</div>';
+  h += '<div class="tres-petit muted">Ces interdits sont déduits de vos seuils (Paramètres → Seuils) et comparés en valeur absolue : une exposition vendeuse concentre autant qu’une acheteuse. Les poches restent neutres — leur répartition relève de votre gestion, pas d’une limite de risque.</div>'
+    + '<div class="rang-btn"><button class="btn btn-mini" data-action="onglet" data-id="discipline">Lire les valeurs et leurs seuils</button></div>';
   return h + '</div>';
 }
 function Fn_RenderDecouvertes() {
@@ -5072,30 +5169,30 @@ function Fn_RenderParametres() {
     + '<div class="et-etat" style="color:var(' + (e.ok ? '--ok' : '--muted') + ')">' + Fn_Esc(e.etat) + '</div></div>').join('') + '</div></div>';
 
   // ---- ① Acquisition
-  h += Fn_Panneau('etageAcquisition', '① Acquisition — les quatre entrées', () => {
-    let x = '<div class="tres-petit muted">Horodatage de chaque entrée, lignes reconnues et non reconnues, et accès au texte brut. Le texte brut est la seule pièce qui permette de diagnostiquer une lecture fautive : il est conservé verbatim sur cet appareil, et jamais synchronisé.</div>';
-    if (!Var_State.captures.length) return x + '<div class="vide">Aucune entrée analysée pour l’instant.</div>';
-    x += '<table class="tbl"><tr><th>entrée</th><th>collée le</th><th>reconnues</th><th>non reconnues</th></tr>'
-      + Var_State.captures.map(cp => {
-        // La ligne « capture » ne compte pas de lignes : elle DATE la lecture et
-        // rappelle ce que l'écran annonçait. C'est le seul repère quand un chiffre
-        // de marge paraît décalé d'une séance.
-        if (cp.type === 'capture') {
-          const lu = cp.lu || {};
-          const dit = [lu.courtier ? 'courtier à jour à ' + Fn_Esc(lu.courtier) : null,
-            lu.statut ? 'état « ' + Fn_Esc(lu.statut) + ' »' : null,
-            lu.ordresOuverts != null ? Fn_Esc(String(lu.ordresOuverts)) + ' ordre(s) annoncé(s)' : null]
-            .filter(Boolean).join(' · ');
-          return '<tr><td>capture</td><td>' + Fn_Esc(Fn_FmtHeure(cp.ts)) + '</td><td colspan="2">' + (dit || '—') + '</td></tr>';
-        }
-        return '<tr><td>' + Fn_Esc(cp.type) + '</td><td>' + Fn_Esc(Fn_FmtHeure(cp.ts)) + '</td><td>'
-          + cp.lignesOk + '</td><td' + (cp.lignesKo ? ' style="color:var(--warn)"' : '') + '>' + cp.lignesKo + '</td></tr>';
-      }).join('')
-      + '</table>';
+  h += Fn_Panneau('etageAcquisition', '① Acquisition — taux déduits et provenance', () => {
+    // Le décompte des lignes lues, les lignes non reconnues et l'accès au texte
+    // brut vivent sur la carte « Entrées du jour » de l'onglet Vigie, à côté des
+    // boutons qui permettent d'y remédier. Les répéter ici obligeait à tenir deux
+    // tableaux d'accord pour une seule vérité.
+    let x = '';
     if (Var_State.fx) {
-      x += '<div class="tres-petit" style="margin-top:6px">Taux de change déduits de l’export du ' + Fn_Esc(Fn_FmtHeure(Var_State.fx.ts)) + ' : '
-        + Object.keys(Var_State.fx.taux).map(d => Fn_Esc(d) + ' → <b class="mono">' + Fn_Esc(Fn_FmtNb(Var_State.fx.taux[d], 4)) + ' €</b>').join(' · ')
-        + '. ' + Fn_Gloss(Fn_Esc('Origine : ' + Var_State.fx.origine + ' — aucun service de change n’est interrogé.')) + '</div>';
+      x += '<div class="carte-titre">Taux de change déduits</div><div class="budget-grille">'
+        + Object.keys(Var_State.fx.taux).map(d => '<div class="budget-c"><span class="bc-l">' + Fn_Esc(d) + ' → euro</span>'
+          + '<span class="bc-v">' + Fn_Esc(Fn_FmtNb(Var_State.fx.taux[d], 4)) + '</span>'
+          + '<span class="bc-s">export du ' + Fn_Esc(Fn_FmtDateCourt(Fn_DateISO(new Date(Var_State.fx.ts)))) + '</span></div>').join('')
+        + '</div>'
+        + '<div class="tres-petit muted">' + Fn_Gloss(Fn_Esc('Origine : ' + Var_State.fx.origine + ' — aucun service de change n’est interrogé. Le taux est daté de la même séance que le fichier et recalculé à chaque import.')) + '</div>';
+    } else {
+      x += '<div class="vide">Aucun taux de change déduit : joignez l’export du courtier. Sans lui, toute ligne en devise étrangère reste sans valeur en euros.</div>';
+    }
+    const cap = Var_State.captures.find(c => c.type === 'capture');
+    if (cap) {
+      const lu = cap.lu || {};
+      x += '<div class="carte-titre" style="margin-top:10px">Provenance de la dernière lecture</div>'
+        + '<div class="tres-petit">Capture intégrée le <b class="mono">' + Fn_Esc(Fn_FmtHeure(cap.ts)) + '</b>'
+        + (lu.courtier ? ' · courtier à jour à <b class="mono">' + Fn_Esc(lu.courtier) + '</b>' : '')
+        + (lu.statut ? ' · état de lecture « ' + Fn_Esc(lu.statut) + ' »' : '') + '.</div>'
+        + '<div class="tres-petit muted">C’est l’heure du courtier, et non celle de l’intégration, qui date la valeur liquidative, le coussin et le levier. Un écart de plusieurs heures avec les cours des lignes explique la plupart des incohérences apparentes.</div>';
     }
     return x;
   });
@@ -5148,13 +5245,18 @@ function Fn_RenderParametres() {
       + '<div class="tres-petit muted">' + Fn_Esc(m.note) + '</div>'
       + '<div class="tres-petit muted">' + Fn_Esc(e.note) + '</div>'
       + '<div class="carte-titre" style="margin-top:8px">Budget de recherche</div>'
-      + '<div class="valo-grille">'
-      + '<span class="met">par découverte <b>' + Cst_RecherchesParDecouverte + ' rech. · ' + Cst_LecturesParDecouverte + ' pages</b></span>'
-      + '<span class="met">découvertes visées <b>' + Cst_DecouvertesVisees + '</b></span>'
-      + '<span class="met">par débrief <b>' + Cst_RecherchesParDebrief + ' rech. · ' + Cst_LecturesParDebrief + ' pages</b></span>'
-      + '<span class="met">par ligne enrichie <b>' + Cst_RecherchesParLigneLourde + ' rech. · ' + Cst_LecturesParLigneLourde + ' pages</b></span>'
+      + '<div class="budget-grille">'
+      + [['par découverte', Cst_RecherchesParDecouverte + ' rech.', Cst_LecturesParDecouverte + ' pages'],
+         ['découvertes visées', String(Cst_DecouvertesVisees), 'par appel'],
+         ['par débrief', (Cst_RecherchesParDebrief + Cst_RecherchesActualiteParDebrief) + ' rech.', Cst_LecturesParDebrief + ' pages'],
+         ['dont actualité de la ligne', Cst_RecherchesActualiteParDebrief + ' rech.', 'sur les précédentes'],
+         ['par ligne enrichie', Cst_RecherchesParLigneLourde + ' rech.', Cst_LecturesParLigneLourde + ' pages']]
+        .map(x => '<div class="budget-c"><span class="bc-l">' + Fn_Esc(x[0]) + '</span>'
+          + '<span class="bc-v">' + Fn_Esc(x[1]) + '</span>'
+          + '<span class="bc-s">' + Fn_Esc(x[2]) + '</span></div>').join('')
       + '</div>'
-      + '<div class="tres-petit muted">Le budget est toujours CALCULÉ à partir du travail réellement demandé, jamais fixé en dur : une constante est arbitraire par construction, et c’est elle qui laissait les valorisations vides en fin de course. Les deux enveloppes sont étanches — la collecte ne peut plus consommer celle des découvertes.</div>';
+      + '<div class="tres-petit muted">Le budget est toujours CALCULÉ à partir du travail réellement demandé, jamais fixé en dur : une constante est arbitraire par construction, et c’est elle qui laissait les valorisations vides en fin de course.</div>'
+      + '<div class="tres-petit muted">L’étanchéité est À SENS UNIQUE : rien ne peut entamer l’enveloppe des découvertes, mais ce que le desk trouve en débriefant peut nourrir une découverte ou un arbitrage sans rien coûter de plus — la page est déjà lue.</div>';
   });
   // ---- Accès API
   h += Fn_Panneau('apiParam', 'Accès API — clé, tarifs et consommation', () => {
@@ -5799,11 +5901,13 @@ function Fn_BuildPromptMAJ(ctx) {
   L.push('  INTERDIT ABSOLU : deux événements différents partageant la même ligne prat générique. Chacune est spécifique au type d’événement, à la poche et à la taille de la position.');
   L.push('  Tu peux AJOUTER des métriques à un événement (clé « m ») si un chiffre manque à la décision — mais uniquement des chiffres que tu calcules depuis ceux fournis, marqués [calcul], ou que tu as vérifiés en ligne, marqués [vérifié + source].');
   L.push('LIVRABLE 2 — DÉBRIEFS DES ÉVÉNEMENTS ÉCHUS (' + nbDebriefs + ' demandé(s)).');
-  L.push('C’est la seule boucle de rétroaction de cet outil : elle transforme le calendrier d’un pense-bête en historique de décisions. Pour chacun, une recherche CIBLÉE sur ce seul événement — donc courte — puis quatre champs :');
+  L.push('C’est la seule boucle de rétroaction de cet outil : elle transforme le calendrier d’un pense-bête en historique de décisions. Chaque débrief dispose de ' + (Cst_RecherchesParDebrief + Cst_RecherchesActualiteParDebrief) + ' recherches : ' + Cst_RecherchesParDebrief + ' pour établir les faits de l’événement, et ' + Cst_RecherchesActualiteParDebrief + ' pour L’ACTUALITÉ DE LA LIGNE DEPUIS. Cinq champs :');
   L.push('  · faits — ce qui s’est réellement passé : chiffres publiés CONTRE consensus attendu, avec source et date.');
   L.push('  · ecart — l’écart à l’anticipation : la carte annonçait telle amplitude de gap (elle t’est donnée dans « annonce »), qu’a fait le titre en réalité ?');
   L.push('  · these — ce que cela change à la thèse. Écris explicitement « rien ne change, et voici pourquoi » si rien ne change : c’est une conclusion valide et utile, pas une dérobade.');
   L.push('  · action — une action, ou l’ABSENCE d’action justifiée. « Conserver, prochain point de décision : … » est une réponse complète.');
+  L.push('  · suite — CE QUI A CHANGÉ DEPUIS sur cette ligne, et le prochain rendez-vous daté. C’est la partie ouverte à l’actualité : une publication qui a suivi, un avertissement sur résultats, une opération capitalistique, un changement de guidance, une décision réglementaire, un mouvement de l’émetteur sur un produit à levier. Un fait daté, sa source, et ce qu’il implique — ou « rien de nouveau depuis, prochain rendez-vous le … ». Rouvrir un dossier est le moment où son actualité coûte le moins cher à collecter : ne le laisse pas passer.');
+  L.push('  Si ce que tu y trouves justifie une idée nouvelle, écris-la en découverte : la recherche est DÉJÀ payée par l’enveloppe du débrief, elle ne consomme pas celle des découvertes. Si elle justifie un arbitrage, écris-le dans actions.');
   L.push('LIVRABLE 3 — DÉCOUVERTES (objectif : 3 à 5, ou AUCUNE si rien ne le justifie).');
   L.push('C’est le livrable à plus forte valeur, et il dispose d’un budget de recherche qui lui est RÉSERVÉ : ' + budget.decouvertes + ' recherches. Rien d’autre ne peut le consommer. Une découverte faible vaut moins que son absence — s’il n’y a rien, renvoie une liste vide et dis-le en une ligne.');
   L.push('Une découverte VALIDE réunit QUATRE conditions, toutes obligatoires :');
@@ -5826,8 +5930,8 @@ function Fn_BuildPromptMAJ(ctx) {
   L.push('');
   L.push('=== DEUX RÉGIMES DE STYLE, À NE PAS CONFONDRE ===');
   L.push('(i) CHAMPS DE DONNÉES ET DE TRAÇABILITÉ — s, u, as, note, tend : style TÉLÉGRAPHIQUE. Pas de phrase complète, pas de justification, pas de récit de ce que tu as tenté. « 05/08/26 clôture » et non un paragraphe. Nomme les sources séparées par « + », sans commenter chacune. Une réserve tient en quelques mots : « non confirmé », « source unique », « deux sources divergentes ».');
-  L.push('(ii) CHAMPS D’EXPERTISE — prat, surv, arb, these, valoRef, risques, revue, faits, ecart, action, propo, decl, cb, inval : c’est LÀ que se trouve la valeur, et la concision n’y justifie AUCUN appauvrissement. Règle professionnelle nommée, chiffre, action corrective : rien de cela ne se sacrifie. Reste dans le plafond en supprimant les redites et les précautions oratoires, jamais en supprimant du fond.');
-  L.push('LONGUEURS MAXIMALES FERMES, en caractères : surv 320 · arb 320 · prat 320 · these 600 · valoRef 250 · risques 300 · tend 200 · revue 600 · faits 500 · ecart 300 · action 300 · propo 250 · decl 250 · cb 250 · inval 250 · fait 400 · entree 200 · s 120 · note 200. Au-delà, REFORMULE plus court ; ne tronque jamais en cours de phrase.');
+  L.push('(ii) CHAMPS D’EXPERTISE — prat, surv, arb, these, valoRef, risques, revue, faits, ecart, action, suite, propo, decl, cb, inval : c’est LÀ que se trouve la valeur, et la concision n’y justifie AUCUN appauvrissement. Règle professionnelle nommée, chiffre, action corrective : rien de cela ne se sacrifie. Reste dans le plafond en supprimant les redites et les précautions oratoires, jamais en supprimant du fond.');
+  L.push('LONGUEURS MAXIMALES FERMES, en caractères : surv 320 · arb 320 · prat 320 · these 600 · valoRef 250 · risques 300 · tend 200 · revue 600 · faits 500 · ecart 300 · action 300 · suite 400 · propo 250 · decl 250 · cb 250 · inval 250 · fait 400 · entree 200 · s 120 · note 200. Au-delà, REFORMULE plus court ; ne tronque jamais en cours de phrase.');
   L.push('');
   L.push('=== TRAÇABILITÉ (obligatoire — chaque carte est lue SEULE, sur mobile, des jours plus tard) ===');
   L.push('1. Références NOMMÉES : jamais « avant l’événement binaire du 13/08 » mais « avant les résultats trimestriels de la société X du 13/08/26 (60,7 % de la valeur nette) » — toujours qui, quoi, quand.');
@@ -5835,8 +5939,9 @@ function Fn_BuildPromptMAJ(ctx) {
   L.push('3. Dates : format AAAA-MM-JJ dans les champs de date ; format JJ/MM/AA dans tout texte — jour PUIS mois, jamais l’inverse. Les sources américaines écrivent MM/JJ : convertis systématiquement. Heures en heure de Paris, avec l’heure locale de la place entre parenthèses quand elle éclaire.');
   L.push('');
   L.push('=== BUDGET DE RECHERCHE ===');
-  L.push('Calculé pour cet appel : ' + budget.recherches + ' recherches et ' + budget.lectures + ' lectures de page, dont ' + budget.decouvertes + ' recherches réservées aux découvertes et ' + budget.debriefs + ' aux débriefs. Ces enveloppes sont ÉTANCHES.');
-  L.push('AUCUNE collecte de cours, de multiples ou de consensus dans cet appel : ce n’est pas ta mission, une autre passe s’en charge à son propre rythme. Tes recherches servent uniquement à sourcer un fait de découverte ou à établir ce qui s’est passé lors d’un événement échu.');
+  L.push('Calculé pour cet appel : ' + budget.recherches + ' recherches et ' + budget.lectures + ' lectures de page, dont ' + budget.decouvertes + ' réservées aux découvertes et ' + budget.debriefs + ' aux débriefs (dont ' + budget.debriefsActualite + ' ouvertes à l’actualité de la ligne).');
+  L.push('L’ÉTANCHÉITÉ EST À SENS UNIQUE, et c’est voulu : rien ne peut entamer l’enveloppe des découvertes — c’est le livrable à plus forte valeur, et il était systématiquement sacrifié en fin de budget. En revanche, ce que tu trouves en débriefant PEUT nourrir une découverte ou un arbitrage sans rien coûter de plus : la page est déjà lue.');
+  L.push('AUCUNE collecte de cours, de multiples ou de consensus dans cet appel : ce n’est pas ta mission, une autre passe s’en charge à son propre rythme. Tes recherches servent à sourcer un fait de découverte, à établir ce qui s’est passé lors d’un événement échu, et à relever ce qui a changé depuis sur la ligne concernée.');
   L.push('Ne relance jamais une requête identique. Après une tentative infructueuse sur une page à contenu chargé par script, change de source.');
   if (c.sitesAutorises && c.sitesAutorises.length) {
     L.push('RESTRICTION DE RECHERCHE choisie par l’utilisateur : l’outil n’atteint QUE ces domaines — ' + c.sitesAutorises.join(', ') + '. Un fait invérifiable dans ce périmètre ne fonde pas une découverte : abandonne-la plutôt que de l’affaiblir.');
@@ -5847,8 +5952,8 @@ function Fn_BuildPromptMAJ(ctx) {
   L.push('{"v":3,');
   L.push(' "evTextes":[{"id","surv","arb","prat","m":[{"l","v"}]}],');
   L.push('   → id=l’identifiant EXACT reçu dans evSansTexte · m=métriques à AJOUTER, facultatif.');
-  L.push(' "debriefs":[{"id","faits","ecart","these","action","s","u"}],');
-  L.push('   → id=l’identifiant EXACT reçu dans evADebriefer.');
+  L.push(' "debriefs":[{"id","faits","ecart","these","action","suite","s","u"}],');
+  L.push('   → id=l’identifiant EXACT reçu dans evADebriefer · suite=ce qui a changé depuis sur la ligne, avec sa date et sa source, et le prochain rendez-vous daté.');
   L.push(' "decouvertes":[{"intention","cible","titre","fait","dateFait","entree","inval","hor","taille","verdict","discipline","s","u"}],');
   L.push('   → intention=une des cinq exactement · cible=l’id de la ligne du portefeuille concernée · fait=le fait daté qui la fonde · dateFait=AAAA-MM-JJ · entree=niveau d’entrée · inval=condition d’invalidation · hor=horizon · taille=allocation cible en % de la valeur nette · verdict=cohérente / sous conditions / incohérente · discipline=le calcul explicite contre les garde-fous (« porterait le facteur X de 77 % à 81 % de la valeur nette, plafond rouge 40 % ») · u=lien direct vers la source du fait.');
   L.push(' "positions":[{"id","poche","profil","fact":["…"],"liqFaible","tend","these","valoRef","risques","revue"}],');
@@ -5888,6 +5993,7 @@ function Fn_IntegrerDesk(data, journal) {
     if (!e) return;
     e.debrief = { faits: Fn_Ch(d, ['faits']) || '', ecart: Fn_Ch(d, ['ecart']) || '',
       these: Fn_Ch(d, ['these']) || '', action: Fn_Ch(d, ['action']) || '',
+      suite: Fn_Ch(d, ['suite']) || '',
       s: Fn_Ch(d, ['s']) || null, u: Fn_UrlSure(Fn_Ch(d, ['u'])), ts };
     e.statut = 'debriefe';
     e.debriefDemande = false;
@@ -6335,7 +6441,7 @@ function Fn_AppliquerControle(carte, accepte) {
     Var_State.positions.push({
       id: p.id, ticker: p.ticker || null, isin: p.isin || null,
       detention: { nom: p.nom, qte: p.qte, dev: p.dev || 'EUR', cloture: p.cloture,
-        clotureVeille: p.clotureVeille, var: null, valDev: p.montantDev, valEur: p.montantEur,
+        clotureVeille: p.clotureVeille, var: null, valDev: p.montantDev, valEurExport: p.montantEur, valEur: null,
         pctVN: null, poche: null, facteurs: [], liqFaible: null, ts: Date.now(), src: p.source },
       produit: levier
         ? { type: 'derive', emetteur: levier.emetteur, sousJacent: levier.sousJacent, sens: levier.sens,
@@ -6376,27 +6482,6 @@ function Fn_OnAction(e) {
       else Fn_RenderParametres();
       break;
     }
-    case 'coller': {
-      // L'API de presse-papier exige HTTPS et une autorisation, et n'existe pas
-      // en fichier local : tout échec renvoie vers la zone de saisie manuelle,
-      // qui est toujours présente sous le bouton.
-      if (!navigator.clipboard || !navigator.clipboard.readText) {
-        rt.collageErreur = 'Ce navigateur ne donne pas accès au presse-papier ici (il faut une page servie en HTTPS). Collez à la main dans la zone ci-dessous.';
-        Fn_RenderAcquisition();
-        break;
-      }
-      navigator.clipboard.readText().then(txt => {
-        // Un document sectionné est reconnu QUELLE QUE SOIT la zone visée : il
-        // alimente les trois entrées d'un coup. Sans borne reconnue, le texte
-        // repart tel quel vers la zone visée — le collage écran par écran reste
-        // valide et rien de l'ancien chemin ne change.
-        if (Fn_PoserCapture(txt) || Fn_PoserCollage(id, txt)) { rt.collageErreur = null; Fn_RenderAcquisition(); }
-      }).catch(() => {
-        rt.collageErreur = 'Accès au presse-papier refusé. Collez à la main dans la zone ci-dessous — le traitement est identique.';
-        Fn_RenderAcquisition();
-      });
-      break;
-    }
     case 'capture-coller': {
       if (!navigator.clipboard || !navigator.clipboard.readText) {
         rt.collageErreur = 'Ce navigateur ne donne pas accès au presse-papier ici (il faut une page servie en HTTPS). Collez à la main dans la zone ci-dessous.';
@@ -6430,15 +6515,6 @@ function Fn_OnAction(e) {
       }, () => Fn_RenderParametres());
       break;
     }
-    case 'capture-detacher': {
-      // Oublie l'EN-TÊTE de la capture, jamais les textes qu'elle a posés : les
-      // trois zones retrouvent leur forme complète et redeviennent collables une
-      // par une, sans qu'il faille refaire quoi que ce soit.
-      rt.capture = null;
-      Fn_DocSupprimer('capture');
-      Fn_RenderAcquisition();
-      break;
-    }
     case 'capture-effacer': {
       Fn_DoubleTap('capture', () => {
         rt.capture = null;
@@ -6449,14 +6525,6 @@ function Fn_OnAction(e) {
       break;
     }
     case 'collage-voir': { rt['voir-' + id] = !rt['voir-' + id]; Fn_RenderAcquisition(); break; }
-    case 'collage-effacer': {
-      Fn_DoubleTap('collage-' + id, () => {
-        delete rt.collages[id];
-        Fn_DocSupprimer(id);
-        Fn_RenderAcquisition();
-      }, () => Fn_RenderAcquisition());
-      break;
-    }
     case 'xlsx-effacer': {
       Fn_DoubleTap('xlsx-effacer', () => { rt.xlsx = null; Fn_DocSupprimer('xlsx'); Fn_RenderAcquisition(); }, () => Fn_RenderAcquisition());
       break;
@@ -6519,7 +6587,7 @@ function Fn_OnAction(e) {
     case 'form-ajouter': {
       const val = q => ((document.getElementById(q) || {}).value || '').trim();
       const date = val('f-date'), titre = val('f-titre');
-      if (!date || !titre) break;
+      if (!date || !titre) { Fn_MajBoutonFormAjout(); break; } // le bouton dit ce qui manque
       let idEv = Fn_Slug(titre) + '-' + date;
       if (Var_State.calendrier.some(x => x.id === idEv)) idEv += '-' + Math.random().toString(36).slice(2, 5);
       Var_State.calendrier.push({
@@ -6637,7 +6705,39 @@ function Fn_OnAction(e) {
       Fn_Save(); Fn_RenderDecouvertes();
       break;
     }
-    case 'cle-voir': { const inp = document.getElementById('p-cle'); if (inp) inp.type = (inp.type === 'password') ? 'text' : 'password'; break; }
+    /* AFFICHER UN CODE ENREGISTRÉ. Le champ est VIDE dès qu'un code est en
+       mémoire — son libellé invite à saisir pour remplacer. Basculer le type du
+       champ ne montrait donc rien du tout, et le bouton passait pour inerte. Il
+       faut y ÉCRIRE le code enregistré, et l'effacer en remasquant pour ne pas
+       le laisser traîner dans le formulaire. Le code n'est jamais réécrit dans
+       le stockage au passage : rien ici ne modifie quoi que ce soit. */
+    case 'cle-voir': case 'ghtoken-voir': {
+      const estCle = (action === 'cle-voir');
+      const inp = document.getElementById(estCle ? 'p-cle' : 'p-ghtoken');
+      if (!inp) break;
+      const stocke = estCle ? Fn_GetApiKey() : Fn_GetSyncToken();
+      if (inp.type !== 'password') {
+        inp.type = 'password';
+        if (inp.dataset.revele === '1') { inp.value = ''; inp.dataset.revele = ''; }
+        el.textContent = 'Afficher';
+        break;
+      }
+      if (!inp.value && !stocke) {
+        // Ne rien afficher SANS LE DIRE est exactement ce qui faisait passer ce
+        // bouton pour cassé. Le libellé répond, puis se remet seul.
+        el.textContent = 'aucun code enregistré';
+        clearTimeout(rt.timers.codeHint);
+        rt.timers.codeHint = setTimeout(() => {
+          const b = document.querySelector('[data-action="' + action + '"]');
+          if (b) b.textContent = 'Afficher';
+        }, 2500);
+        break;
+      }
+      if (!inp.value) { inp.value = stocke; inp.dataset.revele = '1'; }
+      inp.type = 'text';
+      el.textContent = 'Masquer';
+      break;
+    }
     case 'cle-enregistrer': {
       const inp = document.getElementById('p-cle');
       const v = inp ? String(inp.value || '').trim() : '';
@@ -6648,7 +6748,6 @@ function Fn_OnAction(e) {
       Fn_DoubleTap('cle-effacer', () => { Fn_SetApiKey(''); Fn_RenderParametres(); Fn_RenderEntete(); Fn_RenderMajPanel(); }, () => Fn_RenderParametres());
       break;
     }
-    case 'ghtoken-voir': { const inp = document.getElementById('p-ghtoken'); if (inp) inp.type = (inp.type === 'password') ? 'text' : 'password'; break; }
     case 'ghtoken-enregistrer': {
       const inp = document.getElementById('p-ghtoken');
       const v = inp ? String(inp.value || '').trim() : '';
@@ -6714,18 +6813,6 @@ function Fn_OnChange(e) {
       if (Fn_PoserCapture(el.value)) { rt.collageErreur = null; el.value = ''; }
       else rt.collageErreur = 'Ce texte ne porte pas les bornes d’une capture. Utilisez les trois zones écran par écran ci-dessous, ou relancez la capture.';
       setTimeout(() => Fn_RenderAcquisition(), 0);
-      break;
-    }
-    case 'collage-saisie': {
-      // Le re-rendu est DIFFÉRÉ d'un tour de boucle : « change » part au blur,
-      // donc avant le clic sur le bouton voisin. Remplacer le DOM tout de suite
-      // détacherait ce bouton et son clic n'atteindrait jamais son gestionnaire.
-      // Même aiguillage que le bouton « Coller » : la saisie manuelle doit se
-      // comporter à l'identique, c'est le seul chemin possible en fichier local.
-      if (Fn_PoserCapture(el.value) || Fn_PoserCollage(id, el.value)) {
-        el.value = '';
-        setTimeout(() => Fn_RenderAcquisition(), 0);
-      }
       break;
     }
     case 'xlsx': {
@@ -6903,6 +6990,11 @@ function Fn_TickCompteurs() {
   if (principal) {
     principal.addEventListener('click', Fn_OnAction);
     principal.addEventListener('change', Fn_OnChange);
+    // Un seul écouteur de frappe, délégué comme les autres. Il ne sert qu'à
+    // rendre un bouton disponible dès que sa saisie est complète : il ne mute
+    // jamais l'état et ne redessine jamais la zone où l'on tape — remplacer le
+    // DOM sous les doigts ferait perdre le curseur à chaque caractère.
+    principal.addEventListener('input', Fn_OnSaisie);
   }
   // Capture, donc AVANT tout autre gestionnaire : un appui long qui vient
   // d'ouvrir l'aide ne doit pas déclencher la commande au relâchement.

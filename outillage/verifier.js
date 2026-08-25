@@ -632,6 +632,106 @@ setTimeout(() => {
     verifier('calendrier : squelette généré hors appel au modèle', !!squelette, JSON.stringify(squelette));
   } catch (e) { ko('migration et calculs déterministes', e.message); }
 
+  /* --- L'ARITHMÉTIQUE DU PORTEFEUILLE, sur un état contrôlé ---
+     Toutes ces grandeurs sont calculées par l'application et JAMAIS demandées au
+     modèle : elles doivent donc être justes sans recours. Le portefeuille d'essai
+     est minuscule et ses résultats se vérifient de tête, ce qui est le seul moyen
+     de tenir un test d'arithmétique dans le temps.
+       Alpha SA  — action EUR, 100 × 20 €, veille 25 €   → 2 000 €, −20 %
+       Beta Inc  — action USD,  50 × 10 $, taux 0,90     →   450 €
+       Turbo     — short sur Beta, 200 titres, parité 10 → −180 € d'exposition
+     Marge : titres 3 000, VL 2 000, marge libre 500. */
+  console.log('\nG bis. Calculs — l’arithmétique du portefeuille');
+  try {
+    const R = q => vm.runInContext(q, ctx);
+    const J = q => JSON.parse(JSON.stringify(R(q)));
+    const pres = (v, attendu, tol) => v != null && Math.abs(v - attendu) <= (tol == null ? 0.005 : tol);
+
+    R('Var_State.positions = []; Var_State.controles = []; Var_State.calendrier = [];'
+      + 'Var_State.fx = { taux: { USD: 0.9 }, ts: Date.now(), origine: "essai" };'
+      + 'Var_State.marge = { titres: 3000, cash: -1000, vl: 2000, risque: 1500, libre: 500, as: "18:00", ts: Date.now() };'
+      + 'Var_State.positions = ['
+      + ' { id: "P1", ticker: "ALP", isin: null, detention: { nom: "Alpha SA", qte: 100, dev: "EUR", cloture: 20,'
+      + '     clotureVeille: 25, valEurExport: 2500, facteurs: ["tech"], poche: "CONVICTION", ts: Date.now() },'
+      + '   produit: { type: "action", sens: "long", histBarriere: [] }, desk: {}, marche: {}, valo: {}, consensus: {} },'
+      + ' { id: "P2", ticker: "BET", isin: null, detention: { nom: "Beta Inc", qte: 50, dev: "USD", cloture: 10,'
+      + '     clotureVeille: 10, valEurExport: 999, facteurs: ["tech"], poche: "CONVICTION", ts: Date.now() },'
+      + '   produit: { type: "action", sens: "long", histBarriere: [] }, desk: {}, marche: {}, valo: {}, consensus: {} },'
+      + ' { id: "P3", ticker: null, isin: null, detention: { nom: "ZED Beta Turbo Short", qte: 200, dev: "EUR", cloture: 1,'
+      + '     clotureVeille: 1, valEurExport: null, facteurs: ["tech"], poche: "COUVERTURE", ts: Date.now() },'
+      + '   produit: { type: "derive", emetteur: "ZED", sousJacent: "Beta Inc", sens: "short", barriere: 12, strike: 12,'
+      + '     parite: 10, levier: 2, histBarriere: [{ d: "2026-08-01", bar: 12, str: 12 }, { d: "2026-08-15", bar: 11.72, str: 11.72 }] },'
+      + '   desk: {}, marche: {}, valo: {}, consensus: {} }];'
+      + 'Fn_Recalculer();');
+
+    const p = J('Var_State.positions.map(x => ({ id: x.id, v: x.detention.valEur, pct: x.detention.pctVN,'
+      + ' vr: x.detention.var, d: x.produit.deltaEur, db: x.produit.distBarriere, po: x.produit.portageMensuel }))');
+    const par = k => p.find(x => x.id === k);
+
+    verifier('valeur du jour = quantité × cours du JOUR × taux, jamais le montant de l’export',
+      pres(par('P1').v, 2000) && pres(par('P2').v, 450),
+      'P1 ' + par('P1').v + ' (attendu 2000, export 2500) · P2 ' + par('P2').v + ' (attendu 450, export 999)');
+    verifier('variation du jour = (cours − clôture de la veille) ÷ clôture de la veille',
+      pres(par('P1').vr, -20) && pres(par('P2').vr, 0), 'P1 ' + par('P1').vr + ' % · P2 ' + par('P2').vr + ' %');
+    verifier('part de la valeur nette rapportée à la valeur liquidative lue',
+      pres(par('P1').pct, 100) && pres(par('P2').pct, 22.5, 0.05),
+      'P1 ' + par('P1').pct + ' % · P2 ' + par('P2').pct + ' %');
+    verifier('exposition d’un turbo : quantité ÷ parité × cours du sous-jacent, AU TAUX DU SOUS-JACENT',
+      pres(par('P3').d, -180), par('P3').d + ' € (attendu −180 : 200 ÷ 10 × 10 $ × 0,90, signé short)');
+    verifier('distance à la barrière, mesurée sur le cours du sous-jacent',
+      pres(par('P3').db, 20), par('P3').db + ' % (attendu 20 : barrière 12 contre cours 10)');
+    verifier('portage mensuel déduit de la dérive du financement sur au moins une semaine',
+      pres(par('P3').po, 10.8, 0.05), par('P3').po + ' €/mois (attendu 10,80 : 0,02/j ÷ 10 × 180 × 30)');
+
+    const m = J('Var_State.marge');
+    verifier('levier brut = titres ÷ valeur liquidative · coussin = marge libre ÷ valeur liquidative',
+      pres(m.levier, 1.5) && pres(m.coussinPct, 25), 'levier ' + m.levier + ' · coussin ' + m.coussinPct + ' %');
+
+    const prof = J('Fn_ProfilExposition()');
+    const tech = prof.expositionNetteParFacteur.find(f => f.cle === 'tech');
+    const brut = prof.expositionBruteParFacteur.find(f => f.cle === 'tech');
+    verifier('exposition NETTE par facteur : la jambe short se retranche de la longue',
+      tech && tech.deltaEur === 2270 && pres(tech.pctVN, 113.5, 0.05),
+      JSON.stringify(tech) + ' (attendu 2 270 € = 2000 + 450 − 180)');
+    verifier('exposition BRUTE par facteur : la jambe short s’y ajoute en valeur absolue',
+      brut && brut.deltaEur === 2630, JSON.stringify(brut) + ' (attendu 2 630 €)');
+    const dev = k => (prof.expositionParDevise.find(d => d.cle === k) || {}).deltaEur;
+    verifier('exposition par devise : le turbo compte dans SA devise de cotation',
+      dev('EUR') === 1820 && dev('USD') === 450, 'EUR ' + dev('EUR') + ' · USD ' + dev('USD'));
+
+    const gap = J('Fn_ImpactGap(Var_State.positions[2], -10)');
+    verifier('impact d’un écart de cours : amplitude × exposition, signe compris',
+      pres(gap.eur, 18) && pres(gap.pctVN, 0.9, 0.01), JSON.stringify(gap) + ' (attendu +18 € sur un short qui gagne à la baisse)');
+
+    // Sans bloc de marge, la valeur nette est la SOMME des lignes : elle doit se
+    // calculer APRÈS leur mise à jour, sinon chaque poids se rapporte à la veille.
+    R('Var_State.marge = null; Fn_Recalculer();');
+    const sansMarge = J('({ vn: Fn_ValeurNette(), pct: Var_State.positions[0].detention.pctVN })');
+    // 2 650 = 2 000 + 450 + 200 : la VALEUR d'un turbo est son prix de marché
+    // (200 × 1 €), pas son exposition (−180 €). Les deux ne se confondent jamais —
+    // la valeur nette somme des valeurs, l'exposition somme des deltas.
+    verifier('sans bloc de marge, la valeur nette somme les VALEURS de marché du jour, pas les expositions',
+      pres(sansMarge.vn.vn, 2650) && sansMarge.vn.approx === true && pres(sansMarge.pct, 75.47, 0.05),
+      JSON.stringify(sansMarge));
+
+    // Mémorisation : un seul calcul par état, invalidé par le recalcul.
+    verifier('les agrégats ne sont calculés qu’UNE fois par état',
+      R('Fn_ProfilExposition() === Fn_ProfilExposition()') === true);
+    verifier('un recalcul invalide les agrégats mémorisés',
+      R('(function(){ var a = Fn_ProfilExposition(); Fn_Recalculer(); return a !== Fn_ProfilExposition(); })()') === true);
+
+    // La clôture de référence ne glisse pas quand la même séance est réanalysée.
+    R('Var_State.marge = { titres: 3000, cash: -1000, vl: 2000, risque: 1500, libre: 500, as: "18:00", ts: Date.now() };'
+      + 'Var_State.positions[0].detention.clotureVeille = 25;'
+      + 'Var_State._runtime.essai2 = { propositions: [{ id: "P1", nom: "Alpha SA", qte: 100, dev: "EUR", cloture: 21,'
+      + '  clotureVeille: null, montantDev: null, montantEur: null, levier: null, source: "essai" }],'
+      + '  controles: [], capPos: null, capOrd: null, capExe: null, reg: null, meta: null };'
+      + 'Fn_IntegrerEntrees(Var_State._runtime.essai2);');
+    const meme = J('({ cv: Var_State.positions[0].detention.clotureVeille, c: Var_State.positions[0].detention.cloture })');
+    verifier('réanalyser la MÊME séance ne fait pas glisser la clôture de référence',
+      meme.cv === 25 && meme.c === 21, JSON.stringify(meme) + ' (la veille doit rester 25, pas devenir 20)');
+  } catch (e) { ko('l’arithmétique du portefeuille', e.message); }
+
   /* --- Le texte envoyé au modèle --- */
   console.log('\nH. Contrat d’appel');
   try {
