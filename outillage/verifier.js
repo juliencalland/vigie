@@ -317,7 +317,7 @@ const CAPTURE = [
 // sur un relevé qui contient de vraies transactions.
 const EXECUTE = 'Novax Semiconducteurs Inc Achat  | 14:02 $ 118,20  | 1 182,00  | Qté 10 04/08/2026  ';
 
-setTimeout(() => {
+setTimeout(async () => {
   const rendus = ['Fn_RenderEntete', 'Fn_RenderVigie', 'Fn_RenderAcquisition', 'Fn_RenderMajPanel',
     'Fn_RenderDebrief', 'Fn_RenderDecouvertes', 'Fn_RenderCours', 'Fn_RenderDiscipline',
     'Fn_RenderParametres', 'Fn_RenderCalendrier', 'Fn_RenderAValider', 'Fn_RenderTimeline'];
@@ -731,6 +731,202 @@ setTimeout(() => {
     verifier('réanalyser la MÊME séance ne fait pas glisser la clôture de référence',
       meme.cv === 25 && meme.c === 21, JSON.stringify(meme) + ' (la veille doit rester 25, pas devenir 20)');
   } catch (e) { ko('l’arithmétique du portefeuille', e.message); }
+
+  /* --- L'EXPORT DU COURTIER, lu pour de bon ---
+     Le lecteur de classeur n'était vérifié que par sa PRÉSENCE. Il fait pourtant
+     foi sur les quantités, les identifiants et les devises, et c'est de lui que
+     se déduit le taux de change : une régression y passait inaperçue.
+     Le classeur d'essai est un vrai fichier ZIP construit ici, entrées STOCKÉES
+     sans compression — le bac à sable n'a pas de décompresseur, et le lecteur
+     accepte la méthode 0, comme n'importe quel outil d'archive. */
+  console.log('\nG ter. Export du courtier — lecture réelle d’un classeur');
+  try {
+    const enc = new TextEncoder();
+    const u16 = n => [n & 255, (n >> 8) & 255];
+    const u32 = n => [n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >>> 24) & 255];
+    const faireZip = fichiers => {
+      const loc = [], cen = [];
+      let offset = 0;
+      fichiers.forEach(f => {
+        const nom = Array.from(enc.encode(f.nom)), data = Array.from(enc.encode(f.contenu));
+        const entete = [0x50, 0x4b, 0x03, 0x04].concat(u16(20), u16(0), u16(0), u16(0), u16(0),
+          u32(0), u32(data.length), u32(data.length), u16(nom.length), u16(0), nom, data);
+        cen.push([0x50, 0x4b, 0x01, 0x02].concat(u16(20), u16(20), u16(0), u16(0), u16(0), u16(0),
+          u32(0), u32(data.length), u32(data.length), u16(nom.length), u16(0), u16(0),
+          u16(0), u16(0), u32(0), u32(offset), nom));
+        offset += entete.length;
+        loc.push(entete);
+      });
+      const cl = [].concat.apply([], loc), cc = [].concat.apply([], cen);
+      const fin = [0x50, 0x4b, 0x05, 0x06].concat(u16(0), u16(0), u16(fichiers.length),
+        u16(fichiers.length), u32(cc.length), u32(cl.length), u16(0));
+      return new Uint8Array(cl.concat(cc, fin));
+    };
+    const mots = ['Produit', 'Ticker/ISIN', 'Qté', 'Clôture', 'Devise', 'Montant', 'Montant EUR',
+      'Untel SA', 'XX0000000019', 'EUR', 'Autre Inc', 'XX0000000027', 'USD'];
+    const ss = '<?xml version="1.0"?><sst count="' + mots.length + '" uniqueCount="' + mots.length + '">'
+      + mots.map(m => '<si><t>' + m.replace(/&/g, '&amp;') + '</t></si>').join('') + '</sst>';
+    const cs = (r, c, i) => '<c r="' + c + r + '" t="s"><v>' + i + '</v></c>';
+    const cn = (r, c, v) => '<c r="' + c + r + '"><v>' + v + '</v></c>';
+    const feuille = '<?xml version="1.0"?><worksheet><sheetData>'
+      + '<row r="1">' + ['A', 'B', 'C', 'D', 'E', 'F', 'G'].map((c, i) => cs(1, c, i)).join('') + '</row>'
+      + '<row r="2">' + cs(2, 'A', 7) + cs(2, 'B', 8) + cn(2, 'C', 120) + cn(2, 'D', '12.1')
+        + cs(2, 'E', 9) + cn(2, 'F', 1452) + cn(2, 'G', 1452) + '</row>'
+      + '<row r="3">' + cs(3, 'A', 10) + cs(3, 'B', 11) + cn(3, 'C', 50) + cn(3, 'D', 10)
+        + cs(3, 'E', 12) + cn(3, 'F', 500) + cn(3, 'G', 450) + '</row>'
+      + '<row r="4">' + cn(4, 'G', -1000) + '</row>'
+      + '</sheetData></worksheet>';
+    const octets = faireZip([
+      { nom: 'xl/sharedStrings.xml', contenu: ss },
+      { nom: 'xl/worksheets/sheet1.xml', contenu: feuille }
+    ]);
+    ctx.__essaiXlsx = { name: 'export-essai.xlsx', size: octets.length,
+      arrayBuffer: () => Promise.resolve(octets.buffer.slice(octets.byteOffset, octets.byteOffset + octets.byteLength)) };
+    const lu = await vm.runInContext('Fn_LireXlsx(__essaiXlsx)', ctx);
+    verifier('classeur lu sans aucune bibliothèque : quatre lignes de cellules',
+      !!lu && lu.lignes.length === 4, lu ? lu.lignes.length + ' ligne(s)' : 'illisible');
+    ctx.__essaiReg = lu;
+    const reg = JSON.parse(JSON.stringify(vm.runInContext('Fn_RegistreDepuisXlsx(__essaiReg)', ctx)));
+    verifier('en-tête ignoré, deux positions retenues, aucune ligne rejetée',
+      reg.lignes.length === 2 && reg.inconnues.length === 0,
+      reg.lignes.length + ' position(s), ' + reg.inconnues.length + ' rejetée(s)');
+    verifier('quantités, devises et identifiants viennent du classeur, qui fait foi',
+      reg.lignes[0].qte === 120 && reg.lignes[0].dev === 'EUR' && reg.lignes[0].isin === 'XX0000000019'
+      && reg.lignes[1].qte === 50 && reg.lignes[1].dev === 'USD' && reg.lignes[1].isin === 'XX0000000027',
+      JSON.stringify(reg.lignes.map(l => l.qte + '/' + l.dev + '/' + l.isin)));
+    verifier('la colonne de clôture est lue comme la VEILLE, jamais comme le cours du jour',
+      reg.lignes[0].clotureVeille === 12.1 && reg.lignes[1].clotureVeille === 10,
+      JSON.stringify(reg.lignes.map(l => l.clotureVeille)));
+    verifier('taux de change DÉDUIT du fichier : montant en euros ÷ montant en devise',
+      reg.taux.USD === 0.9 && reg.taux.EUR === undefined, JSON.stringify(reg.taux));
+    verifier('la ligne de liquidités est reconnue par sa FORME, jamais par son numéro',
+      !!reg.liquidites && reg.liquidites.montantEur === -1000, JSON.stringify(reg.liquidites));
+    // Un fichier qui n'est pas une archive doit le dire, sans casser la page.
+    ctx.__essaiPdf = { name: 'faux.pdf', size: 5,
+      arrayBuffer: () => Promise.resolve(new Uint8Array([37, 80, 68, 70, 45]).buffer) };
+    let refus = null;
+    try { await vm.runInContext('Fn_LireXlsx(__essaiPdf)', ctx); } catch (e) { refus = String(e.message || e); }
+    verifier('un fichier qui n’est pas une archive est refusé avec un message lisible',
+      !!refus && /signature d’archive/.test(refus), refus || 'aucune erreur levée');
+  } catch (e) { ko('lecture réelle d’un classeur', e.message); }
+
+  /* --- LE CYCLE DE VIE D'UN ÉVÉNEMENT, et l'économie qu'il porte ---
+     Un événement dont les chiffres n'ont pas bougé ne doit JAMAIS repartir au
+     desk. C'est la principale économie du cycle, et elle repose entièrement sur
+     l'empreinte : un seul champ qui change en douce, et tout le calendrier se
+     repaie à chaque analyse. */
+  console.log('\nG quater. Calendrier — l’empreinte et ce qu’elle économise');
+  try {
+    const R = q => vm.runInContext(q, ctx);
+    const J = q => JSON.parse(JSON.stringify(R(q)));
+    R('Var_State.calendrier = [];'
+      + 'Fn_PoserEvenement({ id: "ev1", isin: "P1", date: "2099-01-01", statut: "prevu", source: "regle:test",'
+      + '  libelle: "Publication trimestrielle", court: "Publication", sev: "Warn", conf: true, tags: ["P1"],'
+      + '  metriques: [{ l: "poids", v: "12 %" }] });');
+    verifier('un événement neuf est à écrire : il n’a pas encore de textes',
+      R('Fn_TextesAEcrire(Var_State.calendrier[0])') === true);
+
+    // Le desk écrit ses textes ET ajoute une métrique de son cru.
+    R('Fn_IntegrerDesk({ v: 3, evTextes: [{ id: "ev1", surv: "à lire", arb: "si X alors Y", prat: "règle",'
+      + '  m: [{ l: "gap implicite", v: "8 %" }] }] }, null);');
+    const apres = J('Var_State.calendrier[0]');
+    verifier('le desk peut AJOUTER une métrique, et l’empreinte est prise APRÈS l’ajout',
+      apres.metriques.length === 2 && apres.textes.empreinte.indexOf('gap implicite') >= 0,
+      JSON.stringify(apres.metriques) + ' → ' + apres.textes.empreinte);
+    verifier('textes écrits : l’événement ne repart plus au desk',
+      R('Fn_TextesAEcrire(Var_State.calendrier[0])') === false);
+
+    // Une régénération du squelette repose le MÊME événement, avec les seules
+    // métriques de la règle. Rien ne doit bouger.
+    R('Fn_PoserEvenement({ id: "ev1", isin: "P1", date: "2099-01-01", statut: "prevu", source: "regle:test",'
+      + '  libelle: "Publication trimestrielle", court: "Publication", sev: "Warn", conf: true, tags: ["P1"],'
+      + '  metriques: [{ l: "poids", v: "12 %" }] });');
+    const rejoue = J('Var_State.calendrier[0]');
+    verifier('reposer l’événement ne perd PAS la métrique ajoutée par le desk',
+      rejoue.metriques.length === 2 && rejoue.metriques.some(m => m.l === 'gap implicite'),
+      JSON.stringify(rejoue.metriques));
+    verifier('et il ne repart donc PAS au desk — c’est là qu’est l’économie',
+      R('Fn_TextesAEcrire(Var_State.calendrier[0])') === false,
+      'empreinte stockée ' + rejoue.textes.empreinte + ' · calculée ' + R('Fn_EmpreinteEvenement(Var_State.calendrier[0])'));
+
+    // Un chiffre qui BOUGE, en revanche, doit le renvoyer.
+    R('Fn_PoserEvenement({ id: "ev1", isin: "P1", date: "2099-01-01", statut: "prevu", source: "regle:test",'
+      + '  libelle: "Publication trimestrielle", court: "Publication", sev: "Crit", conf: true, tags: ["P1"],'
+      + '  metriques: [{ l: "poids", v: "31 %" }] });');
+    verifier('un chiffre qui a matériellement bougé le renvoie au desk',
+      R('Fn_TextesAEcrire(Var_State.calendrier[0])') === true);
+
+    // Un événement archivé ne se réécrit jamais, quoi qu'en dise la règle.
+    R('Var_State.calendrier[0].statut = "debriefe";');
+    verifier('un événement débriefé est archivé : la règle ne le ressuscite pas',
+      R('Fn_PoserEvenement({ id: "ev1", date: "2099-02-02", statut: "prevu", source: "regle:test",'
+        + ' libelle: "Autre", court: "Autre", sev: "Info", conf: true, tags: [], metriques: [] })') === 'archive'
+      && J('Var_State.calendrier[0].date') === '2099-01-01');
+  } catch (e) { ko('le cycle de vie d’un événement', e.message); }
+
+  /* --- L'ARBITRAGE DE SYNCHRONISATION ---
+     C'est le seul code de l'application capable de DÉTRUIRE des données sans que
+     personne ne clique : il décide, seul, si l'état distant remplace le local.
+     Les trois cas sont rejoués ici contre un dépôt simulé. */
+  console.log('\nG quinquies. Synchronisation — qui gagne, et pourquoi');
+  try {
+    const R = q => vm.runInContext(q, ctx);
+    const J = q => JSON.parse(JSON.stringify(R(q)));
+    const vraiFetch = ctx.fetch, vraiLs = ctx.localStorage.getItem;
+    // Jeton présent, sinon Fn_SyncTirer s'arrête avant tout arbitrage.
+    ctx.localStorage.getItem = c => (/ghtoken/.test(String(c)) ? 'jeton-essai' : null);
+    let dernierPut = null;
+    const poserDepot = etat => {
+      ctx.fetch = (url, opt) => {
+        if (opt && opt.method === 'PUT') { dernierPut = JSON.parse(opt.body); return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ content: { sha: 'sha2' } }) }); }
+        const b = Buffer.from(JSON.stringify(etat), 'utf8').toString('base64');
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ sha: 'sha1', content: b }) });
+      };
+    };
+    const distantPlein = { v: 3, etatTs: 5000, positions: [{ id: 'D1', detention: { nom: 'Ligne distante', qte: 1, dev: 'EUR' }, produit: {}, desk: {} }], calendrier: [{ id: 'e9', date: '2099-01-01', statut: 'prevu', libelle: 'Distante', metriques: [] }] };
+
+    // Cas 1 — le distant est plus récent : il gagne, c'est la règle générale.
+    poserDepot(distantPlein);
+    R('Var_State.etatTs = 1000; Var_State.razTs = null; Var_State.positions = []; Var_State.calendrier = [];'
+      + 'Var_State.derniereMaj = 4000; Var_State._runtime.syncSha = null;');
+    await R('Fn_SyncTirer()');
+    verifier('le distant plus récent est adopté — « le plus récent gagne »',
+      J('Var_State.positions.length') === 1 && J('Var_State.etatTs') === 5000,
+      'positions ' + J('Var_State.positions.length') + ' · etatTs ' + J('Var_State.etatTs'));
+
+    // Cas 2 — appareil vierge, distant rempli : la ceinture de sécurité joue,
+    // quels que soient les horodatages.
+    poserDepot(distantPlein);
+    R('Var_State.etatTs = 99999; Var_State.razTs = null; Var_State.positions = []; Var_State.calendrier = [];'
+      + 'Var_State.derniereMaj = null; Var_State._runtime.syncSha = null;');
+    await R('Fn_SyncTirer()');
+    verifier('un appareil VIERGE adopte un distant rempli, même s’il se croit plus récent',
+      J('Var_State.positions.length') === 1,
+      'positions ' + J('Var_State.positions.length'));
+
+    // Cas 3 — même signature, mais le vide est VOULU : il doit gagner, et partir.
+    poserDepot(distantPlein);
+    dernierPut = null;
+    R('Var_State.positions = []; Var_State.calendrier = []; Var_State.derniereMaj = null;'
+      + 'Var_State._runtime.syncSha = "sha1"; Var_State._runtime.syncDernierPushTs = 0;'
+      + 'Var_State.razTs = Date.now(); Var_State.etatTs = Var_State.razTs;');
+    await R('Fn_SyncTirer()');
+    verifier('une remise à zéro VOULUE n’est PAS défaite par la synchronisation',
+      J('Var_State.positions.length') === 0 && J('Var_State.calendrier.length') === 0,
+      'positions ' + J('Var_State.positions.length') + ' · événements ' + J('Var_State.calendrier.length'));
+    // L’envoi est déclenché PAR Fn_SyncTirer, sans attente : on laisse la chaîne
+    // de promesses se dénouer avant de regarder ce qui est parti.
+    await new Promise(r => setTimeout(r, 30));
+    const envoye = dernierPut ? JSON.parse(Buffer.from(dernierPut.content, 'base64').toString('utf8')) : null;
+    verifier('et le vide part AU DÉPÔT, sinon le prochain appareil le restaurerait',
+      !!envoye && (envoye.positions || []).length === 0 && (envoye.calendrier || []).length === 0,
+      envoye ? 'positions ' + (envoye.positions || []).length : 'aucun envoi');
+    verifier('l’aveu de remise à zéro s’efface une fois le dépôt vidé',
+      J('Var_State.razTs') === null, String(J('Var_State.razTs')));
+
+    ctx.fetch = vraiFetch;
+    ctx.localStorage.getItem = vraiLs;
+  } catch (e) { ko('l’arbitrage de synchronisation', e.message); }
 
   /* --- Le texte envoyé au modèle --- */
   console.log('\nH. Contrat d’appel');

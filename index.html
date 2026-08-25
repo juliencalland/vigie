@@ -419,7 +419,7 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202608250547';
+const Cst_Version = 'vigie-202608251715';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -666,7 +666,14 @@ const Cst_SitesRecherche = [
 // ================================================================
 // AUCUNE donnée de portefeuille embarquée : le dépôt est PUBLIC.
 // ================================================================
-const Cst_SeedEtat = { marge: null, fx: null, positions: [], ordres: [], calendrier: [] };
+/* UNE VIGIE NEUVE — la liste des champs de portefeuille, écrite UNE seule fois.
+   Fn_RemiseAZero la relit champ par champ plutôt que de tenir sa propre liste :
+   deux listes à garder d’accord, c’est une de trop, et c’est celle qu’on oublie
+   de compléter le jour où l’on ajoute un champ. */
+const Cst_SeedEtat = { marge: null, fx: null, theses: {}, derniereMaj: null,
+  derniereEnrichissement: null, filtreTag: null, filtreJour: null,
+  positions: [], ordres: [], executes: [], calendrier: [], decouvertes: [],
+  actions: [], controles: [], instruments: [], majJournaux: [], captures: [] };
 const Cst_SeedEvents = [];
 
 /* ================================================================
@@ -722,6 +729,7 @@ const Var_State = {
   filtreTag: null,
   filtreJour: null,
   filtreDecouvertes: 'vives',
+  razTs: null,        // horodatage de la dernière remise à zéro VOULUE — voir Fn_SyncTirer
   derniereMaj: null,           // dernière passe DESK réussie
   derniereEnrichissement: null, // dernière passe ENRICHISSEMENT réussie
   freqRappel: 'hebdomadaire',
@@ -775,7 +783,7 @@ function Fn_PersisterSansHorodatage() {
 const Cst_ClesEtat = ['onglet', 'captures', 'fx', 'marge', 'positions', 'ordres', 'executes',
   'calendrier', 'decouvertes', 'actions', 'controles', 'instruments', 'majJournaux',
   'filtreTag', 'filtreJour', 'filtreDecouvertes', 'derniereMaj', 'derniereEnrichissement',
-  'freqRappel', 'sitesRecherche', 'sitesBloques', 'modeleMAJ', 'effortMAJ'];
+  'freqRappel', 'sitesRecherche', 'sitesBloques', 'modeleMAJ', 'effortMAJ', 'razTs'];
 const Cst_ClesEtatObjet = ['theses'];
 const Cst_ClesEtatFusion = ['seuils', 'tarifs', 'cumulApi', 'panneaux'];
 
@@ -1203,17 +1211,16 @@ function Fn_TelechargerEtat() {
       toujours un distant rempli » — restaurait tout à la synchronisation
       suivante, et la remise à zéro semblait n'avoir servi à rien. */
 function Fn_RemiseAZero() {
-  ['positions', 'ordres', 'executes', 'calendrier', 'decouvertes', 'actions',
-    'controles', 'instruments', 'majJournaux', 'captures'].forEach(c => { Var_State[c] = []; });
-  Var_State.theses = {};
-  Var_State.fx = null;
-  Var_State.marge = null;
-  Var_State.derniereMaj = null;
-  Var_State.derniereEnrichissement = null;
-  Var_State.filtreTag = null;
-  Var_State.filtreJour = null;
+  Object.keys(Cst_SeedEtat).forEach(c => {
+    const v = Cst_SeedEtat[c];
+    Var_State[c] = Array.isArray(v) ? [] : (v && typeof v === 'object' ? {} : v);
+  });
   Fn_CollagesVider();
   Var_State._runtime.analyse = null;
+  // L'effacement est DÉCLARÉ, et l'aveu voyage avec l'état. Sans lui, la ceinture
+  // de sécurité de la synchronisation ne peut pas distinguer une vigie vidée
+  // exprès d'un appareil vierge — et défait l'effacement en le restaurant.
+  Var_State.razTs = Date.now();
   Fn_Recalculer();
   Fn_Save();        // tamponne etatTs : l'état vide devient le plus récent
   Fn_SyncPousser(); // et part au dépôt AVANT toute relecture qui le restaurerait
@@ -1269,12 +1276,19 @@ async function Fn_SyncTirer() {
     try { distant = JSON.parse(Fn_B64VersTexte(d.content)); } catch (e) { distant = null; }
     const tsDistant = distant ? (Fn_Num(distant.etatTs) || 0) : 0;
     const tsLocal = Fn_Num(Var_State.etatTs) || 0;
-    // Ceinture de sécurité : un appareil sans substance locale ADOPTE toujours un
-    // distant rempli, quels que soient les horodatages. On n'écrase jamais des
-    // données par du vide.
+    /* Ceinture de sécurité : un appareil sans substance locale ADOPTE toujours un
+       distant rempli, quels que soient les horodatages. On n'écrase jamais des
+       données par du vide.
+       SAUF si ce vide est VOULU. Une remise à zéro produit exactement la même
+       signature qu'un appareil vierge : sans distinguer les deux, la première
+       synchronisation qui suivait restaurait tout ce qu'on venait d'effacer, en
+       silence, et la remise à zéro paraissait n'avoir servi à rien. L'aveu
+       (razTs) est posé par Fn_RemiseAZero, voyage avec l'état, et ne vaut que
+       tant qu'il est le DERNIER geste enregistré sur cet appareil. */
     const localVide = !Var_State.calendrier.length && !Var_State.positions.length && !Var_State.derniereMaj;
     const distantPlein = !!(distant && (((distant.calendrier || distant.events || []).length) || ((distant.positions || []).length)));
-    if (distant && (tsDistant > tsLocal || (localVide && distantPlein))) {
+    const videVoulu = Fn_Num(Var_State.razTs) != null && (tsLocal - Fn_Num(Var_State.razTs)) < 5000;
+    if (distant && (tsDistant > tsLocal || (localVide && distantPlein && !videVoulu))) {
       Fn_AdopterEtat(distant);
       rt.syncDernierPushTs = tsDistant;
       Fn_SyncStatut('✓ état distant repris (' + Fn_FmtHeure(tsDistant) + ')', true);
@@ -1318,6 +1332,9 @@ async function Fn_SyncPousser() {
       const d = await rep.json();
       rt.syncSha = (d.content && d.content.sha) || rt.syncSha;
       rt.syncDernierPushTs = Var_State.etatTs;
+      // Le dépôt porte maintenant le vide : l'aveu de remise à zéro a fait son
+      // office et s'efface, pour que la ceinture de sécurité reprenne son rôle.
+      if (Var_State.razTs) { Var_State.razTs = null; Fn_PersisterSansHorodatage(); }
       Fn_SyncStatut('✓ synchronisé (' + Fn_FmtHeure(Var_State.etatTs) + ')', true);
     } else if (rep) {
       Fn_SyncStatut('erreur envoi GitHub ' + rep.status, false);
@@ -3275,7 +3292,14 @@ function Fn_PoserEvenement(ev) {
   }
   if (existant.statut === 'debriefe' || existant.statut === 'classe') return 'archive';
   existant.date = ev.date;
-  existant.metriques = ev.metriques;
+  /* MÉTRIQUES : la règle fait foi sur SES libellés, mais le desk a pu en AJOUTER
+     (clé « m » de son livrable). Les écraser en bloc ne les perdait pas seulement :
+     l'empreinte changeait, l'événement repassait pour « à réécrire » et repartait
+     au desk — donc se repayait — à CHAQUE régénération du squelette, c'est-à-dire
+     à chaque analyse des entrées. C'était le contraire exact de l'économie que
+     l'empreinte est censée produire. */
+  const ajoutees = (existant.metriques || []).filter(m => !(ev.metriques || []).some(x => x.l === m.l));
+  existant.metriques = (ev.metriques || []).concat(ajoutees);
   existant.sev = ev.sev;
   existant.libelle = ev.libelle;
   existant.court = ev.court;
@@ -6126,7 +6150,18 @@ async function Fn_LancerAppel(passe) {
     budget = Fn_BudgetDesk(charge.aDebriefer.length);
     unites = charge.unites; nbLignes = Var_State.positions.length; nbDebriefs = charge.aDebriefer.length;
   }
-  rt.enCours = true;
+  /* ARMEMENT — et l'ORDRE compte. Tout ce qui doit être défait plus bas par le
+     bloc « finally » n'est armé qu'APRÈS ce qui peut encore échouer sans
+     conséquence : construire le journal, empiler ses phases. Armé d'abord, un
+     simple échec de rendu au milieu de la préparation laissait _runtime.enCours
+     à vrai pour toute la session — l'application se croyait alors en appel, le
+     bouton restait sur « Annuler », et les deux écouteurs de page fuyaient. */
+  const journal = Fn_NouveauJournal(mode.mode, passe, unites);
+  journal.listeRecherches = [];
+  journal.budget = budget;
+  journal.nbLignes = nbLignes;
+  journal.nbDebriefs = nbDebriefs;
+  Cst_PhasesMAJ.forEach(p => journal.phases.push({ cle: p[0], statut: 'attente', message: p[1], ts: Date.now() }));
   rt.abort = (typeof AbortController !== 'undefined') ? new AbortController() : null;
   rt.dernierSignal = (mode.mode === 'byok') ? Date.now() : null;
   rt._stallAbort = false;
@@ -6147,16 +6182,7 @@ async function Fn_LancerAppel(passe) {
   // l'appel ET son coût, déjà facturé.
   rt.onQuitter = ev => { ev.preventDefault(); ev.returnValue = ''; return ''; };
   window.addEventListener('beforeunload', rt.onQuitter);
-  const journal = Fn_NouveauJournal(mode.mode, passe, unites);
-  journal.listeRecherches = [];
-  journal.budget = budget;
-  journal.nbLignes = nbLignes;
-  journal.nbDebriefs = nbDebriefs;
-  Cst_PhasesMAJ.forEach(p => journal.phases.push({ cle: p[0], statut: 'attente', message: p[1], ts: Date.now() }));
-  Fn_Phase(journal, 'contexte', 'ok', passe === 'enrichissement'
-    ? 'Contexte : ' + nbLignes + ' ligne(s) à rafraîchir, les autres sont fraîches et ne repartent pas'
-    : 'Contexte : ' + (contrat.evSansTexte || []).length + ' texte(s) à écrire, ' + nbDebriefs + ' débrief(s), '
-      + Var_State.positions.length + ' ligne(s) — aucun chiffre n’est demandé au modèle');
+  rt.enCours = true; // dernier geste d'armement : au-delà, le « finally » désarme tout
   rt.timers.chrono = setInterval(() => {
     const el = document.getElementById('maj-chrono');
     if (el) el.textContent = Fn_DureeFmt(Date.now() - journal.debutTs);
@@ -6175,6 +6201,10 @@ async function Fn_LancerAppel(passe) {
     }
   }, 1000);
   try {
+    Fn_Phase(journal, 'contexte', 'ok', passe === 'enrichissement'
+      ? 'Contexte : ' + nbLignes + ' ligne(s) à rafraîchir, les autres sont fraîches et ne repartent pas'
+      : 'Contexte : ' + (contrat.evSansTexte || []).length + ' texte(s) à écrire, ' + nbDebriefs + ' débrief(s), '
+        + Var_State.positions.length + ' ligne(s) — aucun chiffre n’est demandé au modèle');
     const sitesAutorises = Fn_SitesAutorises();
     const ctxTexte = { passe, contrat, budget, sitesAutorises };
     const contenus = [{ type: 'text', text: Fn_BuildPromptMAJ(ctxTexte) }];
