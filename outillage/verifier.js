@@ -1808,6 +1808,18 @@ setTimeout(async () => {
     verifier('case décochée : aucune zone de saisie, l’écran ne promet rien',
       String(R('Fn_HtmlThese(Var_State.positions[0])')).indexOf('these-texte') < 0,
       'aucune zone avant de cocher');
+    /* Le bloc de déclarations s’affiche sur TOUTE ligne, quel que soit son poids :
+       la matérialité règle ce que le desk écrit, pas ce que l’utilisateur a le droit
+       de formaliser. Réservé aux lignes lourdes, il interdisait d’écrire une
+       invalidation sur un produit à levier — celui qui en réclame le plus. */
+    ['compact', 'ligne', 'derive'].forEach(niv => {
+      R('Var_State.positions[0].desk.niveau = ' + JSON.stringify(niv) + ';');
+      verifier('les déclarations restent accessibles au niveau « ' + niv + ' »',
+        /these-check/.test(String(R('Fn_HtmlCartePosition(Var_State.positions[0])'))),
+        'bloc présent');
+    });
+    R('Var_State.positions[0].desk.niveau = ' + JSON.stringify('complet') + ';');
+
     ctx.__faux = { target: { closest: () => ({
       getAttribute: n => ({ 'data-action': 'these-check', 'data-id': 'L1', 'data-champ': 'ecrite' })[n],
       checked: true }) } };

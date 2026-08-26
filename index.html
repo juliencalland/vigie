@@ -441,7 +441,7 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202608262021';
+const Cst_Version = 'vigie-202608262033';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -2134,8 +2134,8 @@ const Cst_AidePanneaux = {
    quand vous l'écrivez. */
 const Cst_ChampsThese = {
   ecrite: { cle: 'texte', max: 600, invite: 'Pourquoi vous détenez cette ligne, en vos termes. Le desk la confrontera à ce qu’il observe au lieu d’écrire la sienne dans le vide.' },
-  invalidation: { cle: 'invalTexte', max: 300, invite: 'Le fait précis qui vous ferait sortir. Le desk vous préviendra s’il le voit se produire — c’est la seule façon qu’il en ait.' },
-  objectif: { cle: 'objTexte', max: 250, invite: 'Votre objectif de cours ou de valorisation, et son échéance. Le desk le comparera au multiple et au consensus qu’il collecte.' }
+  invalidation: { cle: 'invalTexte', max: 300, invite: 'Un fait OBSERVABLE de l’extérieur, et daté si possible — « pas de commande ROSIE avant fin 2026 ». Le desk vous préviendra s’il le voit se produire ; il ne peut pas surveiller ce qu’il ne voit pas, comme votre prix de revient.' },
+  objectif: { cle: 'objTexte', max: 250, invite: 'Un NIVEAU et une échéance — « 600 USD d’ici mi-2027 », « PER de 25 ». Un horizon de détention (« garder 5 ans ») n’est pas un objectif : le desk ne peut le confronter à aucun multiple.' }
 };
 const Cst_AideThese = {
   ecrite: { t: 'J’ai écrit MA thèse', d: 'Vous déclarez avoir formalisé, quelque part, la raison de détenir cette ligne. C’est une déclaration : aucun texte n’est rédigé ni stocké ici. Le desk en est informé au prochain jugement — il ne vous redemandera pas d’écrire une thèse que vous avez déjà, et concentrera sa lecture sur ce qui manque. Sans effet sur le score de discipline : c’est le bouton « Revue faite aujourd’hui » qui le nourrit. Décochable à tout moment.' },
@@ -5691,7 +5691,13 @@ function Fn_HtmlCartePosition(p) {
         + (sj ? ' (' + sj + ')' : '') + ' qui comptent. Ils s’affichent sur la fiche de ce sous-jacent s’il est détenu.')) + '</div></div>';
   }
   h += Fn_HtmlDesk(p);
-  if (p.desk.niveau === 'complet') h += Fn_HtmlThese(p);
+  /* VOS DÉCLARATIONS SUR TOUTES LES LIGNES, quel que soit leur poids. La
+     matérialité règle ce que le DESK écrit — c'est son budget — et ce que le score
+     de discipline mesure. Elle n'a rien à dire sur ce que VOUS avez le droit de
+     formaliser : réserver le bloc aux lignes lourdes interdisait d'écrire une
+     invalidation sur un produit à levier, précisément la position qui en réclame
+     une le plus, puisqu'elle peut être désactivée d'un coup. */
+  h += Fn_HtmlThese(p);
   h += '<div class="cours-ligne"><span class="lib">Profil</span>'
     + '<select data-action="pos-profil" data-id="' + Fn_Esc(p.id) + '">'
     + '<option value="">— non attribué</option>'
