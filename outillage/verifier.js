@@ -788,6 +788,24 @@ setTimeout(async () => {
     verifier('un simple rechargement suffit à faire apparaître les ordres au calendrier',
       auRech === 1, auRech + ' événement(s) d’ordre, sans avoir relancé d’analyse');
 
+    /* 2 ter. LA GRILLE ET LE DÉTAIL DOIVENT DIRE LA MÊME CHOSE. La grille affiche
+       les échus, la frise les excluait : en cliquant sur un jour passé on voyait
+       une pastille dans la case et RIEN en dessous. Un jour explicitement choisi
+       montre donc ce qu'il porte, échus compris. */
+    const frise = () => J('(function () { var j = Var_State.filtreJour;'
+      + ' return Fn_EvenementsFiltres().filter(function (e) { return j || e.statut !== "echu"; }).length; })()');
+    R(socle + 'Var_State.calendrier = [{ id: "ev-hier", isin: null, date: "' + hier + '",'
+      + ' statut: "echu", source: "action", libelle: "Action retenue — essai", court: "Action",'
+      + ' sev: "Info", conf: true, tags: ["ACTION"], metriques: [], textes: {}, debrief: null }];'
+      + 'Var_State.ordres = []; Var_State.filtreJour = null;');
+    const sansFiltre = frise();
+    R('Var_State.filtreJour = "' + hier + '";');
+    const avecFiltre = frise();
+    R('Var_State.filtreJour = null;');
+    verifier('un jour passé explicitement choisi montre ce que sa case annonçait',
+      sansFiltre === 0 && avecFiltre === 1,
+      'sans filtre ' + sansFiltre + ' événement(s), jour choisi ' + avecFiltre);
+
     /* 3. L'ANNONCE ATTENDUE AVANT EXÉCUTION — le point aveugle. */
     R(socle + 'Var_State.agenda = { "untel-sa": { nom: "Untel SA", pubDate: "' + dans3j + '", ts: Date.now() } };'
       + 'Fn_GenererSquelette(); Fn_MajStatutsCalendrier();');

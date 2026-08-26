@@ -419,7 +419,7 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202608261644';
+const Cst_Version = 'vigie-202608261802';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -5225,9 +5225,15 @@ function Fn_HtmlEvCarte(e, opts) {
 function Fn_RenderTimeline() {
   const el = document.getElementById('v-timeline');
   if (!el) return;
-  const evs = Fn_EvenementsFiltres().filter(e => e.statut !== 'echu');
+  /* LES ÉCHUS VIVENT DANS LEUR BANDEAU, pas dans la frise : celle-ci regarde
+     devant. Mais la GRILLE, elle, les affiche — si bien qu'en cliquant sur un jour
+     passé on voyait une pastille dans la case et RIEN en dessous. Quand un jour
+     est explicitement sélectionné, on montre donc ce qu'il porte, échus compris :
+     l'utilisateur a désigné ce jour-là, pas les huit semaines à venir. */
+  const jourChoisi = !!Var_State.filtreJour;
+  const evs = Fn_EvenementsFiltres().filter(e => jourChoisi || e.statut !== 'echu');
   if (!evs.length) {
-    el.innerHTML = '<div class="carte"><div class="vide">Aucun événement à venir. Le squelette des '
+    el.innerHTML = '<div class="carte"><div class="vide">' + (jourChoisi ? 'Aucun événement ce jour-là. ' : '') + 'Aucun événement à venir. Le squelette des '
       + Cst_HorizonSemaines + ' semaines se génère tout seul à chaque analyse des entrées : publications, détachements, ajustements de barrière, échéances d’ordre, seuils de marge et revues périodiques.</div></div>';
     return;
   }
