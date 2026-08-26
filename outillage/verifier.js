@@ -887,6 +887,21 @@ setTimeout(async () => {
     verifier('un instrument suivi entre en collecte d’agenda',
       J('Fn_AgendasAEnrichir().some(function (a) { return a.motif === "instrument suivi"; })') === true,
       J('Fn_AgendasAEnrichir().map(function (a) { return a.nom + " [" + a.motif + "]"; })').join(' | ') || 'aucun');
+    /* 8. UNE ÉCHÉANCE D'ORDRE DÉJÀ PASSÉE ne s'affiche pas platement. La date est
+       lue sur la ligne de l'écran des ordres, et rien ne garantit qu'elle soit
+       celle de l'échéance plutôt qu'une autre date de la ligne. Passée, elle est
+       soit un ordre expiré encore affiché, soit une date mal attribuée : dans les
+       deux cas on le dit. */
+    const hierISO = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const loinISO = new Date(Date.now() + 300 * 86400000).toISOString().slice(0, 10);
+    const val = v => J('Fn_ValiditeOrdre(' + JSON.stringify({ validite: v }) + ')');
+    verifier('une échéance d’ordre DÉPASSÉE est signalée, pas affichée telle quelle',
+      /DÉPASSÉE/.test(val('Continu jusqu’au ' + hierISO)), val('Continu jusqu’au ' + hierISO).slice(0, 60));
+    verifier('une échéance à venir, et une validité sans date, restent intactes',
+      val('Continu jusqu’au ' + loinISO).indexOf('DÉPASSÉE') < 0 && val('Continu') === 'Continu',
+      val('Continu jusqu’au ' + loinISO).slice(0, 40) + ' · ' + val('Continu'));
+    verifier('une validité absente affiche la donnée manquante, jamais du vide',
+      /donnée manquante/.test(val(null)), val(null).slice(0, 50));
     R('Var_State.instruments = []; Var_State.decouvertes = [];');
     R('Var_State.positions = []; Var_State.ordres = []; Var_State.calendrier = []; Var_State.agenda = {}; Fn_Recalculer();');
   } catch (e) { ko('les ordres en attente et leurs annonces', String((e && e.stack) || e)); }
@@ -1122,6 +1137,34 @@ setTimeout(async () => {
       justes.indexOf('ecart_valeur_titres') < 0, justes.join(',') || 'aucun écart');
     verifier('et les liquidités de l’export sont enfin comparables à celles de l’écran',
       justes.indexOf('ecart_liquidites') < 0, justes.join(',') || 'aucun écart');
+    /* L'ÉCART QUI S'EXPLIQUE TOUT SEUL. L'écran du courtier réserve la trésorerie
+       des ordres d'ACHAT en attente ; l'export ne connaît que les positions
+       dénouées. Les deux écarts qui en résultent sont égaux et opposés, et valent
+       la somme des achats en attente — une soustraction que l'application sait
+       faire. La faire évite qu'une carte se lève chaque jour sur une divergence
+       parfaitement comprise ; un contrôle qui crie toujours ne se lit plus.
+       Ici : liquidités de l'écran −3 000 €, de l'export −1 000 €, et un ordre
+       d'achat en attente de 2 000 € qui comble exactement la différence. */
+    const preuveLiq = () => {
+      const cs = JSON.parse(JSON.stringify(R2('Fn_AnalyserEntrees().controles')));
+      const c = cs.filter(x => x.kind === 'ecart_liquidites')[0];
+      return c ? String(c.preuve || '') + ' || ' + String(c.propo || '') : '(aucune carte)';
+    };
+    R2('Var_State.positions = []; Var_State.controles = []; Var_State.fx = null;'
+      + 'Var_State._runtime.collages = { positions: { texte: ' + JSON.stringify(capture.replace('-1 000,00', '-3 000,00')) + ', ts: Date.now() },'
+      + ' ordres: { texte: ' + JSON.stringify('Untel SA Achat  | 23:43 € 20,00  | 2 000,00  | Continu Qté 100 -0,66 (-0,83%)   ') + ', ts: Date.now() } };'
+      + 'Var_State._runtime.xlsx = __essaiReg;');
+    const explique = preuveLiq();
+    verifier('un écart de trésorerie que les ordres d’achat en attente expliquent le DIT',
+      /ordres d’ACHAT en attente/.test(explique) && /expliquée par les ordres/.test(explique),
+      explique.slice(0, 120));
+    // Sans ordre en attente, la carte redevient une vraie question ouverte.
+    R2('Var_State.controles = []; delete Var_State._runtime.collages.ordres;');
+    const ouvert = preuveLiq();
+    verifier('sans ordre en attente, l’écart reste une question ouverte à expliquer',
+      ouvert.indexOf('ordres d’ACHAT') < 0 && /à expliquer avant intégration/.test(ouvert),
+      ouvert.slice(0, 110));
+    R2('Var_State.controles = [];');
     const fausses = analyser('6 000,00');
     verifier('un écart RÉEL de valeur des titres est toujours signalé',
       fausses.indexOf('ecart_valeur_titres') >= 0, fausses.join(',') || 'aucun écart');

@@ -419,7 +419,7 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202608261822';
+const Cst_Version = 'vigie-202608261836';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -2539,6 +2539,19 @@ async function Fn_LireXlsx(fichier) {
   if (!lignesLues.length) throw new Error('Classeur lu, mais entièrement vide : aucune ligne à en tirer. Refaites l’export depuis l’espace du courtier, portefeuille affiché.');
   return { lignes, nombres, ts: socle.ts, nom: socle.nom, taille: socle.taille };
 }
+/* VALIDITÉ D'UN ORDRE, ET CE QU'ELLE VAUT. La date est lue sur l'écran des
+   ordres ; rien ne garantit qu'elle soit celle de l'échéance plutôt qu'une autre
+   date de la ligne. Une échéance DÉJÀ PASSÉE est donc soit un ordre expiré que le
+   courtier affiche encore, soit une date mal attribuée — dans les deux cas on le
+   dit, plutôt que d'afficher « Continu jusqu'au 02/02/2026 » comme si de rien
+   n'était six mois après. */
+function Fn_ValiditeOrdre(o) {
+  const v = o && o.validite;
+  if (!v) return '— (donnée manquante : validité lue sur l’écran des ordres)';
+  const m = /(\d{4}-\d{2}-\d{2})/.exec(String(v));
+  if (!m || m[1] >= Fn_AujISO()) return String(v);
+  return String(v) + ' — ÉCHÉANCE DÉPASSÉE : ordre expiré que le courtier affiche encore, ou date mal attribuée sur la ligne. À vérifier chez le courtier avant de compter sur cet ordre.';
+}
 /* Nombre écrit par une MACHINE : le point y est la décimale, jamais un
    séparateur de milliers. Réservé aux cellules du classeur qui portent du texte
    au lieu d'un nombre — ailleurs, la valeur numérique native fait foi. */
@@ -3019,6 +3032,10 @@ function Fn_LireOrdre(l) {
     limite = avant.length ? avant[0].v : null;
     montantEur = avant.length > 1 ? avant[1].v : null;
   }
+  /* SUR LA LIGNE BRUTE, ET C'EST VOULU : Fn_SansHorodatage BLANCHIT les dates,
+     pour qu'aucun de leurs chiffres ne soit lu comme une quantité ou un cours.
+     La date de validité doit donc se relire sur l'original — seul champ dans ce
+     cas, et le neutraliser lui aussi le rendrait tout simplement introuvable. */
   const mDate = /(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})/.exec(l);
   const p2 = n => (String(n).length < 2 ? '0' : '') + n;
   const mIsin = Cst_ReIsin.exec(l);
@@ -3186,13 +3203,34 @@ function Fn_AnalyserEntrees() {
   }
   // Contrôles de trésorerie et de valeur : arithmétiques, donc gratuits.
   const margeCap = capPos && capPos.marge;
+  /* CE QUI EXPLIQUE L'ÉCART, quand l'application peut le calculer elle-même.
+     L'écran du courtier réserve la trésorerie des ordres d'ACHAT en attente et
+     crédite les titres correspondants ; l'export, lui, ne connaît que les
+     positions dénouées. Les deux écarts qui en résultent sont donc égaux et
+     opposés, et valent la somme des achats en attente. Le dire évite qu'une
+     carte se lève chaque jour sur une divergence parfaitement comprise — un
+     contrôle qui crie toujours ne se lit plus. */
+  const achatsEnAttente = (capOrd ? capOrd.lignes : [])
+    .filter(o => o.sens === 'achat' && Fn_Num(o.montantEur) != null)
+    .reduce((a, o) => a + Fn_Num(o.montantEur), 0);
+  const expliquePar = ecart => {
+    if (!achatsEnAttente) return '';
+    const reste = Math.abs(Math.abs(ecart) - achatsEnAttente);
+    if (reste > Math.max(200, achatsEnAttente * 0.15)) return '';
+    return ' Les ordres d’ACHAT en attente totalisent ' + Fn_FmtEur(achatsEnAttente, 0)
+      + ' [calcul] : l’écran les réserve déjà, l’export ne les connaît pas encore. Cela explique l’écart à '
+      + Fn_FmtEur(reste, 0) + ' près.';
+  };
   if (reg && reg.liquidites && margeCap && Fn_Num(margeCap.cash) != null) {
     const ecart = Fn_Num(margeCap.cash) - Fn_Num(reg.liquidites.montantEur);
     if (Math.abs(ecart) > 1) {
+      const expl = expliquePar(ecart);
       controles.push({ kind: 'ecart_liquidites',
         resume: 'Liquidités divergentes entre l’écran et l’export : écart de ' + Fn_FmtEur(ecart) + '.',
-        preuve: 'Écran : ' + Fn_FmtEur(margeCap.cash) + ' · export : ' + Fn_FmtEur(reg.liquidites.montantEur) + '.',
-        propo: 'Mouvement de trésorerie entre les deux horodatages (ordre exécuté, frais, dépôt) — à expliquer avant intégration.' });
+        preuve: 'Écran : ' + Fn_FmtEur(margeCap.cash) + ' · export : ' + Fn_FmtEur(reg.liquidites.montantEur) + '.' + expl,
+        propo: expl
+          ? 'Divergence expliquée par les ordres en attente : accepter la carte sans rien changer à l’état. Elle se refermera quand ces ordres seront exécutés et l’export refait.'
+          : 'Mouvement de trésorerie entre les deux horodatages (ordre exécuté, frais, dépôt) — à expliquer avant intégration.' });
     }
   }
   /* VALEUR DES TITRES — comparer ce qui est comparable.
@@ -3225,7 +3263,9 @@ function Fn_AnalyserEntrees() {
         resume: 'Valeur des titres de l’écran (' + Fn_FmtEur(margeCap.titres) + ') différente de la somme des lignes valorisées (' + Fn_FmtEur(somme) + ') : écart de ' + Fn_FmtEur(ecart) + '.',
         preuve: 'Somme calculée sur ' + propositions.length + ' ligne(s), au cours du jour et au taux de change déduit de l’export — même base que l’écran.'
           + (approchees ? ' ' + approchees + ' ligne(s) sans cours ou sans taux comptée(s) à leur montant d’export, daté de la veille.' : ''),
-        propo: 'Ligne détenue absente de l’export, ligne de l’export qui n’est plus détenue, ou quantité périmée — vérifier avant d’intégrer.' });
+        propo: expliquePar(ecart)
+          ? 'Divergence expliquée par les ordres en attente, en miroir de l’écart de liquidités : accepter la carte sans rien changer à l’état.'
+          : 'Ligne détenue absente de l’export, ligne de l’export qui n’est plus détenue, ou quantité périmée — vérifier avant d’intégrer.' });
     }
   }
   return { capPos, capOrd, capExe, reg, meta, propositions, controles,
@@ -3944,7 +3984,7 @@ function Fn_GenererSquelette() {
             + (o.limite != null ? Fn_FmtNb(o.limite, 2) : '—')
             + (o.montantEur != null ? ' soit ' + Fn_FmtEur(o.montantEur, 0) : '')),
           met('délai avant l’annonce', jours != null ? jours + ' jour(s)' : manquant('date lisible')),
-          met('validité de l’ordre', o.validite || manquant('validité lue sur l’écran des ordres')),
+          met('validité de l’ordre', Fn_ValiditeOrdre(o)),
           met('ce que cela change', q[0] === 'pubDate'
             ? 'un ordre à cours limite peut être exécuté sur l’écart d’ouverture qui suit la publication : décider AVANT si l’on veut être servi sur cette annonce, ou décaler l’ordre'
             : 'le cours s’ajuste à la baisse du montant détaché [règle de place] : une limite placée juste sous le cours peut être touchée mécaniquement'),
