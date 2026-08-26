@@ -1820,6 +1820,21 @@ setTimeout(async () => {
     });
     R('Var_State.positions[0].desk.niveau = ' + JSON.stringify('complet') + ';');
 
+    /* UNE INVITE NE CITE PAS L'EXEMPLE D'UN AUTRE TITRE. Écrites en dur, elles
+       finissaient par proposer « pas de commande ROSIE » — exemple pris sur une
+       small cap — dans la case d'un turbo LVMH. Elles sont donc fonction de la
+       ligne, et un produit à levier reçoit les siennes. */
+    R('Var_State.theses = { L1: { ecrite: true, invalidation: true, objectif: true } };');
+    R('Var_State.positions[0].produit.type = "derive"; Var_State.positions[0].produit.sousJacent = "Untel SA";');
+    const invDerive = String(R('Fn_HtmlThese(Var_State.positions[0])'));
+    R('Var_State.positions[0].produit.type = "action"; Var_State.positions[0].produit.sousJacent = null;');
+    const invAction = String(R('Fn_HtmlThese(Var_State.positions[0])'));
+    verifier('un produit à levier reçoit ses PROPRES invites, nommant son sous-jacent',
+      /barrière/.test(invDerive) && /Untel SA/.test(invDerive) && !/barrière/.test(invAction),
+      'invites distinctes selon le type de produit');
+    verifier('et aucune invite ne cite l’exemple d’un titre étranger à la ligne',
+      !/ROSIE/i.test(invDerive) && !/ROSIE/i.test(invAction), 'aucun exemple emprunté');
+    R('Var_State.theses = {};');
     ctx.__faux = { target: { closest: () => ({
       getAttribute: n => ({ 'data-action': 'these-check', 'data-id': 'L1', 'data-champ': 'ecrite' })[n],
       checked: true }) } };
