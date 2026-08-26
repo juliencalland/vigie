@@ -204,8 +204,17 @@ hr.sep{border:none;border-top:1px solid var(--line);margin:10px 0}
 /* Valorisation : une grille de couples étiquette/valeur, colonnes suivant la
    largeur. En rangée inline, les multiples formaient un pavé illisible. */
 .valo-grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(8.5rem,1fr));gap:5px;margin:5px 0}
-.valo-grille .met{display:flex;justify-content:space-between;gap:6px;min-width:0}
-.valo-grille .met b{font-variant-numeric:tabular-nums;white-space:nowrap}
+.valo-grille .met{display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 6px;min-width:0}
+/* La valeur se REPLIE au lieu de déborder. « white-space:nowrap » convenait à un
+   nombre et débordait dès qu’une valeur était une phrase — « Strong Buy (28 achat
+   fort / 4 achat / 7 conserver…) » sortait de sa case et passait sous la voisine.
+   Les nombres, eux, ne se coupent pas pour autant : Intl les met en espaces
+   insécables étroites, qui ne sont pas des points de rupture. */
+.valo-grille .met b{font-variant-numeric:tabular-nums;white-space:normal;overflow-wrap:anywhere;text-align:right}
+/* Une valeur qui est un TEXTE prend toute la largeur : la comprimer dans une
+   colonne de 8,5 rem la rendait illisible sur quatre lignes de deux mots. */
+.valo-grille .met-large{grid-column:1/-1}
+.valo-grille .met-large b{text-align:left}
 .lien{color:var(--accent);text-decoration:underline;text-underline-offset:2px;overflow-wrap:anywhere}
 .lien::after{content:" ↗";font-size:.85em;text-decoration:none}
 .ev-actions{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
@@ -430,7 +439,7 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202608261936';
+const Cst_Version = 'vigie-202608261957';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -1863,11 +1872,44 @@ function Fn_ChercheEnVain(p, champ) {
   const j = Fn_JoursDepuis(d);
   return j != null && -j < Cst_RelanceIntrouvableJours;
 }
+/* Les ratios que le PROFIL de la ligne appelle. Sans profil attribué, on suppose
+   le cas le plus courant : un multiple et son référentiel. */
+function Fn_RatiosAttendus(p) {
+  const prof = Cst_Profils.filter(x => x.id === (p && p.desk && p.desk.profil))[0];
+  return prof ? prof.ratios : ['per', 'bpa', 'capi', 'margeOp'];
+}
+/* SE JUGE-T-ELLE AU MULTIPLE ? Toutes les lignes ne s'y prêtent pas, et c'est
+   une propriété du PROFIL, pas une lacune de collecte. Une small cap en perte
+   n'a pas de PER — le profil « small » demande d'ailleurs capitalisation, VE/CA
+   et dette nette, jamais un PER. Un produit à levier n'en a pas davantage.
+   Confondre « pas de multiple » avec « multiple manquant » condamnait ces lignes
+   à repartir en collecte chaque semaine pour y chercher un chiffre qui n'existe
+   pas, et à faire mentir la couverture des données. */
+function Fn_SeJugeAuMultiple(p) {
+  const r = Fn_RatiosAttendus(p);
+  return r.indexOf('per') >= 0 || r.indexOf('perN') >= 0;
+}
+/* LE COUPLE MULTIPLE + RÉFÉRENTIEL, pour le seul indicateur de tension. Rendu
+   nul dès que la ligne ne se juge pas au multiple : elle est alors hors sujet,
+   et non pas incomplète. */
 function Fn_ValoExploitable(p) {
+  if (!Fn_SeJugeAuMultiple(p)) return null;
   const v = (p && p.valo) || {};
   const ref = Fn_Num(v.refHist) != null ? Fn_Num(v.refHist) : Fn_Num(v.refPairs);
   const mult = Fn_Num(v.per) != null ? Fn_Num(v.per) : Fn_Num(v.perN);
   return (ref != null && mult != null) ? { mult: mult, ref: ref } : null;
+}
+/* LA LIGNE EST-ELLE DOCUMENTÉE, au sens de SON profil ? C'est cette question-là
+   que pose la couverture des données, et c'est elle qui décide si une ligne
+   repart en collecte. Une small cap documentée par sa capitalisation et sa dette
+   nette l'est autant qu'une valeur de croissance documentée par son PER. */
+function Fn_ValoDocumentee(p) {
+  if (!Fn_SeJugeAuMultiple(p)) {
+    const v = (p && p.valo) || {};
+    const r = Fn_RatiosAttendus(p);
+    return r.length ? r.filter(k => Fn_Num(v[k]) != null).length >= Math.ceil(r.length / 2) : true;
+  }
+  return !!Fn_ValoExploitable(p);
 }
 function Fn_DonneePerimee(freshTs) {
   const t = Fn_Num(freshTs);
@@ -2078,10 +2120,16 @@ const Cst_AidePanneaux = {
   remiseAZero: 'la remise à zéro complète : ce qui serait effacé, ce qui serait conservé, et la copie de sauvegarde à télécharger avant.',
   cadreExpo: 'le cadre d’exposition : ce que vos contraintes INTERDISENT à une idée nouvelle. Les valeurs et leurs seuils se lisent dans l’onglet Discipline.'
 };
+/* CE QUE CES TROIS CASES FONT VRAIMENT — et l'aide l'annonçait à tort.
+   Elles ne touchent PAS au score de discipline : « Fraîcheur des thèses » ne
+   regarde que la date de votre dernière revue, posée par le bouton voisin.
+   Ce qu'elles changent réellement, et c'est tout : elles PARTENT AU DESK, qui
+   cesse alors de vous redemander ce que vous avez déjà formalisé et cible ce qui
+   manque. Elles se comptent aussi dans « thèses déclarées » du bilan de mémoire. */
 const Cst_AideThese = {
-  ecrite: { t: 'Thèse écrite', d: 'Vous déclarez avoir formalisé, quelque part, la raison de détenir cette ligne. C’est une déclaration : aucun texte n’est rédigé ni stocké ici. Elle alimente l’indicateur « Fraîcheur des thèses ». Décochable à tout moment.' },
-  invalidation: { t: 'Invalidation définie', d: 'Vous déclarez avoir fixé le fait précis qui vous ferait sortir de cette ligne — le scénario qui prouverait la thèse fausse. Alimente le même indicateur de discipline.' },
-  objectif: { t: 'Objectif défini', d: 'Vous déclarez avoir fixé un objectif de cours ou de valorisation pour cette ligne. Alimente le même indicateur de discipline.' }
+  ecrite: { t: 'Thèse écrite', d: 'Vous déclarez avoir formalisé, quelque part, la raison de détenir cette ligne. C’est une déclaration : aucun texte n’est rédigé ni stocké ici. Le desk en est informé au prochain jugement — il ne vous redemandera pas d’écrire une thèse que vous avez déjà, et concentrera sa lecture sur ce qui manque. Sans effet sur le score de discipline : c’est le bouton « Revue faite aujourd’hui » qui le nourrit. Décochable à tout moment.' },
+  invalidation: { t: 'Invalidation définie', d: 'Vous déclarez avoir fixé le fait précis qui vous ferait sortir de cette ligne — le scénario qui prouverait la thèse fausse. Transmis au desk au même titre que la thèse écrite, et sans effet sur le score de discipline.' },
+  objectif: { t: 'Objectif défini', d: 'Vous déclarez avoir fixé un objectif de cours ou de valorisation pour cette ligne. Transmis au desk au même titre que les deux autres, et sans effet sur le score de discipline.' }
 };
 const Cst_AideActions = {
   'capture-coller': { t: 'Coller la capture', d: 'Lit le presse-papier, y reconnaît le document de capture à ses bornes et le répartit d’un seul geste dans les trois entrées d’écran. Une capture REMPLACE les entrées du jour : une section vide efface l’entrée correspondante, pour qu’un ordre annulé ne survive pas. Le texte reste sur cet appareil et n’est jamais synchronisé.' },
@@ -4267,7 +4315,11 @@ function Fn_IndicateursDiscipline() {
     let valeur = null, aff = '—', zone = null, manquant = null, extra = '', couverture = null;
     if (rien) manquant = manquePortefeuille;
     else {
-      const actions = pos.filter(p => p.produit.type !== 'derive');
+      /* Hors sujet, et non pas incomplètes : les lignes qui ne se jugent pas au
+         multiple sortent du calcul SANS grossir la liste des données manquantes,
+         qui inviterait à relancer une collecte incapable de les combler. */
+      const horsSujet = pos.filter(p => p.produit.type !== 'derive' && !Fn_SeJugeAuMultiple(p));
+      const actions = pos.filter(p => p.produit.type !== 'derive' && Fn_SeJugeAuMultiple(p));
       const evaluables = [], horsCalcul = [];
       let basePct = 0;
       actions.forEach(p => {
@@ -4317,18 +4369,18 @@ function Fn_IndicateursDiscipline() {
            totalité du portefeuille faute de multiples. Un indicateur dont le
            métier est de dire quand relancer la collecte ne peut pas être celui
            qui la déclare inutile. */
-        const documentees = cibles.filter(p => Fn_ValoExploitable(p) && !Fn_DonneePerimee(p.valo && p.valo.freshTs));
+        const documentees = cibles.filter(p => Fn_ValoDocumentee(p) && !Fn_DonneePerimee(p.valo && p.valo.freshTs));
         valeur = documentees.reduce((a, p) => a + Math.abs(Fn_Num(p.detention.pctVN) || 0), 0) / totalPct * 100;
         aff = Fn_FmtPct(valeur, 0) + ' de la VN documentée et fraîche';
         zone = Fn_ZoneSeuil(valeur, s.couvertureDonneesVert, s.couvertureDonneesRouge, 'bas');
-        const aFaire = cibles.filter(p => !Fn_ValoExploitable(p) || Fn_DonneePerimee(p.valo && p.valo.freshTs));
+        const aFaire = cibles.filter(p => !Fn_ValoDocumentee(p) || Fn_DonneePerimee(p.valo && p.valo.freshTs));
         /* CHERCHÉ ET INTROUVABLE n'est pas MANQUANT : le premier ne se comblera pas
            en relançant la collecte, et le dire évite de la relancer pour rien. */
         const vains = aFaire.filter(p => Fn_ChercheEnVain(p, 'ref'));
         extra = aFaire.length
           ? 'À collecter ou à rafraîchir : ' + aFaire.map(p => Fn_Esc(String(p.detention.nom || p.id).slice(0, 20))
               + (Fn_ChercheEnVain(p, 'ref') ? ' (référentiel cherché le ' + Fn_Esc(Fn_FmtDateCourt(p.valo.cherche.ref)) + ', introuvable)'
-                : Fn_ValoExploitable(p) ? ' (périmé)' : ' (multiple ou référentiel absent)')).join(', ')
+                : Fn_ValoDocumentee(p) ? ' (périmé)' : ' (multiple ou référentiel absent)')).join(', ')
             + ' — une passe d’enrichissement les traite toutes, et seulement elles.'
             + (vains.length ? ' Les lignes marquées « introuvable » n’y repartiront PAS avant ' + Cst_RelanceIntrouvableJours + ' jours : la collecte a déjà été payée sans résultat. Le référentiel peut être saisi à la main sur la fiche de la ligne.' : '')
           : 'Toutes les lignes matérielles portent un multiple, son référentiel, et des données de moins de '
@@ -4897,9 +4949,7 @@ function Fn_LignesAEnrichir() {
     if (p.desk.niveau === 'derive') return false;
     return Fn_DonneePerimee(p.valo && p.valo.freshTs)
       || Fn_DonneePerimee(p.consensus && p.consensus.freshTs)
-      || (!Fn_ValoExploitable(p) && !(Fn_ChercheEnVain(p, 'ref') && Fn_ChercheEnVain(p, 'mult'))
-          && !(Fn_ChercheEnVain(p, 'ref') && (Fn_Num(p.valo.per) != null || Fn_Num(p.valo.perN) != null))
-          && !(Fn_ChercheEnVain(p, 'mult') && (Fn_Num(p.valo.refHist) != null || Fn_Num(p.valo.refPairs) != null)));
+      || (!Fn_ValoDocumentee(p) && !Fn_ChercheEnVain(p, 'ref') && !Fn_ChercheEnVain(p, 'mult'));
   });
 }
 /* LES INSTRUMENTS QUE L'ON NE DÉTIENT PAS ET DONT LA DATE COMPTE QUAND MÊME :
@@ -5556,7 +5606,7 @@ function Fn_HtmlConsensus(p) {
   }
   return '<div class="cours-ligne"><span class="lib">Consensus et agenda ' + Fn_BadgeFraicheurDonnee(c.freshTs, 'collecté') + '</span>'
     + '<div class="valo-grille">'
-    + (c.conso ? '<span class="met">consensus <b>' + Fn_Esc(c.conso) + '</b></span>' : '')
+    + (c.conso ? '<span class="met' + (String(c.conso).length > 18 ? ' met-large' : '') + '">consensus <b>' + Fn_Esc(c.conso) + '</b></span>' : '')
     + (Fn_Num(c.nbA) != null ? '<span class="met">analystes <b>' + Fn_Esc(Fn_FmtNb(c.nbA, 0)) + '</b></span>' : '')
     + (Fn_Num(c.obj) != null ? '<span class="met">objectif moyen <b>' + Fn_Esc(Fn_FmtNb(c.obj, 2)) + '</b></span>' : '')
     + (Fn_Num(c.objEcart) != null ? '<span class="met">écart au cours <b>' + Fn_Esc(Fn_FmtPct(c.objEcart, 1, true)) + '</b></span>' : '')
@@ -6919,6 +6969,16 @@ function Fn_IntegrerEnrichissement(data, journal) {
       p.consensus.freshTs = ts;
       det.consensus++;
     }
+    /* CHERCHÉ, RIEN TROUVÉ — ici aussi. La ligne figurait dans la demande ; si
+       aucun bloc de consensus n'est revenu, c'est qu'il n'y en a pas dans les
+       sources atteintes (un ETF n'a pas de consensus d'analystes, par nature).
+       Sans cette marque, freshTs restait nul et la ligne repartait à CHAQUE
+       passe — ce qui explique un compteur d'enrichissement qui ne descend
+       jamais. */
+    if (!c || typeof c !== 'object') {
+      p.consensus = p.consensus || {};
+      if (!p.consensus.freshTs) p.consensus.freshTs = ts;
+    }
     if (m && typeof m === 'object') {
       p.marche = p.marche || {};
       ['h52', 'b52', 'adv', 'vol'].forEach(k => { const x = Fn_Num(Fn_Ch(m, [k])); if (x != null) p.marche[k] = x; });
@@ -7314,6 +7374,10 @@ function Fn_OnAction(e) {
   const id = el.getAttribute('data-id');
   const rt = Var_State._runtime;
   switch (action) {
+    /* CHANGER D'ONGLET DEPUIS LE CORPS DE PAGE. L'action « onglet » n'était câblée
+       que sur la barre de navigation : tout bouton posé ailleurs — « Voir la
+       discipline » du bandeau d'alerte, par exemple — ne faisait rien du tout. */
+    case 'onglet': { Fn_MontrerOnglet(id); break; }
     case 'toggle': {
       Var_State.panneaux[id] = !Var_State.panneaux[id];
       Fn_Save();

@@ -1662,6 +1662,7 @@ setTimeout(async () => {
   console.log('\nJ. Répartition Vigie / Paramètres');
   try {
     const R = q => vm.runInContext(q, ctx);
+    const J = q => JSON.parse(JSON.stringify(R(q)));
     R('Fn_ModeAcces = function () { return { mode: "cle", libelle: "Clé personnelle" }; };');
     R('Fn_RenderVigie();');
     const texte = id => String((els[id] && els[id].innerHTML) || '')
@@ -1720,6 +1721,43 @@ setTimeout(async () => {
     R('Var_State.majJournaux = []; Fn_RenderBandeMAJ();');
     verifier('hors appel, la bande est vide et s’efface',
       texte('entete-maj') === '', JSON.stringify(texte('entete-maj')));
+    /* CHANGER D'ONGLET DEPUIS LE CORPS DE PAGE. L'action « onglet » n'était
+       câblée que sur la barre de navigation : « Voir la discipline », posé dans
+       le bandeau d'alerte, ne faisait rien. Un bouton qui ne fait rien est pire
+       qu'un bouton absent — on le presse deux fois avant de douter de soi. */
+    verifier('l’action « onglet » est routée depuis le corps de page, pas seulement la barre',
+      /case 'onglet':/.test(js), 'Fn_OnAction traite l’action onglet');
+    /* Une valeur de case ne déborde plus : « Strong Buy (28 achat fort / … ) »
+       sortait de sa colonne de 8,5 rem, faute de pouvoir se replier. */
+    verifier('une valeur longue se replie dans sa case au lieu de déborder',
+      /\.valo-grille \.met b\{[^}]*white-space:normal/.test(h)
+      && /\.valo-grille \.met-large\{grid-column:1\/-1\}/.test(h),
+      'CSS des cases de valeur');
+
+    /* CE QUE LES TROIS CASES DE THÈSE FONT, ET CE QU'ELLES NE FONT PAS.
+       Leur aide annonçait qu'elles alimentaient « Fraîcheur des thèses » — c'est
+       faux : cet indicateur ne lit que la date de dernière revue. Une aide qui
+       promet un effet inexistant est un bug, pas une approximation. */
+    R('Var_State.marge = { titres: 1000, cash: 0, vl: 1000, risque: 500, libre: 500, as: "18:00", ts: Date.now() };'
+      + 'Var_State.positions = [{ id: "L1", ticker: null, isin: null,'
+      + ' detention: { nom: "Alpha SA", qte: 100, dev: "EUR", cloture: 10, clotureVeille: 10, valEurExport: null,'
+      + '   facteurs: ["tech"], poche: "CONVICTION", ts: Date.now() },'
+      + ' produit: { type: "action", sens: "long", histBarriere: [] }, desk: { niveau: "complet", profil: "croissance" },'
+      + ' marche: {}, valo: {}, consensus: {} }];'
+      + 'Var_State.theses = { L1: { ecrite: true, invalidation: true, objectif: true, derniereRevue: null } };'
+      + 'Fn_Recalculer();');
+    const fraich = (J('Fn_IndicateursDiscipline()') || []).filter(x => x.nom === 'Fraîcheur des thèses')[0] || {};
+    verifier('cocher les trois cases ne change RIEN à la fraîcheur des thèses',
+      /jamais revue/.test(String(fraich.valeurAff) + String(fraich.extra)),
+      String(fraich.valeurAff));
+    verifier('mais les trois déclarations PARTENT au desk, qui cesse de les redemander',
+      JSON.stringify(J('Fn_ContratDesk().pos[0].vous')).indexOf('these') >= 0,
+      JSON.stringify(J('Fn_ContratDesk().pos[0].vous')));
+    verifier('et l’aide de chaque case dit ce qu’elle fait vraiment, sans promettre l’inverse',
+      Object.keys(J('Cst_AideThese')).every(k =>
+        /sans effet sur le score|Sans effet sur le score/.test(J('Cst_AideThese')[k].d)),
+      Object.keys(J('Cst_AideThese')).join(', '));
+    R('Var_State.theses = {}; Var_State.positions = []; Fn_Recalculer();');
   } catch (e) { ko('la répartition Vigie / Paramètres', String((e && e.stack) || e)); }
 
   console.log('\nI. Aide des commandes et codes d’erreur');
