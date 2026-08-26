@@ -400,6 +400,31 @@ setTimeout(async () => {
     verifier('levier : le point d’un paramètre est une DÉCIMALE, jamais des milliers',
       app('Fn_NombreParam', ['186.315']) === 186.315 && app('Fn_NombreParam', ['653,4635']) === 653.4635);
 
+    /* LE PRIX DE REVIENT UNITAIRE — colonne « PRU » de l'écran des positions.
+       L'écran répète chaque valeur numérique deux fois : cours · quantité ·
+       cours · valeur · valeur · PRU · PRU. L'ancre est la RÉPÉTITION DU COURS et
+       non la quantité doublée, parce que « 200 200 » se lit légitimement deux
+       cent mille deux cents — un groupe de trois chiffres est un séparateur de
+       milliers valide — et la quantité fusionne alors en un seul nombre.
+       Vérifié sur cinq formes réelles : action en euros, action en dollars, cours
+       à trois décimales, quantité à trois chiffres, produit à levier. */
+    const pru = t => app('Fn_ParserPositions', [[t], { lignes: [], inconnues: [] }]).lignes[0].pru;
+    const casPru = [
+      [' Untel SA Untel SA UNT | € 180,02 55 55 XX0000000019 € 180,02 EUR 9 901,10 9 901,10 197,978181 197,978181 -299,20 -299,20 -2,93% -2,93% -987,70  (-9,07%) -987,70   (-9,07%) ', 197.978181, 'action en euros'],
+      [' Autre Inc Autre Inc AUT | $ 479,76 60 60 XX0000000027 $ 479,76 USD 24 700,29 24 700,29 152,016666 152,016666 +28,15 +28,15 -0,05% -0,05% ', 152.016666, 'action en dollars'],
+      [' Tierce SA Tierce SA TIE | € 0,094 23 000 23 000 XX0000000035 € 0,094 EUR 2 162,00 2 162,00 0,23 0,23 -23,00 -23,00 ', 0.23, 'cours à trois décimales'],
+      [' ZED Turbo Short ZED Turbo Short € 22,59 200 200 XX0000000043 € 22,59 EUR 4 518,00 4 518,00 13,34 13,34 +2,00 +2,00 1 SL 652.7484 STR 679.9462 R 10', 13.34, 'quantité à trois chiffres, produit à levier']
+    ];
+    const mauvais = casPru.filter(c => Math.abs((pru(c[0]) || 0) - c[1]) > 1e-6);
+    verifier('le PRU est lu sur chaque forme de ligne, y compris quand la quantité fusionne',
+      mauvais.length === 0,
+      mauvais.length ? mauvais.map(c => c[2] + ' → ' + pru(c[0])).join(' · ')
+        : casPru.map(c => c[2]).join(' · '));
+    /* Une ligne qui ne présente PAS cette forme ne rend rien : un prix de revient
+       inventé fausserait toute plus-value affichée, et vaut moins qu'un blanc. */
+    verifier('une ligne sans la forme attendue ne rend AUCUN prix de revient',
+      pru(' Untel SA Untel SA UNT | € 12,50 120 XX0000000019 EUR 1 500,00 ') == null,
+      String(pru(' Untel SA Untel SA UNT | € 12,50 120 XX0000000019 EUR 1 500,00 ')));
     /* Constat 4 — les champs d'un ordre se lisent par ancrage */
     const ord = app('Fn_ParserCapture', ['ordres', doc.ordres]);
     verifier('ordres : 3 lignes reconnues, aucune rejetée',

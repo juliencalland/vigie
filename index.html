@@ -441,7 +441,7 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202608262048';
+const Cst_Version = 'vigie-202608262100';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -2142,7 +2142,7 @@ const Cst_ChampsThese = {
       : 'Pourquoi vous détenez cette ligne, en vos termes. Le desk la confrontera à ce qu’il observe au lieu d’écrire la sienne dans le vide.' },
   invalidation: { cle: 'invalTexte', max: 300, invite: p => (p && p.produit && p.produit.type === 'derive')
       ? 'Ce qui vous ferait sortir AVANT la barrière — un niveau du sous-jacent, une distance, une durée. La désactivation, elle, n’est pas une décision : elle vous est imposée.'
-      : 'Un fait OBSERVABLE de l’extérieur, et daté si possible : le desk ne peut vous prévenir que de ce qu’il peut lire. Un niveau de cours convient — l’application lui fournit vos chiffres de position.' },
+      : 'Un fait OBSERVABLE de l’extérieur, et daté si possible. Un niveau de cours convient, et votre PRIX DE REVIENT aussi : l’application le lit sur l’écran et le fournit au desk, qui peut donc surveiller « revenu au prix de revient ».' },
   objectif: { cle: 'objTexte', max: 250, invite: p => (p && p.produit && p.produit.type === 'derive')
       ? 'Le niveau du SOUS-JACENT qui déclencherait la prise de gain, et l’échéance que vous vous donnez.'
       : 'Un NIVEAU et une échéance — un cours, un multiple. Un horizon de détention (« garder 5 ans ») n’est pas un objectif : le desk ne peut le confronter à rien.' }
@@ -3027,6 +3027,36 @@ function Fn_ParserCapture(type, texte) {
    Le bloc de marge peut MANQUER : il n'est à l'écran que si le bandeau « Aperçu
    de la marge disponible » a été ouvert. marge reste alors nulle, et
    l'application le dit au lieu de deviner. */
+/* LE PRIX DE REVIENT UNITAIRE, lu par la FORME de la ligne et non par un numéro
+   de colonne — la disposition de l'export a déjà changé une fois, celle de
+   l'écran peut en faire autant.
+   L'écran répète CHAQUE valeur numérique deux fois de suite, et l'en-tête donne
+   l'ordre : Cours · Devise · Valeur · PRU · P/L € · P/L % · P/L latent.
+   La suite des nombres d'une ligne est donc :
+     [cours, qté, qté, cours, valeur, valeur, PRU, PRU, …]
+   On repère la QUANTITÉ DOUBLÉE, on vérifie que le cours se répète juste après,
+   puis que la valeur et le PRU sont eux aussi doublés. Si l'une de ces quatre
+   vérifications échoue, on ne rend RIEN : un prix de revient inventé serait pire
+   qu'absent, il fausserait toute plus-value affichée.
+   Contrôlé sur six lignes réelles : PRU × quantité redonne exactement la
+   plus-value latente affichée par le courtier, au centime. */
+function Fn_PruDeLigne(nb) {
+  if (!nb || nb.length < 5) return null;
+  const eq = (a, b) => a != null && b != null && Math.abs(a - b) < 1e-9;
+  /* L'ANCRE EST LA RÉPÉTITION DU COURS, pas la quantité doublée. « 200 200 » se
+     lit légitimement DEUX CENT MILLE DEUX CENTS — un groupe de trois chiffres est
+     un séparateur de milliers valide — et la quantité fusionne alors en un seul
+     nombre. Le cours, lui, réapparaît toujours après l'identifiant, quelle que
+     soit la quantité. On repart de là : cours · valeur doublée · PRU doublé. */
+  for (let j = 1; j + 4 < nb.length; j++) {
+    if (!eq(nb[j], nb[0])) continue;              // le cours, répété après l'identifiant
+    if (!eq(nb[j + 1], nb[j + 2])) continue;      // valeur doublée
+    if (!eq(nb[j + 3], nb[j + 4])) continue;      // PRU doublé
+    const pru = nb[j + 3];
+    return (pru > 0 && isFinite(pru)) ? pru : null;
+  }
+  return null;
+}
 function Fn_ParserPositions(lignes, res) {
   const prisMarge = {};
   lignes.forEach((l, i) => {
@@ -3073,6 +3103,7 @@ function Fn_ParserPositions(lignes, res) {
       // Les suivants sont conservés bruts : l'export fait foi sur la quantité et
       // le montant, on ne devine pas.
       cloture: apres[0].v, levier: levier,
+      pru: Fn_PruDeLigne(apres.map(x => x.v)),
       nombres: apres.map(n => n.v), brut: l
     });
   });
@@ -3263,7 +3294,7 @@ function Fn_AnalyserEntrees() {
       }
       propositions.push({ id, isin: x.isin || (c && c.isin) || null, nom: nomComplet, qte: x.qte,
         ticker: (c && c.ticker) || null, // l'écran est la SEULE source d'un ticker : l'export n'en porte pas
-        dev: x.dev, cloture: c ? c.cloture : null, clotureVeille: x.clotureVeille,
+        dev: x.dev, cloture: c ? c.cloture : null, pru: c ? c.pru : null, clotureVeille: x.clotureVeille,
         montantDev: x.montantDev, montantEur: x.montantEur, levier, source: 'export+capture' });
     });
     capLignes.forEach(c => {
@@ -3274,7 +3305,7 @@ function Fn_AnalyserEntrees() {
       // produit à levier acheté après l'export n'y figure pas encore.
       const id = Fn_IdPosition(c.isin, null, c.nom);
       const payload = { id, isin: c.isin, nom: c.nom, ticker: c.ticker || null, qte: null,
-        dev: c.dev || 'EUR', cloture: c.cloture, clotureVeille: null, montantDev: null,
+        dev: c.dev || 'EUR', cloture: c.cloture, pru: c.pru, clotureVeille: null, montantDev: null,
         montantEur: null, levier: c.levier, source: 'capture seule' };
       controles.push({ kind: 'ligne_non_appariee', id, payload,
         resume: 'Ligne lue à l’écran sans correspondance dans l’export : ' + String(c.nom).slice(0, 70) + '.',
@@ -3291,7 +3322,7 @@ function Fn_AnalyserEntrees() {
       propositions.push({ id: existante ? existante.id : id, isin: c.isin, nom: c.nom,
         ticker: c.ticker || null,
         qte: existante ? Fn_Num(existante.detention.qte) : null, dev: c.dev || 'EUR',
-        cloture: c.cloture, clotureVeille: null, montantDev: null, montantEur: null,
+        cloture: c.cloture, pru: c.pru, clotureVeille: null, montantDev: null, montantEur: null,
         levier: c.levier, source: 'capture seule' });
     });
   }
@@ -3395,6 +3426,9 @@ function Fn_IntegrerEntrees(an) {
     else if (p.cloture != null && d.cloture != null && d.cloture !== p.cloture
       && (d.ts == null || !Fn_MemeJour(d.ts, ts))) d.clotureVeille = d.cloture;
     if (p.cloture != null) d.cloture = p.cloture;
+    /* Le PRU est un FAIT LU, au même titre que le cours : il s'écrit directement,
+       sans passer par une carte à valider. Il ne bouge qu'à l'achat ou à la vente. */
+    if (p.pru != null) d.pru = p.pru;
     if (p.dev) d.dev = p.dev;
     if (p.nom && p.nom.length > String(d.nom || '').length) d.nom = p.nom; // la capture porte le nom complet
     if (p.ticker && !pos.ticker) pos.ticker = p.ticker; // relevé sur l'écran, jamais deviné
@@ -3573,6 +3607,17 @@ function Fn_Recalculer() {
     d.valEur = (q != null && c != null && taux != null) ? q * c * taux : Fn_Num(d.valEurExport);
     d.var = (c != null && Fn_Num(d.clotureVeille) != null && Fn_Num(d.clotureVeille) !== 0)
       ? (c - Fn_Num(d.clotureVeille)) / Fn_Num(d.clotureVeille) * 100 : null;
+    /* PLUS-VALUE LATENTE — déterministe, donc calculée ici et jamais demandée au
+       modèle. Le pourcentage est EXACT et sans devise : cours et prix de revient
+       sont dans la même monnaie, le change s'annule. Le montant l'est aussi dans
+       la devise de la ligne. Sa conversion en euros, en revanche, emploie le taux
+       DU JOUR alors que l'achat s'est fait à un taux passé : elle est donc
+       APPROCHÉE, et l'écran le dit — le courtier, lui, affiche la vraie, calculée
+       sur son historique de change. */
+    const pru = Fn_Num(d.pru);
+    d.plPct = (c != null && pru != null && pru !== 0) ? (c - pru) / pru * 100 : null;
+    d.plDev = (c != null && pru != null && q != null) ? (c - pru) * q : null;
+    d.plEurApprox = (d.plDev != null && taux != null) ? d.plDev * taux : null;
     // Produit à levier : delta, distance à la barrière et portage.
     if (pr.type === 'derive') {
       const sj = Fn_CoursSousJacent(p);
@@ -5555,6 +5600,12 @@ function Fn_HtmlSocle(p) {
     + bloc('exposition', Fn_Num(pr.deltaEur) != null ? Fn_FmtEur(pr.deltaEur, 0) : (Fn_Num(d.valEur) != null ? Fn_FmtEur(d.valEur, 0) : '—'), '',
       pr.type === 'derive' ? 'delta [calcul]' : null)
     + bloc('% valeur nette', Fn_FmtPct(d.pctVN, 1), '')
+    /* PLUS-VALUE LATENTE : le pourcentage est EXACT — cours et prix de revient sont
+       dans la même devise, le change s'annule. Le montant en euros, lui, emploie le
+       taux du jour pour un achat fait à un taux passé : approché, et dit comme tel. */
+    + bloc('plus-value latente', Fn_FmtPct(d.plPct, 1, true),
+        Fn_Num(d.plPct) == null ? '' : (Fn_Num(d.plPct) >= 0 ? ' v-pos' : ' v-neg'),
+        Fn_Num(d.pru) != null ? 'PRU ' + Fn_FmtNb(d.pru, 4).replace(/,?0+$/, '') + ' ' + (d.dev || '') : null)
     + '</div>';
   if (Fn_Num(d.var) == null) {
     h += '<div class="tres-petit muted">Variation « — » : il faut deux clôtures successives. La prochaine analyse des entrées fournira la seconde — aucune recherche n’est nécessaire.</div>';
@@ -6602,6 +6653,11 @@ function Fn_ContratDesk() {
       cours: r2(d.cloture), varJour: r2(d.var), expoEur: Math.round(Fn_Num(pr.deltaEur) != null ? Fn_Num(pr.deltaEur) : (Fn_Num(d.valEur) || 0)),
       pctVN: r2(d.pctVN), poche: d.poche, fact: (d.facteurs || []).length ? d.facteurs : null,
       niveau: p.desk.niveau, profil: p.desk.profil };
+    /* PRIX DE REVIENT ET PLUS-VALUE LATENTE : calculés par l'application, donc
+       FOURNIS au desk et jamais cherchés par lui. Ils rendent surveillable une
+       invalidation formulée en prix de revient — « revenu au coût de revient » —
+       que personne ne pouvait vérifier tant que le chiffre restait sur l'écran. */
+    if (Fn_Num(d.pru) != null) { o.pru = Math.round(Fn_Num(d.pru) * 10000) / 10000; o.plPct = r2(d.plPct); }
     if (pr.type === 'derive') {
       o.derive = { sj: pr.sousJacent, sens: pr.sens, bar: pr.barriere, strike: pr.strike,
         parite: pr.parite, lev: pr.levier, distBar: r2(pr.distBarriere), portMens: Math.round(Fn_Num(pr.portageMensuel) || 0) || null };
@@ -6782,7 +6838,7 @@ function Fn_BuildPromptMAJ(ctx) {
   L.push('=== CONTEXTE ===');
   L.push('Date et heure de l’appel : ' + horodatage + '.');
   L.push('Portefeuille, marge, expositions nettes, écarts de contrôle déjà détectés, événements à traiter et découvertes déjà proposées — clés abrégées pour l’économie, légende ci-après.');
-  L.push('LÉGENDE : id=identifiant interne d’une ligne (à réutiliser TEL QUEL) · nom=libellé complet · qte=quantité · dev=devise · cours=dernier cours lu · varJour=variation du jour en % · expoEur=exposition en euros (delta pour un produit à levier) · pctVN=poids dans la valeur nette · poche=classement de gestion · fact=facteurs de risque · niveau=effort attendu sur cette ligne (complet / compact / ligne / derive) · profil=profil de valorisation · derive.sj=sous-jacent · derive.distBar=distance à la barrière en % · derive.portMens=portage mensuel en euros · valo/conso=ce qui est DÉJÀ connu, avec son âge · manque=ce qui n’a pas encore été collecté (ce n’est PAS ta mission dans cet appel) · marge.vl=valeur liquidative · marge.libre=marge disponible · marge.coussinPct=coussin en % · expoNetteFacteur=exposition NETTE par facteur, une jambe short compensant une jambe longue · gardeFous=plafonds chiffrés en vigueur · ecarts=écarts de contrôle déjà détectés par l’application · evSansTexte=les seuls événements dont tu dois écrire les textes · evADebriefer=les événements échus à débriefer · decVues=les dernières découvertes, une ligne chacune, pour ne pas les reproposer · deskPrec=TON jugement précédent sur cette ligne, avec sa date · vous=ce que l’utilisateur a déclaré sur cette ligne : declare=lesquelles des trois déclarations il a faites, revue=date de sa dernière relecture, et surtout these/inval/obj=SES PROPRES TEXTES quand il les a écrits — c’est sa position, pas la tienne · arbitragesTranches=les arbitrages que tu as proposés et que l’utilisateur a acceptés ou rejetés · arbitragesEnAttente=ceux qu’il n’a pas encore tranchés.');
+  L.push('LÉGENDE : id=identifiant interne d’une ligne (à réutiliser TEL QUEL) · nom=libellé complet · qte=quantité · dev=devise · cours=dernier cours lu · pru=prix de revient unitaire, dans la devise de la ligne · plPct=plus-value latente en %, EXACTE (cours et prix de revient sont dans la même devise) · varJour=variation du jour en % · expoEur=exposition en euros (delta pour un produit à levier) · pctVN=poids dans la valeur nette · poche=classement de gestion · fact=facteurs de risque · niveau=effort attendu sur cette ligne (complet / compact / ligne / derive) · profil=profil de valorisation · derive.sj=sous-jacent · derive.distBar=distance à la barrière en % · derive.portMens=portage mensuel en euros · valo/conso=ce qui est DÉJÀ connu, avec son âge · manque=ce qui n’a pas encore été collecté (ce n’est PAS ta mission dans cet appel) · marge.vl=valeur liquidative · marge.libre=marge disponible · marge.coussinPct=coussin en % · expoNetteFacteur=exposition NETTE par facteur, une jambe short compensant une jambe longue · gardeFous=plafonds chiffrés en vigueur · ecarts=écarts de contrôle déjà détectés par l’application · evSansTexte=les seuls événements dont tu dois écrire les textes · evADebriefer=les événements échus à débriefer · decVues=les dernières découvertes, une ligne chacune, pour ne pas les reproposer · deskPrec=TON jugement précédent sur cette ligne, avec sa date · vous=ce que l’utilisateur a déclaré sur cette ligne : declare=lesquelles des trois déclarations il a faites, revue=date de sa dernière relecture, et surtout these/inval/obj=SES PROPRES TEXTES quand il les a écrits — c’est sa position, pas la tienne · arbitragesTranches=les arbitrages que tu as proposés et que l’utilisateur a acceptés ou rejetés · arbitragesEnAttente=ceux qu’il n’a pas encore tranchés.');
   L.push(Fn_JsonCompact(contrat));
   L.push('Une clé ABSENTE vaut « inconnu » : elle a été omise pour ne pas consommer de jetons, jamais parce qu’elle vaut zéro.');
   L.push('');
