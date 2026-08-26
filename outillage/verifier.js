@@ -1523,6 +1523,45 @@ setTimeout(async () => {
   } catch (e) { ko('contrat d’appel', e.message); }
 
   /* --- Aide des commandes --- */
+  /* --- OÙ VIT QUOI ---
+     L'onglet Vigie sert à DÉCIDER : ce qui est échu, ce qui est à valider, ce qui
+     vient. La mécanique d'appel — charge du desk, projection de dépense, journal
+     détaillé — se RÈGLE, et un réglage vit dans Paramètres. Elle occupait 5 477
+     caractères en tête de Vigie, avant tout ce qu'on vient y lire. Le partage doit
+     tenir : ni retour du pavé dans Vigie, ni duplication entre les deux onglets. */
+  console.log('\nJ. Répartition Vigie / Paramètres');
+  try {
+    const R = q => vm.runInContext(q, ctx);
+    R('Fn_ModeAcces = function () { return { mode: "cle", libelle: "Clé personnelle" }; };');
+    R('Fn_RenderVigie();');
+    const texte = id => String((els[id] && els[id].innerHTML) || '')
+      .replace(/<[^>]+>/g, ' ').replace(/&[a-z]+;/g, ' ').replace(/\s+/g, ' ').trim();
+    const maj = texte('v-maj');
+    verifier('l’onglet Vigie ne porte plus le pavé de mise à jour (moins de 900 caractères)',
+      maj.length > 0 && maj.length < 900, maj.length + ' caractères');
+    /* Sans journal en base, la ligne « Dernier appel » n’a rien à dire : on
+       vérifie donc les deux déclencheurs, puis la ligne une fois un journal posé. */
+    verifier('mais il garde le lancement du desk, et ce qui le justifie',
+      /data-action="maj-lancer"/.test(String(els['v-maj'].innerHTML))
+      && /découverte\(s\) visée\(s\)/.test(maj), maj.slice(0, 80));
+    R('Var_State.majJournaux = [{ debutTs: Date.now(), passe: "desk", statut: "terminee", coutUsd: 1.5, phases: [] }]; Fn_RenderMajPanel();');
+    verifier('et le sort du dernier appel, avec son coût, en UNE ligne',
+      /Dernier appel/.test(texte('v-maj')) && /US/.test(texte('v-maj')),
+      texte('v-maj').slice(0, 80));
+    R('Var_State.majJournaux = [];');
+    /* AUCUNE REDONDANCE : ce qui est parti ne doit pas être resté. */
+    ['Ce que le desk aura à produire', 'Ce que le desk sait déjà', 'Projection de dépense']
+      .forEach(t => {
+        verifier('« ' + t.slice(0, 34) + ' » a quitté l’onglet Vigie',
+          maj.indexOf(t) < 0, maj.indexOf(t) < 0 ? 'absent, comme voulu' : 'encore présent');
+      });
+    R('Var_State.panneaux.majDetail = true; Fn_RenderParametres();');
+    const param = texte('p-contenu');
+    verifier('et se retrouve en entier dans Paramètres',
+      /Ce que le desk aura à produire/.test(param) && /Ce que le desk sait déjà/.test(param),
+      param.length + ' caractères dans Paramètres');
+  } catch (e) { ko('la répartition Vigie / Paramètres', String((e && e.stack) || e)); }
+
   console.log('\nI. Aide des commandes et codes d’erreur');
   try {
     const uniques = a => Array.from(new Set(a));

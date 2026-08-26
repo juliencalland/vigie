@@ -419,7 +419,7 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202608261802';
+const Cst_Version = 'vigie-202608261812';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -729,7 +729,7 @@ const Var_State = {
   sitesBloques: [],
   cumulApi: { appels: 0, jetonsEntree: 0, jetonsSortie: 0, jetonsCacheEcriture: 0, jetonsCacheLecture: 0, recherches: 0, lectures: 0, coutUsd: 0 },
   majJournaux: [],
-  panneaux: { acquisition: true, maj: false, journal: false, formAjout: false, regles: true,
+  panneaux: { acquisition: true, majDetail: false, journal: false, formAjout: false, regles: true,
     etageAcquisition: true, etageEnrichissement: false, etageDesk: false, etageCalendrier: false,
     apiParam: true, syncParam: true, seuilsParam: false, instrumentsParam: false, glossParam: false,
     sitesParam: false, erreursParam: false, remiseAZero: false, cadreExpo: true },
@@ -2013,7 +2013,7 @@ const Cst_AideOnglets = {
 };
 const Cst_AidePanneaux = {
   acquisition: 'la zone de collage des écrans du courtier et de l’export du jour : c’est l’étage qui alimente tout le reste, et il ne coûte rien.',
-  maj: 'le panneau de mise à jour : ce qui sera demandé au modèle, ce qu’il sait déjà de vos revues, la projection de dépense, le lancement, le suivi en direct et le bilan.',
+  majDetail: 'la mécanique d’appel, réglée ici plutôt qu’affichée dans Vigie : ce qui sera demandé au modèle, ce qu’il sait déjà de vos revues, la projection de dépense propre à cet appel, et le journal complet du dernier appel avec ses cinq postes de coût. L’onglet Vigie n’en garde que les deux boutons et le résultat en une ligne.',
   journal: 'l’historique des derniers appels : durée, recherches menées, jetons, coût et issue de chacun.',
   formAjout: 'le formulaire d’ajout d’un événement au calendrier, sans passer par un appel au modèle.',
   regles: 'l’ordre de réduction décidé à froid, et la provenance datée des chiffres. Les indicateurs à seuil sont dans l’onglet Discipline.',
@@ -4850,99 +4850,119 @@ function Fn_HtmlAlerteAppel(journal) {
     + '<div class="tres-petit" style="margin-top:4px">' + Fn_Gloss(Fn_Esc(journal.message || 'Aucun détail enregistré.')) + '</div>'
     + '</div>';
 }
+/* ONGLET VIGIE — LE GESTE, ET RIEN QUE LE GESTE.
+   Ce panneau portait tout : ce que le desk aura à produire, ce qu'il sait déjà,
+   la projection de dépense, l'enveloppe de recherche, le journal détaillé du
+   dernier appel. Cinq mille caractères de mécanique et de coûts, placés AVANT
+   tout ce qu'on vient réellement lire — les échus à débriefer, les arbitrages,
+   le calendrier. Or rien de tout cela ne se décide ici : cela se RÈGLE, et un
+   réglage vit dans Paramètres. Ne restent donc que les deux boutons, ce qui
+   justifie chacun en un mot, le sort du dernier appel et son coût. */
 function Fn_RenderMajPanel() {
   const el = document.getElementById('v-maj');
   if (!el) return;
-  const ouvert = !!Var_State.panneaux.maj;
   const mode = Fn_ModeAcces();
   const rt = Var_State._runtime;
   const journal = Var_State.majJournaux[0] || null;
   const enCours = !!rt.enCours;
-  let h = '<div class="carte">'
-    + '<button class="panneau-tete' + (ouvert ? ' ouvert' : '') + '" data-action="toggle" data-id="maj"><span>③ Mise à jour — le jugement du desk'
-    + (journal && journal.statut === 'en cours' ? ' <span class="spinner"></span>' : '') + '</span><span class="chevron">▶</span></button>';
+  const charge = Fn_ChargeDesk();
+  const aEnrichir = Fn_LignesAEnrichir();
+  const agendas = (typeof Fn_AgendasAEnrichir === 'function') ? Fn_AgendasAEnrichir() : [];
+  let h = '<div class="carte"><div class="carte-titre">③ Mise à jour'
+    + (journal && journal.statut === 'en cours' ? ' <span class="spinner"></span>' : '') + '</div>';
   if (journal) {
     const stLib = { 'en cours': 'en cours…', terminee: 'terminée', partielle: 'terminée (partielle)', echec: 'échec', interrompue: 'interrompue' }[journal.statut] || journal.statut;
     const stCls = journal.statut === 'echec' || journal.statut === 'interrompue' ? 'var(--crit)' : (journal.statut === 'partielle' ? 'var(--warn)' : 'var(--ok)');
-    h += '<div class="tres-petit maj-resume" style="margin-top:2px">Dernier appel : <span class="mono">' + Fn_Esc(Fn_FmtHeure(journal.debutTs)) + '</span> — '
+    h += '<div class="tres-petit maj-resume">Dernier appel : <span class="mono">' + Fn_Esc(Fn_FmtHeure(journal.debutTs)) + '</span> — '
       + Fn_Esc(journal.passe === 'enrichissement' ? 'enrichissement' : 'desk') + ' — <b style="color:' + stCls + '">' + Fn_Esc(stLib) + '</b>'
       + (journal.coutUsd != null ? ' — ' + Fn_Esc(Fn_FmtUsd(journal.coutUsd)) : '') + '</div>';
   }
+  // Un échec se lit LÀ OÙ L'ON CLIQUE POUR RELANCER, jamais au fond d'un journal.
   h += Fn_HtmlAlerteAppel(journal);
-  if (ouvert) {
-    h += Fn_HtmlBanniereVersion();
-    h += '<hr class="sep"><div class="petit"><b>Accès :</b> ' + Fn_Gloss(Fn_Esc(mode.libelle)) + '</div>';
-    if (mode.mode === 'aucun') {
-      h += '<div class="note note-info" style="margin-top:8px">Aucune requête ne sera émise (elle échouerait). Deux circuits : <b>artefact</b> — ouvrir ce fichier comme artefact, l’appel passe par le pont, sans clé ; <b>clé personnelle</b> — l’enregistrer dans Paramètres → Accès API, elle reste dans ce navigateur.</div>';
-    } else {
-      const charge = Fn_ChargeDesk();
-      const budgetDesk = Fn_BudgetDesk(charge.aDebriefer.length);
-      const aEnrichir = Fn_LignesAEnrichir();
-      const budgetEnr = Fn_BudgetEnrichissement(aEnrichir.length);
-      const memoire = Fn_MemoireDesk();
-      // Le panneau se lit en trois temps : ce qui sera produit, ce que cela
-      // coûtera, le lancement. Empilés sans titres, les trois se confondaient en
-      // un seul mur de texte où le bouton se perdait.
-      h += '<div class="etape"><div class="etape-t">Ce que le desk aura à produire</div>'
-        + '<div class="valo-grille">'
-        + '<span class="met">textes d’événements <b>' + charge.sansTexte.length + '</b></span>'
-        + '<span class="met">débriefs demandés <b>' + charge.aDebriefer.length + '</b></span>'
-        + '<span class="met">profils à attribuer <b>' + charge.sansProfil.length + '</b></span>'
-        + '<span class="met">découvertes visées <b>' + Cst_DecouvertesVisees + '</b></span>'
-        + '</div>'
-        + '<div class="tres-petit muted">Le desk ne reçoit AUCUNE demande de chiffre : quantités, cours, expositions, distances aux barrières et écarts de contrôle lui sont fournis, déjà calculés. Il ne traite que les événements sans texte ou dont les chiffres ont matériellement bougé — les autres ne repartent pas, et ne sont donc pas repayés.</div>'
-        + '</div>';
-      // Ce que la vigie lui remet de ses revues passées : c'est ce qui distingue
-      // une réévaluation d'un premier avis, et ce qui l'empêche de reproposer un
-      // arbitrage déjà tranché.
-      h += '<div class="etape"><div class="etape-t">Ce que le desk sait déjà de vos revues</div>'
-        + '<div class="valo-grille">'
-        + '<span class="met">lignes déjà jugées <b>' + memoire.jugees + '</b></span>'
-        + '<span class="met">arbitrages tranchés <b>' + memoire.arbitrages + '</b></span>'
-        + '<span class="met">thèses déclarées <b>' + memoire.theses + '</b></span>'
-        + '<span class="met">découvertes déjà vues <b>' + memoire.decouvertes + '</b></span>'
-        + '</div>'
-        + '<div class="tres-petit muted">Son jugement précédent lui est rendu ligne par ligne, ainsi que les arbitrages que vous avez acceptés ou rejetés. Il réévalue au lieu de redécouvrir, et ne repropose pas un arbitrage rejeté sans fait nouveau — repayer deux fois la même conclusion est la dépense la plus facile à éviter.</div>'
-        + '</div>';
-      /* Le bouton et sa projection de dépense vivent dans la MÊME boîte : la
-         projection est la dernière chose à lire avant de cliquer.
-         Le détail du budget de recherche — combien de recherches par découverte,
-         par débrief, par ligne enrichie — n'est plus répété ici : il est réglé et
-         documenté dans Paramètres → ⑤ Desk, et le redire deux fois obligeait à
-         tenir deux textes d'accord. La projection, elle, reste : elle est propre
-         À CET APPEL, calée sur ce qui a été réellement facturé, et n'existe
-         nulle part ailleurs. */
-      h += '<div class="etape etape-cle"><div class="etape-t">Lancer</div>';
-      if (!enCours) h += Fn_HtmlProjection('desk', charge.unites, budgetDesk, 'unités de travail');
-      h += '<div class="rang-btn">'
-        + (enCours
-          ? '<button class="btn btn-danger arme" data-action="maj-annuler">■ Annuler l’appel en cours</button>'
-          : '<button class="btn btn-accent btn-large" data-action="maj-lancer">'
-            + (journal && (journal.statut === 'echec' || journal.statut === 'interrompue') ? 'Relancer le jugement de desk' : 'Lancer le jugement de desk')
-            + '</button>')
-        + '</div></div>';
-      // Passe d'enrichissement : distincte, hebdomadaire, et proposée seulement
-      // quand elle a quelque chose à faire.
-      h += '<div class="etape" style="margin-top:10px"><div class="etape-t">Passe d’enrichissement — hebdomadaire, et séparée</div>';
-      if (!aEnrichir.length) {
-        h += '<div class="tres-petit muted">Rien à rafraîchir : toutes les lignes matérielles portent des données de moins de '
-          + (Fn_Num(Var_State.seuils.fraicheurDonneesJours) || 7) + ' jours. Un champ frais n’est jamais recollecté — c’est là que se fait l’essentiel de l’économie.</div>';
-      } else {
-        h += '<div class="tres-petit">' + aEnrichir.length + ' ligne(s) à rafraîchir : '
-          + aEnrichir.map(p => Fn_Esc(String(p.detention.nom || p.id).slice(0, 18))).join(' · ') + '.</div>'
-          + '<div class="tres-petit muted">Multiples, référentiels, consensus et agendas. Ces données ne bougent pas d’un jour à l’autre : les recollecter chaque jour serait payer plusieurs fois la même information. Les lignes au traitement allégé en sont exclues par construction.</div>';
-        if (!enCours) h += Fn_HtmlProjection('enrichissement', aEnrichir.length, budgetEnr, 'lignes');
-        h += '<div class="rang-btn"><button class="btn" data-action="maj-enrichir"' + (enCours ? ' disabled' : '') + '>Lancer l’enrichissement de ' + aEnrichir.length + ' ligne(s)</button></div>';
-      }
-      h += '</div>';
-      h += '<div class="tres-petit muted" style="margin-top:6px">Les données du portefeuille ne sont transmises qu’à api.anthropic.com, uniquement quand VOUS lancez un appel. Jamais d’identifiant de courtier.</div>';
-    }
-    if (journal) h += Fn_HtmlJournalMAJ(journal);
+  if (mode.mode === 'aucun') {
+    h += '<div class="note note-info">Aucune requête ne sera émise : aucun accès n’est configuré. Paramètres → Accès API.</div>';
+  } else if (enCours) {
+    h += '<div class="rang-btn"><button class="btn btn-danger arme" data-action="maj-annuler">■ Annuler l’appel en cours</button></div>';
+  } else {
+    const relance = journal && (journal.statut === 'echec' || journal.statut === 'interrompue');
+    h += '<div class="rang-btn">'
+      + '<button class="btn btn-accent btn-large" data-action="maj-lancer">'
+      + (relance ? 'Relancer le jugement de desk' : 'Lancer le jugement de desk') + '</button>'
+      + (aEnrichir.length || agendas.length
+        ? '<button class="btn" data-action="maj-enrichir">Enrichir ' + aEnrichir.length + ' ligne(s)'
+          + (agendas.length ? ' et ' + agendas.length + ' agenda(s)' : '') + '</button>'
+        : '')
+      + '</div>';
+    /* CE QUI JUSTIFIE CHAQUE BOUTON, en une ligne chacun : de quoi décider s'il
+       vaut la peine de lancer, sans avoir à lire le détail des enveloppes. */
+    h += '<div class="tres-petit muted">Desk : ' + charge.sansTexte.length + ' texte(s) d’événement · '
+      + charge.aDebriefer.length + ' débrief(s) demandé(s) · ' + charge.sansProfil.length + ' profil(s) à attribuer · '
+      + Cst_DecouvertesVisees + ' découverte(s) visée(s).</div>';
+    h += '<div class="tres-petit muted">Enrichissement : '
+      + (aEnrichir.length || agendas.length
+        ? aEnrichir.length + ' ligne(s) à valoriser'
+          + (agendas.length ? ' et ' + agendas.length + ' agenda(s) à dater — instruments visés par un ordre, sous-jacents' : '')
+          + '.'
+        : 'rien à rafraîchir, tout est frais.')
+      + '</div>';
+    h += '<div class="tres-petit muted">Budgets, projection de dépense et journal détaillé du dernier appel : <b>Paramètres → ⑤ Desk</b>.</div>';
   }
   el.innerHTML = h + '</div>';
-  const boiteReq = el.querySelector && el.querySelector('.maj-requetes');
-  if (boiteReq) boiteReq.scrollTop = boiteReq.scrollHeight;
-  Fn_MajAfficherSante(journal);
+}
+/* LA MÉCANIQUE, LÀ OÙ ELLE SE RÈGLE. Même contenu qu'avant, déplacé : ce que le
+   desk aura à produire, ce qu'il sait déjà de vos revues, la projection de
+   dépense propre à cet appel, et le journal complet. Rien n'est dupliqué avec
+   l'onglet Vigie, qui n'en garde que le résultat en une ligne. */
+function Fn_HtmlMajDetail() {
+  const mode = Fn_ModeAcces();
+  const journal = Var_State.majJournaux[0] || null;
+  const enCours = !!Var_State._runtime.enCours;
+  const charge = Fn_ChargeDesk();
+  const budgetDesk = Fn_BudgetDesk(charge.aDebriefer.length);
+  const aEnrichir = Fn_LignesAEnrichir();
+  const agendas = (typeof Fn_AgendasAEnrichir === 'function') ? Fn_AgendasAEnrichir() : [];
+  const unitesEnr = aEnrichir.length + Math.ceil(agendas.length / 2);
+  const budgetEnr = Fn_BudgetEnrichissement(unitesEnr);
+  const memoire = Fn_MemoireDesk();
+  let h = '<div class="petit"><b>Accès :</b> ' + Fn_Gloss(Fn_Esc(mode.libelle)) + '</div>';
+  if (mode.mode === 'aucun') {
+    return h + '<div class="note note-info" style="margin-top:8px">Aucune requête ne sera émise (elle échouerait). Deux circuits : <b>artefact</b> — ouvrir ce fichier comme artefact, l’appel passe par le pont, sans clé ; <b>clé personnelle</b> — l’enregistrer dans Accès API, elle reste dans ce navigateur.</div>';
+  }
+  h += '<div class="etape"><div class="etape-t">Ce que le desk aura à produire</div>'
+    + '<div class="valo-grille">'
+    + '<span class="met">textes d’événements <b>' + charge.sansTexte.length + '</b></span>'
+    + '<span class="met">débriefs demandés <b>' + charge.aDebriefer.length + '</b></span>'
+    + '<span class="met">profils à attribuer <b>' + charge.sansProfil.length + '</b></span>'
+    + '<span class="met">découvertes visées <b>' + Cst_DecouvertesVisees + '</b></span>'
+    + '</div>'
+    + '<div class="tres-petit muted">Le desk ne reçoit AUCUNE demande de chiffre : quantités, cours, expositions, distances aux barrières et écarts de contrôle lui sont fournis, déjà calculés. Il ne traite que les événements sans texte ou dont les chiffres ont matériellement bougé — les autres ne repartent pas, et ne sont donc pas repayés.</div>'
+    + '</div>';
+  h += '<div class="etape"><div class="etape-t">Ce que le desk sait déjà de vos revues</div>'
+    + '<div class="valo-grille">'
+    + '<span class="met">lignes déjà jugées <b>' + memoire.jugees + '</b></span>'
+    + '<span class="met">arbitrages tranchés <b>' + memoire.arbitrages + '</b></span>'
+    + '<span class="met">thèses déclarées <b>' + memoire.theses + '</b></span>'
+    + '<span class="met">découvertes déjà vues <b>' + memoire.decouvertes + '</b></span>'
+    + '</div>'
+    + '<div class="tres-petit muted">Son jugement précédent lui est rendu ligne par ligne, ainsi que les arbitrages que vous avez acceptés ou rejetés. Il réévalue au lieu de redécouvrir, et ne repropose pas un arbitrage rejeté sans fait nouveau — repayer deux fois la même conclusion est la dépense la plus facile à éviter.</div>'
+    + '</div>';
+  if (!enCours) {
+    h += '<div class="etape"><div class="etape-t">Projection de dépense — jugement de desk</div>'
+      + Fn_HtmlProjection('desk', charge.unites, budgetDesk, 'unités de travail') + '</div>';
+    if (aEnrichir.length || agendas.length) {
+      h += '<div class="etape"><div class="etape-t">Projection de dépense — enrichissement</div>'
+        + '<div class="tres-petit">' + aEnrichir.length + ' ligne(s) à valoriser'
+        + (agendas.length ? ' · ' + agendas.length + ' agenda(s) à dater (un agenda compte pour une demi-unité : une date, pas une batterie de ratios)' : '')
+        + '.</div>'
+        + Fn_HtmlProjection('enrichissement', unitesEnr, budgetEnr, 'unités') + '</div>';
+    } else {
+      h += '<div class="tres-petit muted">Enrichissement : rien à rafraîchir. Toutes les lignes portent un multiple, son référentiel et des données de moins de '
+        + (Fn_Num(Var_State.seuils.fraicheurDonneesJours) || 7) + ' jours. Un champ frais n’est jamais recollecté — c’est là que se fait l’essentiel de l’économie.</div>';
+    }
+  }
+  h += '<div class="tres-petit muted">Les données du portefeuille ne sont transmises qu’à api.anthropic.com, uniquement quand VOUS lancez un appel. Jamais d’identifiant de courtier.</div>';
+  if (journal) h += Fn_HtmlJournalMAJ(journal);
+  return h;
 }
 function Fn_HtmlJournalMAJ(journal) {
   const majEnCours = journal.statut === 'en cours';
@@ -5880,6 +5900,8 @@ function Fn_RenderParametres() {
       + '<div class="tres-petit muted">Le budget est toujours CALCULÉ à partir du travail réellement demandé, jamais fixé en dur : une constante est arbitraire par construction, et c’est elle qui laissait les valorisations vides en fin de course.</div>'
       + '<div class="tres-petit muted">L’étanchéité est À SENS UNIQUE : rien ne peut entamer l’enveloppe des découvertes, mais ce que le desk trouve en débriefant peut nourrir une découverte ou un arbitrage sans rien coûter de plus — la page est déjà lue.</div>';
   });
+  // ---- La mécanique d'appel, sortie de l'onglet Vigie où elle noyait le geste
+  h += Fn_Panneau('majDetail', '⑤ bis Mise à jour — charge, projection de dépense et journal', Fn_HtmlMajDetail);
   // ---- Accès API
   h += Fn_Panneau('apiParam', 'Accès API — clé, tarifs et consommation', () => {
     return '<div class="petit">' + Fn_Gloss(Fn_Esc(mode.libelle)) + '</div>'
