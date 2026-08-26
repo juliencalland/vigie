@@ -441,7 +441,7 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202608262100';
+const Cst_Version = 'vigie-202608262107';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -5605,7 +5605,16 @@ function Fn_HtmlSocle(p) {
        taux du jour pour un achat fait à un taux passé : approché, et dit comme tel. */
     + bloc('plus-value latente', Fn_FmtPct(d.plPct, 1, true),
         Fn_Num(d.plPct) == null ? '' : (Fn_Num(d.plPct) >= 0 ? ' v-pos' : ' v-neg'),
-        Fn_Num(d.pru) != null ? 'PRU ' + Fn_FmtNb(d.pru, 4).replace(/,?0+$/, '') + ' ' + (d.dev || '') : null)
+        /* SUR UNE LIGNE EN DEVISE, CE POURCENTAGE N'EST PAS CELUI DU COURTIER, et il
+           faut le dire : le nôtre est la performance du TITRE, cours contre prix de
+           revient dans la même monnaie — exact, et sans effet de change. Celui du
+           courtier est en euros et incorpore le mouvement de la paire depuis
+           l'achat. Les deux sont justes ; les voir diverger sans explication ferait
+           conclure à une erreur. */
+        Fn_Num(d.pru) != null
+          ? 'PRU ' + Fn_FmtNb(d.pru, 4).replace(/,?0+$/, '') + ' ' + (d.dev || '')
+            + ((d.dev && d.dev !== 'EUR') ? ' · hors change' : '')
+          : null)
     + '</div>';
   if (Fn_Num(d.var) == null) {
     h += '<div class="tres-petit muted">Variation « — » : il faut deux clôtures successives. La prochaine analyse des entrées fournira la seconde — aucune recherche n’est nécessaire.</div>';
