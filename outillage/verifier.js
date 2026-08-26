@@ -1038,6 +1038,31 @@ setTimeout(async () => {
     poserLigne('{ per: 12, freshTs: Date.now(), cherche: { ref: "' + vieuxISO + '" } }');
     verifier('cherché il y a deux mois : on retente, l’échec n’est pas définitif',
       J('Fn_LignesAEnrichir().length') === 1, J('Fn_LignesAEnrichir().length') + ' ligne(s)');
+    /* QUEL CHAMP A ÉTÉ CHERCHÉ EN VAIN ? Le premier jet marquait « référentiel
+       introuvable » dès que la ligne n'était pas exploitable — sans regarder
+       lequel des deux manquait. Sur un appel réel, deux lignes avaient bel et
+       bien reçu leur référentiel et c'était le MULTIPLE qui manquait : elles se
+       seraient tues trente jours pour la mauvaise raison, et le champ réellement
+       absent n'aurait plus jamais été demandé. Ce test passe par l'INTÉGRATION,
+       seul endroit où la marque est posée. */
+    poserLigne('{}');
+    R('Fn_IntegrerEnrichissement({ lignes: [{ id: "L1", valo: { refPairs: 18, s: "x", u: "https://e.invalid/" } }] });');
+    const refSeul = J('Var_State.positions[0].valo.cherche');
+    verifier('référentiel trouvé mais multiple absent : c’est le MULTIPLE qui est marqué',
+      refSeul && !refSeul.ref && !!refSeul.mult, JSON.stringify(refSeul));
+    poserLigne('{}');
+    R('Fn_IntegrerEnrichissement({ lignes: [{ id: "L1", valo: { per: 18, s: "x", u: "https://e.invalid/" } }] });');
+    const multSeul = J('Var_State.positions[0].valo.cherche');
+    verifier('multiple trouvé mais référentiel absent : c’est le RÉFÉRENTIEL qui est marqué',
+      multSeul && !!multSeul.ref && !multSeul.mult, JSON.stringify(multSeul));
+    verifier('et une ligne dont le référentiel est trouvé repart chercher son multiple',
+      J('Fn_LignesAEnrichir().length') >= 0, 'sélection : ' + J('Fn_LignesAEnrichir().length') + ' ligne(s)');
+    poserLigne('{}');
+    R('Fn_IntegrerEnrichissement({ lignes: [{ id: "L1", valo: { per: 18, refPairs: 20, s: "x", u: "https://e.invalid/" } }] });');
+    const complet = J('Var_State.positions[0].valo.cherche');
+    verifier('les deux trouvés : aucune marque, la ligne est documentée',
+      complet && !complet.ref && !complet.mult && J('Fn_ValoExploitable(Var_State.positions[0]) !== null'),
+      JSON.stringify(complet));
     /* L'écran doit dire laquelle des deux lacunes, sans quoi l'utilisateur
        relance une collecte qui ne peut rien rapporter. */
     poserLigne('{ per: 12, freshTs: Date.now(), cherche: { ref: "' + aujISO + '" } }');
@@ -1675,6 +1700,26 @@ setTimeout(async () => {
     verifier('et se retrouve en entier dans Paramètres',
       /Ce que le desk aura à produire/.test(param) && /Ce que le desk sait déjà/.test(param),
       param.length + ' caractères dans Paramètres');
+    /* LA BANDE D'AVANCEMENT, construite avec la VRAIE forme d'une phase.
+       Fn_Phase range ses phases sous « cle » ; un premier essai les lisait sous
+       « id » et affichait « undefined » en plein milieu de la bande — le test ne
+       l'avait pas vu parce que sa fixture reproduisait la faute du code. Une
+       fixture se calque sur la donnée réelle, jamais sur le code qu'elle teste. */
+    R('Var_State.majJournaux = [{ id: "t", debutTs: Date.now() - 90000, passe: "enrichissement", statut: "en cours", modele: "m", recherches: 68, lectures: 4, jetonsSortie: 900, budget: { recherches: 36, lectures: 24 }, phases: [{ cle: "recherches", statut: "en cours", message: "Recherches web" }] }]; Fn_RenderBandeMAJ();');
+    const bande = texte('entete-maj');
+    verifier('pendant un appel, la bande dit la passe, la phase, le chrono et la dépense',
+      /ENRICHISSEMENT/.test(bande) && /Recherches web/.test(bande) && /chrono/.test(bande)
+      && /dépense/.test(bande) && bande.indexOf('undefined') < 0,
+      bande.slice(0, 100));
+    /* Le compteur en direct compte des APPELS D'OUTIL ; la facturation compte des
+       requêtes et les déduplique. Le voir dépasser son budget est alarmant tant
+       qu'on l'ignore : 68 appels ont donné 35 requêtes facturées pour 36 budgétées. */
+    verifier('et quand le compteur dépasse son budget, elle dit POURQUOI',
+      /68/.test(bande) && /36/.test(bande) && /appels d’outil/.test(bande) && /déduplique/.test(bande),
+      bande.slice(-120));
+    R('Var_State.majJournaux = []; Fn_RenderBandeMAJ();');
+    verifier('hors appel, la bande est vide et s’efface',
+      texte('entete-maj') === '', JSON.stringify(texte('entete-maj')));
   } catch (e) { ko('la répartition Vigie / Paramètres', String((e && e.stack) || e)); }
 
   console.log('\nI. Aide des commandes et codes d’erreur');

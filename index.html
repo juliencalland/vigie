@@ -430,7 +430,7 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202608261914';
+const Cst_Version = 'vigie-202608261936';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -4897,7 +4897,9 @@ function Fn_LignesAEnrichir() {
     if (p.desk.niveau === 'derive') return false;
     return Fn_DonneePerimee(p.valo && p.valo.freshTs)
       || Fn_DonneePerimee(p.consensus && p.consensus.freshTs)
-      || (!Fn_ValoExploitable(p) && !Fn_ChercheEnVain(p, 'ref'));
+      || (!Fn_ValoExploitable(p) && !(Fn_ChercheEnVain(p, 'ref') && Fn_ChercheEnVain(p, 'mult'))
+          && !(Fn_ChercheEnVain(p, 'ref') && (Fn_Num(p.valo.per) != null || Fn_Num(p.valo.perN) != null))
+          && !(Fn_ChercheEnVain(p, 'mult') && (Fn_Num(p.valo.refHist) != null || Fn_Num(p.valo.refPairs) != null)));
   });
 }
 /* LES INSTRUMENTS QUE L'ON NE DÉTIENT PAS ET DONT LA DATE COMPTE QUAND MÊME :
@@ -6193,7 +6195,10 @@ function Fn_HtmlBandeMAJ() {
   const j = Var_State.majJournaux[0];
   if (!j || j.statut !== 'en cours') return '';
   const phase = (j.phases || []).filter(p => p.statut === 'en cours').slice(-1)[0];
-  const lib = phase ? (Cst_PhasesMAJ.filter(x => x[0] === phase.id)[0] || [null, phase.id])[1] : 'en cours';
+  /* La phase se range sous « cle », pas « id » — lire le mauvais champ affichait
+     « undefined » en plein milieu de la bande. Le message de la phase fait un
+     repli utile : il porte déjà son libellé. */
+  const lib = phase ? ((Cst_PhasesMAJ.filter(x => x[0] === phase.cle)[0] || [])[1] || phase.message || phase.cle || 'en cours') : 'en cours';
   const bud = j.budget && Fn_Num(j.budget.recherches);
   return '<span class="em-t">⏳ ' + Fn_Esc(j.passe === 'enrichissement' ? 'ENRICHISSEMENT' : 'JUGEMENT DE DESK') + '</span>'
     + '<span>' + Fn_Esc(lib) + '</span>'
@@ -6587,6 +6592,9 @@ function Fn_ContratEnrichissement(lignes, agendas) {
          ligne restait éternellement dans la sélection et se repayait chaque
          semaine pour le même échec. */
       if (Fn_Num(v.refHist) == null && Fn_Num(v.refPairs) == null && !Fn_ChercheEnVain(p, 'ref')) manque.push('refPairs');
+      /* Le multiple a sa propre mémoire : une ligne dont le référentiel est trouvé
+         mais le multiple introuvable ne doit pas se taire au nom du référentiel. */
+      if (Fn_Num(v.per) == null && Fn_Num(v.perN) == null && !Fn_ChercheEnVain(p, 'mult')) manque.push('per');
       if (!c.pubDate) manque.push('pubDate');
       if (!c.conso) manque.push('conso');
       return { id: p.id, nom: String(p.detention.nom || '').slice(0, 60), isin: p.isin || null,
@@ -6888,9 +6896,16 @@ function Fn_IntegrerEnrichissement(data, journal) {
          pas dans les sources atteintes. On le DATE, ce qui vaut deux choses —
          l'écran peut dire « cherché le JJ/MM, introuvable » au lieu de « manquant »,
          et la ligne cesse de repartir chaque semaine pour le même échec. */
+      /* DATER LE BON CHAMP. Marquer « référentiel introuvable » dès que la ligne
+         n'est pas exploitable était trop grossier : sur deux lignes, le
+         référentiel avait bel et bien été trouvé et c'était le MULTIPLE qui
+         manquait. Elles se seraient tues trente jours pour la mauvaise raison,
+         et le champ réellement absent n'aurait plus jamais été demandé. */
       p.valo.cherche = p.valo.cherche || {};
-      if (Fn_ValoExploitable(p)) delete p.valo.cherche.ref;
-      else p.valo.cherche.ref = Fn_AujISO();
+      const aRef = Fn_Num(p.valo.refHist) != null || Fn_Num(p.valo.refPairs) != null;
+      const aMult = Fn_Num(p.valo.per) != null || Fn_Num(p.valo.perN) != null;
+      if (aRef) delete p.valo.cherche.ref; else p.valo.cherche.ref = Fn_AujISO();
+      if (aMult) delete p.valo.cherche.mult; else p.valo.cherche.mult = Fn_AujISO();
       det.valo++;
     }
     if (c && typeof c === 'object') {
