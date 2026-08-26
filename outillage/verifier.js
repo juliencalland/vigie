@@ -732,6 +732,104 @@ setTimeout(async () => {
       meme.cv === 25 && meme.c === 21, JSON.stringify(meme) + ' (la veille doit rester 25, pas devenir 20)');
   } catch (e) { ko('l’arithmétique du portefeuille', e.message); }
 
+  /* --- CE QUI SE PASSE AVANT QU'UN ORDRE NE PARTE ---
+     Un ordre d'achat sur un titre qui publie dans trois jours est exactement ce
+     qu'il faut voir AVANT, et rien ne le montrait : la règle des publications ne
+     parcourt que les positions, et un titre qu'on ne détient pas encore n'en est
+     pas une. Les événements d'ordre, eux, se périmaient chaque nuit. */
+  console.log('\nG octies. Ordres en attente — permanence et annonces à venir');
+  try {
+    const R = q => vm.runInContext(q, ctx);
+    const J = q => JSON.parse(JSON.stringify(R(q)));
+    const hier = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const dans3j = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10);
+    const socle = 'Var_State.positions = []; Var_State.calendrier = []; Var_State.controles = [];'
+      + 'Var_State.agenda = {}; Var_State.executes = [];'
+      + 'Var_State.marge = { titres: 1000, cash: 0, vl: 1000, risque: 500, libre: 500, as: "18:00", ts: Date.now() };'
+      + 'Var_State.ordres = [{ id: "o1", ticker: null, nom: "Untel SA", isin: null, sens: "achat",'
+      + ' type: "limite", qte: 10, limite: 20, montantEur: 200, validite: "Continu", ts: Date.now() }];';
+
+    /* 1. PERMANENCE. L'identifiant portait la date du jour : chaque analyse créait
+       un nouvel événement et laissait le précédent basculer en « échu », donc en
+       attente de débrief, donc à repayer — pour un ordre qui n'avait pas bougé. */
+    R(socle + 'Fn_GenererSquelette(); Fn_MajStatutsCalendrier();');
+    const un = J('Var_State.calendrier.filter(function (e) { return e.source === "regle:ordre"; })');
+    R('Fn_GenererSquelette(); Fn_GenererSquelette(); Fn_MajStatutsCalendrier();');
+    const apres = J('Var_State.calendrier.filter(function (e) { return e.source === "regle:ordre"; })');
+    verifier('trois analyses dans la journée ne font qu’UN événement d’ordre, toujours vif',
+      un.length === 1 && apres.length === 1 && apres[0].statut === 'imminent',
+      apres.length + ' événement(s), statut ' + (apres[0] || {}).statut);
+    /* Le test ci-dessus ne franchit pas minuit : c’est l’identifiant lui-même qui
+       doit être daté de rien, sans quoi le lendemain en recrée un et périme celui
+       de la veille. On le vérifie donc sur sa FORME. */
+    verifier('l’identifiant d’un événement d’ordre ne porte AUCUNE date',
+      !/-[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(String((apres[0] || {}).id || '')),
+      String((apres[0] || {}).id || '(aucun)'));
+
+    /* 2. Les exemplaires datés d'une version antérieure sont CLASSÉS au chargement :
+       ils n'ont rien à débriefer, l'ordre qu'ils décrivent est toujours vivant. */
+    R('Var_State.calendrier.push({ id: "ordre-untel-sa-achat-20-' + hier + '", isin: null, date: "' + hier + '",'
+      + ' statut: "echu", source: "regle:ordre", libelle: "Ordre en attente — achat Untel SA", court: "Ordre",'
+      + ' sev: "Info", conf: true, tags: ["ORDRES"], metriques: [], textes: {}, debrief: null });');
+    const classees = J('Fn_ClasserOrdresDatesAnciennes()');
+    verifier('un exemplaire daté d’une version antérieure est CLASSÉ, jamais mis à débriefer',
+      classees === 1 && J('Fn_ADebriefer().length') === 0,
+      classees + ' classé(s), ' + J('Fn_ADebriefer().length') + ' à débriefer');
+
+    /* 3. L'ANNONCE ATTENDUE AVANT EXÉCUTION — le point aveugle. */
+    R(socle + 'Var_State.agenda = { "untel-sa": { nom: "Untel SA", pubDate: "' + dans3j + '", ts: Date.now() } };'
+      + 'Fn_GenererSquelette(); Fn_MajStatutsCalendrier();');
+    const annonce = J('Var_State.calendrier.filter(function (e) { return e.source === "regle:ordre-annonce"; })');
+    verifier('un ordre sur un titre NON DÉTENU qui publie sous peu lève un événement daté',
+      annonce.length === 1 && annonce[0].date === dans3j && /AVANT exécution/.test(annonce[0].libelle),
+      annonce.length + ' événement(s) : ' + ((annonce[0] || {}).libelle || '—').slice(0, 52));
+    verifier('et il dit que le titre n’est pas encore détenu, avec le délai restant',
+      (annonce[0].metriques || []).some(m => /pas encore détenu|ligne nouvelle/.test(m.v))
+      && (annonce[0].metriques || []).some(m => /jour\(s\)/.test(m.v)),
+      JSON.stringify((annonce[0].metriques || []).map(m => m.l)));
+
+    /* 4. La sélection de collecte va chercher ces dates : instrument d'un ordre,
+       et sous-jacent d'un produit à levier — ni l'un ni l'autre n'est une position. */
+    R(socle + 'Var_State.positions = [{ id: "T1", ticker: null, isin: null,'
+      + ' detention: { nom: "Zed Turbo Short", qte: 100, dev: "EUR", cloture: 2, clotureVeille: 2,'
+      + '   valEurExport: null, facteurs: [], poche: null, ts: Date.now() },'
+      + ' produit: { type: "derive", emetteur: "Zed", sousJacent: "Autre Inc", sens: "short", barriere: null,'
+      + '   strike: null, parite: 1, levier: 1, histBarriere: [] }, desk: {}, marche: {}, valo: {}, consensus: {} }];'
+      + 'Fn_Recalculer();');
+    const ag = J('Fn_AgendasAEnrichir()');
+    verifier('l’instrument d’un ordre et le SOUS-JACENT d’un produit à levier entrent en collecte',
+      ag.length === 2 && ag.some(a => /Untel/.test(a.nom)) && ag.some(a => /Autre Inc/.test(a.nom)),
+      ag.map(a => a.nom + ' [' + a.motif + ']').join(' | '));
+    R('Var_State.agenda = { "untel-sa": { nom: "Untel SA", pubDate: "' + dans3j + '", ts: Date.now() },'
+      + ' "autre-inc": { nom: "Autre Inc", pubDate: "' + dans3j + '", ts: Date.now() } };');
+    verifier('un agenda déjà frais n’est JAMAIS recollecté',
+      J('Fn_AgendasAEnrichir().length') === 0, J('Fn_AgendasAEnrichir().length') + ' encore demandé(s)');
+
+    /* 5. Aucune ligne détenue n'est privée d'agenda : le traitement allégé se
+       disait « agenda seulement » et n'en collectait aucun. */
+    R('Var_State.positions.push({ id: "L1", ticker: null, isin: null,'
+      + ' detention: { nom: "Petite SA", qte: 1, dev: "EUR", cloture: 5, clotureVeille: 5, valEurExport: null,'
+      + '   facteurs: [], poche: null, ts: Date.now() },'
+      + ' produit: { type: "action", sens: "long", histBarriere: [] }, desk: {}, marche: {}, valo: {}, consensus: {} });'
+      + 'Fn_Recalculer();');
+    const petite = J('Var_State.positions.find(function (p) { return p.id === "L1"; }).desk.niveau');
+    verifier('une ligne au traitement ALLÉGÉ part quand même à la collecte',
+      petite === 'ligne' && J('Fn_LignesAEnrichir().some(function (p) { return p.id === "L1"; })') === true,
+      'niveau ' + petite + ', sélectionnée : ' + J('Fn_LignesAEnrichir().length') + ' ligne(s)');
+    verifier('un produit à levier, lui, reste hors collecte de valorisation',
+      J('Fn_LignesAEnrichir().some(function (p) { return p.id === "T1"; })') === false,
+      'produit à levier ' + (J('Fn_LignesAEnrichir().some(function (p) { return p.id === "T1"; })') ? 'sélectionné' : 'écarté'));
+
+    /* 6. Le contrat porte les deux listes, et les agendas ne demandent que des dates. */
+    ctx.__lg = J('Fn_LignesAEnrichir()');
+    const contrat = J('Fn_ContratEnrichissement(Fn_LignesAEnrichir(), Fn_AgendasAEnrichir())');
+    verifier('le cahier des charges sépare les positions à valoriser des agendas à dater',
+      Array.isArray(contrat.agendas) && Array.isArray(contrat.lignes),
+      (contrat.lignes || []).length + ' ligne(s), ' + (contrat.agendas || []).length + ' agenda(s)');
+
+    R('Var_State.positions = []; Var_State.ordres = []; Var_State.calendrier = []; Var_State.agenda = {}; Fn_Recalculer();');
+  } catch (e) { ko('les ordres en attente et leurs annonces', String((e && e.stack) || e)); }
+
   /* --- CE QUE LES INDICATEURS MESURENT VRAIMENT ---
      Deux d'entre eux annonçaient autre chose que ce qu'ils calculaient, et l'un
      contredisait son voisin sur le même écran. Un indicateur faux est pire qu'un

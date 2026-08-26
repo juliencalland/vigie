@@ -419,7 +419,7 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202608260427';
+const Cst_Version = 'vigie-202608260451';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -670,7 +670,7 @@ const Cst_SitesRecherche = [
    Fn_RemiseAZero la relit champ par champ plutôt que de tenir sa propre liste :
    deux listes à garder d’accord, c’est une de trop, et c’est celle qu’on oublie
    de compléter le jour où l’on ajoute un champ. */
-const Cst_SeedEtat = { marge: null, fx: null, theses: {}, derniereMaj: null,
+const Cst_SeedEtat = { marge: null, fx: null, theses: {}, agenda: {}, derniereMaj: null,
   derniereEnrichissement: null, filtreTag: null, filtreJour: null,
   positions: [], ordres: [], executes: [], calendrier: [], decouvertes: [],
   actions: [], controles: [], instruments: [], majJournaux: [], captures: [] };
@@ -712,6 +712,13 @@ const Var_State = {
   controles: [],      // {id, kind, resume, preuve, propo, payload, statut} — le sas obligatoire
   instruments: [],    // {id, ticker, isin, place, libelle}
   theses: {},         // par identifiant de position : {ecrite, invalidation, objectif, derniereRevue}
+  /* AGENDA DES INSTRUMENTS QUE L'ON NE DÉTIENT PAS ENCORE. Une date de
+     publication ne concerne pas que les lignes en portefeuille : un ordre d'achat
+     en attente sur un titre qui publie dans trois jours est exactement ce qu'il
+     faut voir AVANT que l'ordre ne parte. Le sous-jacent d'un produit à levier
+     relève du même besoin — c'est lui qui porte le risque, pas le turbo.
+     Clé = nom normalisé de l'instrument. Écrit par le seul étage enrichissement. */
+  agenda: {},         // {<nom normalisé>: {nom, pubDate, exDiv, s, u, ts}}
   seuils: Object.assign({}, Cst_SeuilsDefaut),
   tarifs: Object.assign({}, Cst_TarifsDefaut),
   modeleMAJ: Cst_ModeleMAJ,
@@ -784,7 +791,7 @@ const Cst_ClesEtat = ['onglet', 'captures', 'fx', 'marge', 'positions', 'ordres'
   'calendrier', 'decouvertes', 'actions', 'controles', 'instruments', 'majJournaux',
   'filtreTag', 'filtreJour', 'filtreDecouvertes', 'derniereMaj', 'derniereEnrichissement',
   'freqRappel', 'sitesRecherche', 'sitesBloques', 'modeleMAJ', 'effortMAJ', 'razTs'];
-const Cst_ClesEtatObjet = ['theses'];
+const Cst_ClesEtatObjet = ['theses', 'agenda'];
 const Cst_ClesEtatFusion = ['seuils', 'tarifs', 'cumulApi', 'panneaux'];
 
 /* ----------------------------------------------------------------
@@ -941,6 +948,7 @@ function Fn_AppliquerEtat(s) {
     if (!Array.isArray(Var_State[c])) Var_State[c] = [];
   });
   if (!Var_State.theses || typeof Var_State.theses !== 'object') Var_State.theses = {};
+  if (!Var_State.agenda || typeof Var_State.agenda !== 'object') Var_State.agenda = {};
   // Le montant venu de l'export s'écrivait autrefois dans valEur, qui porte
   // désormais la valeur du JOUR, recalculée depuis le cours du jour. Un état
   // antérieur voit donc son montant recopié dans son champ propre : sans cela,
@@ -965,6 +973,7 @@ async function Fn_Load() {
   });
   Fn_ReparerJournauxOrphelins();
   Fn_FusionnerControlesDoublons();
+  Fn_ClasserOrdresDatesAnciennes();
   Fn_MajStatutsCalendrier();
   Fn_ElaguerEtat();
   Fn_Recalculer();
@@ -981,6 +990,7 @@ function Fn_AdopterEtat(s) {
   // termine. Même règle qu'au chargement — seule une exécution locale fait foi.
   Fn_ReparerJournauxOrphelins();
   Fn_FusionnerControlesDoublons();
+  Fn_ClasserOrdresDatesAnciennes();
   Fn_MajStatutsCalendrier();
   Fn_Recalculer();
   try { Fn_StorageSet(Fn_SerialiserEtat()); } catch (e) { /* session seulement */ }
@@ -994,6 +1004,22 @@ function Fn_AdopterEtat(s) {
    chaque enregistrement, et un « tout accepter » en laisserait derrière. On les
    replie donc au chargement ET à l'adoption, en gardant la DERNIÈRE de chaque
    clé : c'est elle qui porte les chiffres les plus frais. */
+/* L'événement d'un ordre portait autrefois la DATE DU JOUR dans son identifiant :
+   chaque analyse en créait un nouveau et laissait le précédent basculer en
+   « échu », donc en attente de débrief. Ces exemplaires périmés n'ont rien à
+   débriefer — l'ordre qu'ils décrivent est toujours vivant sous son identifiant
+   stable. On les CLASSE, ce qui les sort du calendrier vif sans les effacer. */
+function Fn_ClasserOrdresDatesAnciennes() {
+  let n = 0;
+  (Var_State.calendrier || []).forEach(e => {
+    if (e.source !== 'regle:ordre' || e.statut === 'debriefe' || e.statut === 'classe') return;
+    if (!/-\d{4}-\d{2}-\d{2}$/.test(String(e.id || ''))) return;
+    e.statut = 'classe';
+    e.debrief = e.debrief || { note: 'Classé automatiquement : exemplaire daté d’un ordre encore vivant, produit par une version antérieure.', ts: Date.now() };
+    n++;
+  });
+  return n;
+}
 function Fn_FusionnerControlesDoublons() {
   const gardees = [], parCle = {};
   let replies = 0;
@@ -3831,7 +3857,16 @@ function Fn_GenererSquelette() {
   // RÈGLE 6 — ordre en attente : vigilance d'exécution, et échéance de validité.
   Var_State.ordres.forEach(o => {
     const jours = o.ts ? Math.floor((Date.now() - o.ts) / 86400000) : 0;
-    const id = 'ordre-' + Fn_Slug((o.nom || '') + '-' + (o.sens || '') + '-' + (o.limite || '')) + '-' + auj;
+    /* L'IDENTIFIANT NE PORTE PLUS LA DATE DU JOUR. Un ordre encore vivant est le
+       MÊME événement d'un jour sur l'autre : le dater du jour en créait un nouveau
+       à chaque analyse et faisait basculer le précédent en « échu », donc à
+       débriefer, donc à REPAYER — pour un ordre qui n'avait pas bougé d'un
+       centime. Le calendrier se remplissait de doublons périmés, et l'utilisateur
+       retrouvait chaque matin un calendrier « vide » où tout était échu.
+       L'événement est reposé à chaque analyse, ce qui rafraîchit sa date tant que
+       l'ordre vit ; le jour où l'ordre disparaît de la capture il cesse d'être
+       reposé, passe échu, et demande alors à bon droit ce qu'il est devenu. */
+    const id = 'ordre-' + Fn_Slug((o.nom || '') + '-' + (o.sens || '') + '-' + (o.limite || ''));
     poser({ id, isin: null, date: auj, statut: 'imminent', source: 'regle:ordre',
       libelle: 'Ordre en attente — ' + (o.sens || '') + ' ' + (o.nom || 'instrument non identifié'),
       court: 'Ordre en attente', sev: jours > 5 ? 'Warn' : 'Info', conf: true,
@@ -3843,6 +3878,43 @@ function Fn_GenererSquelette() {
           ? 'marge disponible ' + Fn_FmtEur(Var_State.marge.libre, 0) + ' → ' + Fn_FmtEur(Fn_Num(Var_State.marge.libre) - Fn_Num(o.montantEur), 0) + ' [calcul]'
           : manquant('marge disponible ou montant de l’ordre'))
       ] });
+  });
+  /* RÈGLE 6 bis — ANNONCE ATTENDUE AVANT L'EXÉCUTION D'UN ORDRE.
+     C'est le point aveugle que rien ne couvrait : la règle des publications ne
+     parcourt que les POSITIONS, si bien qu'un ordre d'achat sur un titre qu'on ne
+     détient pas encore ne déclenchait rien. Acheter la veille d'une publication
+     est pourtant la façon la plus banale de subir un écart de cours qu'on n'a pas
+     choisi — et l'ordre, lui, est déjà chez le courtier.
+     La date vient de la position quand le titre est déjà détenu, sinon de
+     l'agenda collecté pour l'instrument visé. */
+  Var_State.ordres.forEach(o => {
+    if (!o.nom) return;
+    const cle = Fn_NomAgenda(o.nom);
+    const pos = Var_State.positions.find(x => Fn_NomAgenda(x.detention.nom) === cle);
+    const src = pos ? { pubDate: pos.consensus && pos.consensus.pubDate, exDiv: pos.valo && pos.valo.exDiv }
+      : (Var_State.agenda[cle] || {});
+    [['pubDate', 'Publication de résultats', 'RÉSULTATS'], ['exDiv', 'Détachement de dividende', 'DIVIDENDE']].forEach(q => {
+      const d = src[q[0]];
+      if (!d || d < auj || d > fin) return;
+      const jours = Fn_JoursDepuis(d);
+      poser({ id: 'ordre-annonce-' + Fn_Slug((o.nom || '') + '-' + (o.sens || '')) + '-' + q[0] + '-' + d,
+        isin: pos ? pos.id : null, date: d, statut: 'prevu', source: 'regle:ordre-annonce',
+        libelle: q[1] + ' AVANT exécution d’un ordre — ' + o.nom,
+        court: ('Annonce/ordre ' + String(o.nom).slice(0, 14)).slice(0, 28),
+        sev: q[0] === 'pubDate' ? 'Warn' : 'Info', conf: true,
+        tags: [String(o.nom).slice(0, 12), 'ORDRES', q[2]],
+        metriques: [
+          met('ordre concerné', (o.sens || '') + ' ' + (o.qte != null ? Fn_FmtNb(o.qte, 0) + ' × ' : '')
+            + (o.limite != null ? Fn_FmtNb(o.limite, 2) : '—')
+            + (o.montantEur != null ? ' soit ' + Fn_FmtEur(o.montantEur, 0) : '')),
+          met('délai avant l’annonce', jours != null ? jours + ' jour(s)' : manquant('date lisible')),
+          met('validité de l’ordre', o.validite || manquant('validité lue sur l’écran des ordres')),
+          met('ce que cela change', q[0] === 'pubDate'
+            ? 'un ordre à cours limite peut être exécuté sur l’écart d’ouverture qui suit la publication : décider AVANT si l’on veut être servi sur cette annonce, ou décaler l’ordre'
+            : 'le cours s’ajuste à la baisse du montant détaché [règle de place] : une limite placée juste sous le cours peut être touchée mécaniquement'),
+          met('titre déjà détenu', pos ? 'oui — ' + Fn_FmtPct(Fn_Num(pos.detention.pctVN), 1) + ' de la valeur nette' : 'non, l’ordre ouvrirait une ligne nouvelle')
+        ] });
+    });
   });
   // RÈGLE 7 — franchissement du seuil de marge : événement immédiat, sévérité maximale.
   const m = Var_State.marge;
@@ -4705,13 +4777,46 @@ function Fn_MemoireDesk() {
    valorisation reste inexploitable est donc reproposée, exactement comme une
    ligne périmée. Le nombre de lignes et le budget sont affichés avant l'appel :
    c'est vous qui décidez de le relancer, jamais l'application. */
+/* TOUTE LIGNE DÉTENUE EST SUIVIE. Le traitement allégé se disait « agenda
+   seulement » — et n'en collectait aucun : les lignes sous le seuil de
+   matérialité étaient purement exclues de la passe. Une ligne de 1 % qui publie
+   dans trois jours reste une ligne dont on veut connaître la date, et son
+   consensus ne coûte pas plus cher que celui d'une autre. Le niveau continue de
+   régler la profondeur du JUGEMENT ; il ne prive plus personne de données.
+   Les produits à levier restent hors sélection : leurs multiples propres n'ont
+   aucun sens. C'est leur SOUS-JACENT qui est suivi, par l'agenda. */
 function Fn_LignesAEnrichir() {
   return Var_State.positions.filter(p => {
-    if (p.desk.niveau === 'ligne' || p.desk.niveau === 'derive') return false;
+    if (p.desk.niveau === 'derive') return false;
     return Fn_DonneePerimee(p.valo && p.valo.freshTs)
       || Fn_DonneePerimee(p.consensus && p.consensus.freshTs)
       || !Fn_ValoExploitable(p);
   });
+}
+/* LES INSTRUMENTS QUE L'ON NE DÉTIENT PAS ET DONT LA DATE COMPTE QUAND MÊME :
+   le titre visé par un ordre en attente, et le sous-jacent d'un produit à levier.
+   Dans les deux cas on ne veut qu'un agenda — pas de multiples, pas de consensus :
+   il n'y a pas de position à valoriser. */
+function Fn_NomAgenda(nom) { return Fn_Slug(Fn_NormNom(nom || '')).slice(0, 60); }
+function Fn_AgendasAEnrichir() {
+  const vus = {}, sortie = [];
+  const detenu = {};
+  Var_State.positions.forEach(p => { detenu[Fn_NomAgenda(p.detention.nom)] = true; });
+  const ajouter = (nom, motif) => {
+    const cle = Fn_NomAgenda(nom);
+    if (!cle || vus[cle] || detenu[cle]) return;      // déjà suivi comme position
+    const a = Var_State.agenda[cle];
+    if (a && !Fn_DonneePerimee(a.ts)) return;         // agenda frais : jamais recollecté
+    vus[cle] = true;
+    sortie.push({ cle: cle, nom: String(nom).slice(0, 60), motif: motif });
+  };
+  Var_State.ordres.forEach(o => ajouter(o.nom, 'ordre en attente'));
+  Var_State.positions.forEach(p => {
+    if (p.produit && p.produit.type === 'derive' && p.produit.sousJacent) {
+      ajouter(p.produit.sousJacent, 'sous-jacent de ' + String(p.detention.nom || p.id).slice(0, 24));
+    }
+  });
+  return sortie;
 }
 /* ALERTE DU DERNIER APPEL. Placée EN TÊTE du panneau, et affichée MÊME PANNEAU
    FERMÉ. Le message d'échec ne vivait qu'au fond du journal, sous le budget,
@@ -5418,9 +5523,15 @@ function Fn_RenderCours() {
      4. compatible avec la discipline — un dimensionnement qui aggraverait
         un plafond déjà dépassé est signalé comme tel.
    ================================================================ */
+/* Les quatre premières intentions sont RELATIVES au portefeuille ; la cinquième
+   substitue une ligne par une autre. Aucune ne permettait de proposer une idée
+   NEUVE, et le cahier des charges l'interdisait explicitement — d'où un onglet
+   Découvertes qui ne parlait que des titres déjà détenus. « ouvrir une ligne
+   nouvelle » comble ce trou : l'idée reste soumise aux mêmes quatre conditions,
+   et notamment à la discipline, mais elle n'a plus à s'accrocher à l'existant. */
 const Cst_Intentions = [
   'renforcer une conviction', 'réduire un risque identifié', 'couvrir le facteur concentré',
-  'diversifier hors du facteur dominant', 'substituer une ligne'
+  'diversifier hors du facteur dominant', 'substituer une ligne', 'ouvrir une ligne nouvelle'
 ];
 const Cst_VerdictsDec = {
   'cohérente': { badge: 'badge-ok', cls: '' },
@@ -6284,9 +6395,13 @@ function Fn_ContratDesk() {
       .map(a => ({ id: a.isin, p: String(a.propo || '').slice(0, 90) }))
   };
 }
-function Fn_ContratEnrichissement(lignes) {
+function Fn_ContratEnrichissement(lignes, agendas) {
   return {
     ts: new Date().toISOString(),
+    /* Un instrument non détenu ne porte ni multiple ni consensus : on n'en
+       demande QUE les dates. Le distinguer évite de payer une valorisation
+       complète sur un titre qu'on ne possède pas encore. */
+    agendas: (agendas || []).map(a => ({ id: a.cle, nom: a.nom, pourquoi: a.motif, manque: ['pubDate', 'exDiv'] })),
     lignes: lignes.map(p => {
       const v = p.valo || {}, c = p.consensus || {};
       const manque = [];
@@ -6328,6 +6443,7 @@ function Fn_BuildPromptMAJ(ctx) {
     L.push('Ne cherche JAMAIS un cours, une quantité, une valeur en euros, une exposition, un pourcentage de valeur nette, un taux de change ou une distance à une barrière : ces valeurs sont lues sur les écrans du courtier et calculées par l’application. Elles te sont données pour contexte, elles ne sont pas à retrouver.');
     L.push('');
     L.push('=== LIGNES À TRAITER (clés abrégées) ===');
+    L.push('Deux listes, et elles ne se traitent pas pareil. « lignes » = les positions détenues, à valoriser. « agendas » = des instruments que l’utilisateur NE DÉTIENT PAS : le titre visé par un ordre en attente, ou le sous-jacent d’un produit à levier. Pour ceux-là on ne veut QUE deux dates — prochaine publication de résultats et prochain détachement de dividende — et rien d’autre : ni multiple, ni consensus, ni objectif de cours. Le champ « pourquoi » dit ce qui motive la demande.');
     L.push('LÉGENDE : id=identifiant interne · nom=libellé complet · isin=identifiant du titre · dev=devise · cours=dernier cours lu (contexte, NE PAS chercher) · pctVN=poids dans la valeur nette · profil=profil de la ligne, il dicte QUELS ratios comptent · niveau=effort attendu · sousJacent=pour un produit à levier, le titre sur lequel porter la recherche · ageValo=âge en jours de la dernière collecte · manque=LA LISTE EXACTE des champs à rapporter.');
     L.push(Fn_JsonCompact(contrat));
     L.push('');
@@ -6338,15 +6454,16 @@ function Fn_BuildPromptMAJ(ctx) {
     L.push('4. Un produit à levier compte pour SON SOUS-JACENT : ses multiples propres n’existent pas. Ne consomme aucun appel pour lui chercher un ratio.');
     L.push('5. Le RÉFÉRENTIEL est aussi important que le multiple : un PER isolé n’est pas interprétable. Rapporte la médiane historique du titre (5 ou 10 ans) ou celle des pairs — sans elle, le multiple restera brut et n’entrera dans aucun indicateur.');
     L.push('6. BUDGET DE COLLECTE, calculé pour cet appel : ' + budget.recherches + ' recherches et ' + budget.lectures + ' lectures de page pour ' + (contrat.lignes || []).length + ' ligne(s). Répartis-le : ne consomme pas la moitié sur les deux premières lignes. Si le budget approche de sa fin, termine par les lignes les plus lourdes en pourcentage de valeur nette.');
-    L.push('7. Une valeur non trouvée s’OMET. Elle ne s’invente jamais, ne vaut jamais 0, et ne se remplace pas par une prose expliquant la recherche : cette prose coûte dix fois le chiffre qu’elle remplace.');
+    L.push('7. Une DATE D’AGENDA vaut cher pour peu de recherche : c’est elle qui prévient d’un ordre sur le point de partir juste avant une publication. Traite les agendas EN PREMIER — une recherche chacun suffit le plus souvent — puis consacre le reste du budget aux valorisations.');
+    L.push('8. Une valeur non trouvée s’OMET. Elle ne s’invente jamais, ne vaut jamais 0, et ne se remplace pas par une prose expliquant la recherche : cette prose coûte dix fois le chiffre qu’elle remplace.');
     if (c.sitesAutorises && c.sitesAutorises.length) {
-      L.push('8. RESTRICTION DE RECHERCHE choisie par l’utilisateur : l’outil n’atteint QUE ces domaines — ' + c.sitesAutorises.join(', ') + '. Une donnée introuvable depuis ce périmètre s’omet ; ne compense jamais par une estimation.');
+      L.push('9. RESTRICTION DE RECHERCHE choisie par l’utilisateur : l’outil n’atteint QUE ces domaines — ' + c.sitesAutorises.join(', ') + '. Une donnée introuvable depuis ce périmètre s’omet ; ne compense jamais par une estimation.');
     }
     L.push('');
     L.push('=== FORMAT DE SORTIE (strict) ===');
     L.push('Un objet JSON unique, aucun texte autour. Premier caractère « { », dernier caractère « } ». Omets toute clé inconnue : jamais null, jamais "", jamais "—".');
-    L.push('{"v":3,"lignes":[{"id","valo":{"per","perN","bpa","capi","detteNette","roe","margeOp","rdt","exDiv","veCa","veEbitda","croisCa","croisBpa","refHist","refPairs","s","u"},"conso":{"conso","nbA","obj","objEcart","pub","pubDate","s","u"},"marche":{"h52","b52","adv","s","u"}}]}');
-    L.push('   → id=l’identifiant EXACT reçu ci-dessus, jamais un autre · per=PER courant · perN=PER prévisionnel · bpa=bénéfice par action · capi=capitalisation (nombre entier) · roe et margeOp en pourcentage · rdt=rendement du dividende en pourcentage · exDiv=prochain détachement au format AAAA-MM-JJ · refHist=médiane historique du titre · refPairs=médiane des pairs ou du secteur · conso=recommandation agrégée avec sa répartition · nbA=nombre d’analystes · obj=objectif de cours moyen · objEcart=écart en pourcentage au cours fourni · pubDate=prochaine publication au format AAAA-MM-JJ · adv=volume moyen quotidien en titres · s=source nommée, en style TÉLÉGRAPHIQUE (« StockAnalysis 05/08/26 », jamais une phrase) · u=lien direct vers la page réellement lue, jamais une page d’accueil.');
+    L.push('{"v":3,"lignes":[{"id","valo":{"per","perN","bpa","capi","detteNette","roe","margeOp","rdt","exDiv","veCa","veEbitda","croisCa","croisBpa","refHist","refPairs","s","u"},"conso":{"conso","nbA","obj","objEcart","pub","pubDate","s","u"},"marche":{"h52","b52","adv","s","u"}}],"agendas":[{"id","nom","pubDate","exDiv","s","u"}]}');
+    L.push('   → id=l’identifiant EXACT reçu ci-dessus, jamais un autre · per=PER courant · perN=PER prévisionnel · bpa=bénéfice par action · capi=capitalisation (nombre entier) · roe et margeOp en pourcentage · rdt=rendement du dividende en pourcentage · exDiv=prochain détachement au format AAAA-MM-JJ · refHist=médiane historique du titre · refPairs=médiane des pairs ou du secteur · conso=recommandation agrégée avec sa répartition · nbA=nombre d’analystes · obj=objectif de cours moyen · objEcart=écart en pourcentage au cours fourni · pubDate=prochaine publication au format AAAA-MM-JJ · adv=volume moyen quotidien en titres · dans le bloc agendas : id=la clé EXACTE reçue, pubDate et exDiv au format AAAA-MM-JJ, et RIEN d’autre — un agenda sans date trouvée s’omet entièrement · s=source nommée, en style TÉLÉGRAPHIQUE (« StockAnalysis 05/08/26 », jamais une phrase) · u=lien direct vers la page réellement lue, jamais une page d’accueil.');
     L.push('');
     L.push('Aucune interface, aucun code, aucun commentaire, aucune conclusion : ta sortie est UNIQUEMENT ce JSON.');
     return L.join('\n');
@@ -6403,13 +6520,14 @@ function Fn_BuildPromptMAJ(ctx) {
   L.push('LIVRABLE 3 — DÉCOUVERTES (objectif : 3 à 5, ou AUCUNE si rien ne le justifie).');
   L.push('C’est le livrable à plus forte valeur, et il dispose d’un budget de recherche qui lui est RÉSERVÉ : ' + budget.decouvertes + ' recherches. Rien d’autre ne peut le consommer. Une découverte faible vaut moins que son absence — s’il n’y a rien, renvoie une liste vide et dis-le en une ligne.');
   L.push('Une découverte VALIDE réunit QUATRE conditions, toutes obligatoires :');
-  L.push('  1. ANCRÉE DANS LE PORTEFEUILLE. Elle nomme son intention parmi exactement cinq : « ' + Cst_Intentions.join(' » · « ') + ' ». Et elle nomme la ligne concernée par son id. Une idée rattachée à aucune position n’est PAS une découverte : ne la propose pas.');
+  L.push('  1. UTILE À CE PORTEFEUILLE — ce qui n’oblige pas à porter sur une ligne déjà détenue. Elle nomme son intention parmi exactement ' + Cst_Intentions.length + ' : « ' + Cst_Intentions.join(' » · « ') + ' ». Les cinq premières visent une position existante et en donnent l’id dans « cible ». La dernière, « ouvrir une ligne nouvelle », désigne un titre que l’utilisateur NE DÉTIENT PAS : laisse alors « cible » vide et nomme le titre dans le titre de la découverte. On attend de VRAIES idées neuves, pas seulement des ajustements de l’existant — vise au moins une ou deux propositions d’ouverture par appel quand le portefeuille s’y prête, et dis-le si rien ne s’y prête.');
   L.push('  2. ADOSSÉE À UN FAIT DATÉ RÉCENT, avec source nommée et lien direct ouvrable. Pas une impression de marché, pas une reprise de dépêche : un fait, sa date, son lien.');
   L.push('  3. RÉFUTABLE : un niveau d’entrée, une condition d’invalidation, un horizon. Sans les trois, ce n’est pas une idée, c’est une opinion.');
-  L.push('  4. COMPATIBLE AVEC LA DISCIPLINE. Confronte le dimensionnement aux garde-fous fournis : si l’idée porterait une ligne ou un facteur au-delà de son plafond rouge, dis-le explicitement, mets le verdict à « incohérente » et la taille à 0 — sauf si elle RÉDUIT une concentration existante. Si le coussin de marge est sous son seuil, aucune augmentation du brut n’est recevable : l’idée doit être auto-financée et nommer la ligne à alléger.');
+  L.push('  4. COMPATIBLE AVEC LA DISCIPLINE, et une ligne NOUVELLE ne s’en dispense pas : elle ajoute au brut, donc au levier, et elle apporte ses propres facteurs — dis lesquels, et ce qu’ils font à l’exposition nette existante. Confronte le dimensionnement aux garde-fous fournis : si l’idée porterait une ligne ou un facteur au-delà de son plafond rouge, dis-le explicitement, mets le verdict à « incohérente » et la taille à 0 — sauf si elle RÉDUIT une concentration existante. Si le coussin de marge est sous son seuil, aucune augmentation du brut n’est recevable : l’idée doit être auto-financée et nommer la ligne à alléger.');
   L.push('ANTI-RÉPÉTITION : le bloc decVues liste les dernières découvertes, gardées comme écartées, une ligne chacune. Ne les repropose pas — elles ont déjà été payées et tranchées.');
   L.push('LIVRABLE 4 — JUGEMENT PAR POSITION, et rien de plus.');
-  L.push('Pour chaque ligne dont le niveau est « complet », et pour celles dont la poche, le profil ou les facteurs manquent : attribue-les, et écris la lecture de desk. Sur les lignes « compact », limite-toi au profil, aux facteurs et à une tendance en une phrase. Sur les lignes « ligne » et « derive », n’écris rien du tout : c’est voulu, leur poids ne le justifie pas.');
+  L.push('CLASSER N’EST PAS RÉDIGER, et TOUTE ligne se classe — poche, profil, facteurs, liqFaible — quel que soit son poids. Cela ne demande aucune recherche : c’est de la lecture de portefeuille. Une ligne laissée sans facteurs disparaît de l’exposition nette, qui est l’indicateur le plus lourd du tableau de bord ; une ligne laissée sans poche échappe au plan de réduction en cas d’appel de marge. Un PRODUIT À LEVIER hérite des facteurs de son SOUS-JACENT — c’est lui qui porte le risque — et y ajoute le sien propre (effet de levier, barrière) ; sa poche est celle du rôle qu’il joue, et son profil est « derive ».');
+  L.push('La RÉDACTION, elle, suit la matérialité. Niveau « complet » : la lecture de desk entière (these, valoRef, risques, tend, revue). Niveau « compact » : une tendance en une phrase, rien de plus. Niveaux « ligne » et « derive » : aucun texte — leur poids ne le justifie pas, mais leur classement, lui, est obligatoire.');
   L.push('  · poche parmi : ' + Cst_Poches.join(' · ') + '. · profil parmi : ' + Cst_Profils.map(p => p.id).join(' · ') + ' — il dicte quels ratios seront cherchés, donc payés : un PER sur une société en perte est du bruit.');
   L.push('  · fact = les facteurs de risque communs à plusieurs lignes (secteur, thème, devise, sensibilité aux taux). Des lignes corrélées constituent UNE exposition, pas plusieurs : c’est de cette attribution que dépend tout l’indicateur d’exposition nette.');
   L.push('  · liqFaible = true si la ligne ne peut pas être soldée en une à deux séances.');
@@ -6549,8 +6667,23 @@ function Fn_IntegrerDesk(data, journal) {
 }
 function Fn_IntegrerEnrichissement(data, journal) {
   const ts = Date.now();
-  const det = { valo: 0, consensus: 0, marche: 0 };
+  const det = { valo: 0, consensus: 0, marche: 0, agendas: 0 };
   if (journal) journal.detail = det;
+  /* ÉTAGE ÉTANCHE : l'agenda d'un instrument non détenu s'écrit dans
+     Var_State.agenda, jamais dans une position. */
+  (data.agendas || []).forEach(a => {
+    const cle = Fn_Ch(a, ['id']);
+    if (!cle) return;
+    const pub = Fn_Ch(a, ['pubDate']), ex = Fn_Ch(a, ['exDiv']);
+    const e = Var_State.agenda[cle] || (Var_State.agenda[cle] = { nom: Fn_Ch(a, ['nom']) || cle });
+    if (Fn_Ch(a, ['nom'])) e.nom = Fn_Ch(a, ['nom']);
+    if (pub) e.pubDate = pub;
+    if (ex) e.exDiv = ex;
+    if (Fn_Ch(a, ['s'])) e.s = Fn_Ch(a, ['s']);
+    if (Fn_Ch(a, ['u'])) e.u = Fn_Ch(a, ['u']);
+    e.ts = ts;                                     // horodaté même bredouille : pas de boucle
+    det.agendas++;
+  });
   (data.lignes || []).forEach(l => {
     const p = Fn_PositionParId(Fn_Ch(l, ['id']));
     if (!p) return;
@@ -6608,10 +6741,15 @@ async function Fn_LancerAppel(passe) {
   let contrat, budget, unites, nbLignes = 0, nbDebriefs = 0;
   if (passe === 'enrichissement') {
     const lignes = Fn_LignesAEnrichir();
-    if (!lignes.length) { Fn_RenderMajPanel(); return; }
-    contrat = Fn_ContratEnrichissement(lignes);
-    budget = Fn_BudgetEnrichissement(lignes.length);
-    unites = lignes.length; nbLignes = lignes.length;
+    const agendas = Fn_AgendasAEnrichir();
+    if (!lignes.length && !agendas.length) { Fn_RenderMajPanel(); return; }
+    contrat = Fn_ContratEnrichissement(lignes, agendas);
+    /* Un agenda coûte moins qu'une valorisation complète — une date, pas une
+       batterie de ratios — mais il coûte : il compte donc dans le budget, à
+       demi-unité, et le budget reste CALCULÉ, jamais une constante. */
+    unites = lignes.length + Math.ceil(agendas.length / 2);
+    budget = Fn_BudgetEnrichissement(unites);
+    nbLignes = lignes.length;
   } else {
     const charge = Fn_ChargeDesk();
     contrat = Fn_ContratDesk();
@@ -7122,7 +7260,13 @@ function Fn_OnAction(e) {
         if (action === 'act-accepter') {
           const idEv = Fn_Slug('action-' + (a.propo || '')) + '-' + Fn_AujISO();
           if (!Var_State.calendrier.some(x => x.id === idEv)) {
-            Var_State.calendrier.push({
+            /* L'EMPREINTE EST POSÉE ICI, pas laissée vide. Ses textes sont écrits par
+               l'application à partir de l'arbitrage accepté : il n'y a rien à
+               demander au desk. Une empreinte vide vaut « textes à écrire » et
+               renvoyait donc l'événement au modèle à CHAQUE cycle, pour lui faire
+               réécrire ce qui était déjà là — le contraire exact de l'économie que
+               l'empreinte existe pour produire. */
+            const ev = {
               id: idEv, isin: a.isin || null, date: Fn_AujISO(), statut: 'imminent', source: 'action',
               libelle: 'Action retenue — ' + String(a.propo).slice(0, 90),
               court: 'Action retenue', sev: a.prio === 1 ? 'Crit' : (a.prio === 2 ? 'Warn' : 'Info'), conf: true,
@@ -7132,7 +7276,9 @@ function Fn_OnAction(e) {
                 prat: 'Condition d’invalidation : ' + (a.inval || 'non fournie — à définir avant exécution.'),
                 texteEcritLe: Fn_AujISO(), empreinte: '' },
               debrief: null
-            });
+            };
+            ev.textes.empreinte = Fn_EmpreinteEvenement(ev);
+            Var_State.calendrier.push(ev);
           }
         }
         Fn_Save(); Fn_RenderVigie();
