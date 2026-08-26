@@ -1753,6 +1753,12 @@ setTimeout(async () => {
     verifier('mais les trois déclarations PARTENT au desk, qui cesse de les redemander',
       JSON.stringify(J('Fn_ContratDesk().pos[0].vous')).indexOf('these') >= 0,
       JSON.stringify(J('Fn_ContratDesk().pos[0].vous')));
+    /* « Thèse » désignait DEUX choses sur la même fiche : celle que le desk vient
+       d’écrire, et celle de l’utilisateur. « Thèse écrite » se lisait comme un constat
+       — le desk en a écrit une, je coche — au lieu d’une question. */
+    verifier('les cases de thèse se lisent à la PREMIÈRE PERSONNE, pas comme un constat',
+      Object.keys(J('Cst_AideThese')).every(k => /^J’ai /.test(J('Cst_AideThese')[k].t)),
+      Object.keys(J('Cst_AideThese')).map(k => J('Cst_AideThese')[k].t).join(' · '));
     verifier('et l’aide de chaque case dit ce qu’elle fait vraiment, sans promettre l’inverse',
       Object.keys(J('Cst_AideThese')).every(k =>
         /sans effet sur le score|Sans effet sur le score/.test(J('Cst_AideThese')[k].d)),

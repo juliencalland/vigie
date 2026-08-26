@@ -439,7 +439,7 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202608261957';
+const Cst_Version = 'vigie-202608262005';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -2127,9 +2127,9 @@ const Cst_AidePanneaux = {
    cesse alors de vous redemander ce que vous avez déjà formalisé et cible ce qui
    manque. Elles se comptent aussi dans « thèses déclarées » du bilan de mémoire. */
 const Cst_AideThese = {
-  ecrite: { t: 'Thèse écrite', d: 'Vous déclarez avoir formalisé, quelque part, la raison de détenir cette ligne. C’est une déclaration : aucun texte n’est rédigé ni stocké ici. Le desk en est informé au prochain jugement — il ne vous redemandera pas d’écrire une thèse que vous avez déjà, et concentrera sa lecture sur ce qui manque. Sans effet sur le score de discipline : c’est le bouton « Revue faite aujourd’hui » qui le nourrit. Décochable à tout moment.' },
-  invalidation: { t: 'Invalidation définie', d: 'Vous déclarez avoir fixé le fait précis qui vous ferait sortir de cette ligne — le scénario qui prouverait la thèse fausse. Transmis au desk au même titre que la thèse écrite, et sans effet sur le score de discipline.' },
-  objectif: { t: 'Objectif défini', d: 'Vous déclarez avoir fixé un objectif de cours ou de valorisation pour cette ligne. Transmis au desk au même titre que les deux autres, et sans effet sur le score de discipline.' }
+  ecrite: { t: 'J’ai écrit MA thèse', d: 'Vous déclarez avoir formalisé, quelque part, la raison de détenir cette ligne. C’est une déclaration : aucun texte n’est rédigé ni stocké ici. Le desk en est informé au prochain jugement — il ne vous redemandera pas d’écrire une thèse que vous avez déjà, et concentrera sa lecture sur ce qui manque. Sans effet sur le score de discipline : c’est le bouton « Revue faite aujourd’hui » qui le nourrit. Décochable à tout moment.' },
+  invalidation: { t: 'J’ai fixé MON invalidation', d: 'Vous déclarez avoir fixé le fait précis qui vous ferait sortir de cette ligne — le scénario qui prouverait la thèse fausse. Transmis au desk au même titre que la thèse écrite, et sans effet sur le score de discipline.' },
+  objectif: { t: 'J’ai fixé MON objectif', d: 'Vous déclarez avoir fixé un objectif de cours ou de valorisation pour cette ligne. Transmis au desk au même titre que les deux autres, et sans effet sur le score de discipline.' }
 };
 const Cst_AideActions = {
   'capture-coller': { t: 'Coller la capture', d: 'Lit le presse-papier, y reconnaît le document de capture à ses bornes et le répartit d’un seul geste dans les trois entrées d’écran. Une capture REMPLACE les entrées du jour : une section vide efface l’entrée correspondante, pour qu’un ordre annulé ne survive pas. Le texte reste sur cet appareil et n’est jamais synchronisé.' },
@@ -5632,7 +5632,13 @@ function Fn_HtmlDesk(p) {
 function Fn_HtmlThese(p) {
   const th = Var_State.theses[p.id] || {};
   const age = th.derniereRevue ? -Fn_JoursDepuis(th.derniereRevue) : null;
-  return '<div class="cours-ligne"><span class="lib">Suivi de thèse (déclaratif)</span>'
+  /* « THÈSE » DÉSIGNAIT DEUX CHOSES SUR LA MÊME FICHE : celle que le desk vient
+     d'écrire, juste au-dessus, et la vôtre. « Thèse écrite » se lisait donc comme
+     un constat — le desk en a écrit une, je coche — au lieu d'une question posée
+     à l'utilisateur. Les libellés sont désormais à la première personne, et le
+     bloc dit à quoi il sert avant de demander quoi que ce soit. */
+  return '<div class="cours-ligne"><span class="lib">Vos décisions sur cette ligne</span>'
+    + '<div class="tres-petit muted" style="margin-bottom:5px">Ce que VOUS avez formalisé, de votre côté — pas ce que le desk a écrit ci-dessus. Cocher ne rédige rien et ne change pas le score de discipline : cela dit au desk ce qu’il n’a plus à vous redemander, pour qu’il concentre sa lecture sur ce qui manque.</div>'
     + '<div class="petit">'
     // Les cases sont dérivées de Cst_AideThese : il est ainsi IMPOSSIBLE d'ajouter
     // une case sans son aide — le contrôle est structurel, pas déclaratif.
