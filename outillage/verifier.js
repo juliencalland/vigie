@@ -1615,6 +1615,16 @@ setTimeout(async () => {
       maj.length > 0 && maj.length < 900, maj.length + ' caractères');
     /* Sans journal en base, la ligne « Dernier appel » n’a rien à dire : on
        vérifie donc les deux déclencheurs, puis la ligne une fois un journal posé. */
+    /* Sans accès configuré, les deux lancements sont MASQUÉS : leur absence doit
+       alors s’expliquer d’elle-même, et rappeler que la clé est stockée PAR APPAREIL
+       — l’avoir saisie ailleurs ne la met pas ici. */
+    R('Fn_ModeAcces = function () { return { mode: "aucun", libelle: "aucun" }; }; Fn_RenderMajPanel();');
+    const sansCle = texte('v-maj');
+    verifier('sans accès, l’absence de bouton s’explique et rappelle que la clé est par appareil',
+      /masqués/.test(sansCle) && /CET appareil/.test(sansCle) && /jamais synchronis/i.test(sansCle),
+      sansCle.slice(-110));
+    R('Fn_ModeAcces = function () { return { mode: "cle", libelle: "Clé personnelle" }; }; Fn_RenderVigie();');
+
     verifier('mais il garde le lancement du desk, et ce qui le justifie',
       /data-action="maj-lancer"/.test(String(els['v-maj'].innerHTML))
       && /découverte\(s\) visée\(s\)/.test(maj), maj.slice(0, 80));

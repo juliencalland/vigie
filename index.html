@@ -419,7 +419,7 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202608261836';
+const Cst_Version = 'vigie-202608261847';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -4946,7 +4946,12 @@ function Fn_RenderMajPanel() {
   // Un échec se lit LÀ OÙ L'ON CLIQUE POUR RELANCER, jamais au fond d'un journal.
   h += Fn_HtmlAlerteAppel(journal);
   if (mode.mode === 'aucun') {
-    h += '<div class="note note-info">Aucune requête ne sera émise : aucun accès n’est configuré. Paramètres → Accès API.</div>';
+    /* SANS ACCÈS, PAS DE BOUTON — et il faut dire POURQUOI, sinon leur absence
+       ressemble à une panne. Le cas est d'autant plus déroutant que la clé est
+       STOCKÉE PAR APPAREIL et jamais synchronisée : l'avoir enregistrée hier sur
+       un autre appareil ne la met pas ici. */
+    h += '<div class="note note-warn"><b>Les deux lancements sont masqués : aucun accès n’est configuré sur CET appareil.</b>'
+      + '<div class="tres-petit" style="margin-top:4px">La clé personnelle est enregistrée dans le navigateur de chaque appareil et n’est JAMAIS synchronisée — c’est voulu, un secret ne voyage pas par le dépôt. L’avoir saisie ailleurs ne la met pas ici. Paramètres → Accès API pour l’enregistrer sur cet appareil.</div></div>';
   } else if (enCours) {
     h += '<div class="rang-btn"><button class="btn btn-danger arme" data-action="maj-annuler">■ Annuler l’appel en cours</button></div>';
   } else {
