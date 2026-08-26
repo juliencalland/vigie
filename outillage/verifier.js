@@ -776,6 +776,18 @@ setTimeout(async () => {
       classees === 1 && J('Fn_ADebriefer().length') === 0,
       classees + ' classé(s), ' + J('Fn_ADebriefer().length') + ' à débriefer');
 
+    /* 2 bis. UN SIMPLE RECHARGEMENT remplit le calendrier. Le squelette ne se
+       régénérait qu’au moment d’une analyse des entrées : les ordres en attente
+       étaient bien dans l’état, mais leurs événements n’existaient pas encore, et
+       « j’ai rechargé, rien n’a changé » était donc exact. Le squelette est
+       déterministe et gratuit — rien ne justifiait de le faire attendre. */
+    R(socle + 'Var_State.calendrier = [];');
+    ctx.__etatRech = J('JSON.parse(Fn_SerialiserEtat())');
+    R('Fn_AdopterEtat(__etatRech);');
+    const auRech = J('Fn_CalendrierVif().filter(function (e) { return e.source === "regle:ordre"; }).length');
+    verifier('un simple rechargement suffit à faire apparaître les ordres au calendrier',
+      auRech === 1, auRech + ' événement(s) d’ordre, sans avoir relancé d’analyse');
+
     /* 3. L'ANNONCE ATTENDUE AVANT EXÉCUTION — le point aveugle. */
     R(socle + 'Var_State.agenda = { "untel-sa": { nom: "Untel SA", pubDate: "' + dans3j + '", ts: Date.now() } };'
       + 'Fn_GenererSquelette(); Fn_MajStatutsCalendrier();');

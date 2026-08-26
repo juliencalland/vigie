@@ -419,7 +419,7 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202608260451';
+const Cst_Version = 'vigie-202608261644';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -977,6 +977,17 @@ async function Fn_Load() {
   Fn_MajStatutsCalendrier();
   Fn_ElaguerEtat();
   Fn_Recalculer();
+  /* LE SQUELETTE EST DÉTERMINISTE : le régénérer ne coûte RIEN — aucun appel, aucune
+     recherche — et il dépend d'un état qui a pu changer depuis la dernière analyse,
+     ne serait-ce que parce qu'on a changé de jour. Ne le régénérer qu'au moment de
+     l'analyse des entrées faisait qu'un simple rechargement ne remplissait jamais le
+     calendrier : les ordres en attente étaient bien dans l'état, leurs événements
+     n'existaient pas encore. « J'ai rechargé, rien n'a changé » était donc exact, et
+     ce n'était pas au lecteur de deviner qu'il fallait relancer une analyse.
+     Il vient APRÈS Fn_Recalculer : il lit des parts de valeur nette et des
+     expositions que seul le recalcul a posées. */
+  Fn_GenererSquelette();
+  Fn_MajStatutsCalendrier();
   Fn_PersisterSansHorodatage(); // persister SANS tamponner etatTs : charger n'est pas modifier
 }
 // Adoption d'un état complet (distant ou importé) SANS toucher etatTs — sinon
@@ -993,6 +1004,8 @@ function Fn_AdopterEtat(s) {
   Fn_ClasserOrdresDatesAnciennes();
   Fn_MajStatutsCalendrier();
   Fn_Recalculer();
+  Fn_GenererSquelette();
+  Fn_MajStatutsCalendrier();
   try { Fn_StorageSet(Fn_SerialiserEtat()); } catch (e) { /* session seulement */ }
 }
 // Un journal « en cours » n'est PAS une preuve qu'un appel tourne : le statut est
