@@ -1763,6 +1763,37 @@ setTimeout(async () => {
       Object.keys(J('Cst_AideThese')).every(k =>
         /sans effet sur le score|Sans effet sur le score/.test(J('Cst_AideThese')[k].d)),
       Object.keys(J('Cst_AideThese')).join(', '));
+    /* DÉCLARER NE SUFFIT PAS : ce que l'utilisateur ÉCRIT doit atteindre le desk.
+       Sans le texte, celui-ci savait qu'une thèse existait sans savoir ce qu'elle
+       disait — il écrivait la sienne à côté au lieu de dialoguer avec. Avec, il
+       peut la confronter, chiffrer l'écart à l'objectif, et surtout signaler
+       qu'une invalidation VIENT D'ÊTRE TOUCHÉE : lui seul lit l'actualité. */
+    R('Var_State.theses = { L1: { ecrite: true, invalidation: true, objectif: true, derniereRevue: "2026-08-26", texte: "Ma raison de détenir.", invalTexte: "Ce qui me ferait sortir.", objTexte: "Mon objectif." } };');
+    const vous = J('Fn_ContratDesk().pos[0].vous');
+    verifier('les TEXTES de l’utilisateur partent au desk, pas seulement ses cases cochées',
+      vous.these === 'Ma raison de détenir.' && vous.inval === 'Ce qui me ferait sortir.'
+      && vous.obj === 'Mon objectif.',
+      JSON.stringify(vous));
+    /* Une déclaration SANS texte reste valide : une thèse tenue dans un carnet
+       est une thèse, et la déclarer vaut mieux que de ne rien dire. */
+    R('Var_State.theses = { L1: { ecrite: true, invalidation: false, objectif: false, derniereRevue: null } };');
+    const nu = J('Fn_ContratDesk().pos[0].vous');
+    verifier('une déclaration sans texte reste transmise, sans champ vide inventé',
+      nu.declare.indexOf('these') >= 0 && nu.these === undefined, JSON.stringify(nu));
+    /* Le cahier des charges doit DEMANDER le dialogue, sinon le texte voyage
+       pour rien : le modèle le lirait sans savoir qu'on attend une confrontation. */
+    const brief = R('Fn_BuildPromptMAJ({ contrat: Fn_ContratDesk(), budget: { recherches: 5, lectures: 3, decouvertes: 2, debriefs: 0 } })');
+    verifier('et le desk reçoit la consigne de DIALOGUER avec, pas de la paraphraser',
+      /vous\.inval/.test(brief) && /D\u00c9J\u00c0 TOUCH\u00c9E/.test(brief) && /DIALOGUER/.test(brief),
+      'consigne de confrontation présente dans le cahier des charges');
+    /* Le texte s'enregistre par la fonction, borné à sa longueur déclarée. */
+    R('Var_State.theses = {};');
+    R('Fn_SauverTexteThese("L1", "texte", new Array(900).join("x"));');
+    verifier('un texte trop long est TRONQUÉ à son plafond, jamais refusé en silence',
+      J('Var_State.theses.L1.texte.length') === 600, J('Var_State.theses.L1.texte.length') + ' caractères');
+    verifier('et un champ inconnu n’écrit rien du tout',
+      J('Fn_SauverTexteThese("L1", "inconnu", "x")') === false && J('Var_State.theses.L1.inconnu === undefined'),
+      'champ refusé');
     R('Var_State.theses = {}; Var_State.positions = []; Fn_Recalculer();');
   } catch (e) { ko('la répartition Vigie / Paramètres', String((e && e.stack) || e)); }
 

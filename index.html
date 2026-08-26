@@ -228,6 +228,8 @@ hr.sep{border:none;border-top:1px solid var(--line);margin:10px 0}
 /* ---- formulaires ---- */
 input[type=text],input[type=date],input[type=number],input[type=password],select,textarea{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--txt);font:inherit;font-size:13.5px;padding:8px 9px;min-height:38px}
 textarea{min-height:56px;resize:vertical}
+/* Champ de déclaration : discret, pleine largeur, il suit la case qu’il complète. */
+.champ-texte{width:100%;min-height:44px;margin-top:4px;font-size:12px;line-height:1.4}
 label.champ{display:block;font-size:11.5px;color:var(--muted);font-weight:600;margin:8px 0 3px}
 .form-grille{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .form-grille .col2{grid-column:1/3}
@@ -439,7 +441,7 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202608262005';
+const Cst_Version = 'vigie-202608262016';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -2126,12 +2128,22 @@ const Cst_AidePanneaux = {
    Ce qu'elles changent réellement, et c'est tout : elles PARTENT AU DESK, qui
    cesse alors de vous redemander ce que vous avez déjà formalisé et cible ce qui
    manque. Elles se comptent aussi dans « thèses déclarées » du bilan de mémoire. */
+/* Le TEXTE attaché à chaque déclaration : c'est lui qui transforme un aveu en
+   matière de travail pour le desk. Plafonds calés sur ceux que le desk s'impose
+   à lui-même — ce qui doit tenir en 600 caractères quand il l'écrit doit y tenir
+   quand vous l'écrivez. */
+const Cst_ChampsThese = {
+  ecrite: { cle: 'texte', max: 600, invite: 'Pourquoi vous détenez cette ligne, en vos termes. Le desk la confrontera à ce qu’il observe au lieu d’écrire la sienne dans le vide.' },
+  invalidation: { cle: 'invalTexte', max: 300, invite: 'Le fait précis qui vous ferait sortir. Le desk vous préviendra s’il le voit se produire — c’est la seule façon qu’il en ait.' },
+  objectif: { cle: 'objTexte', max: 250, invite: 'Votre objectif de cours ou de valorisation, et son échéance. Le desk le comparera au multiple et au consensus qu’il collecte.' }
+};
 const Cst_AideThese = {
   ecrite: { t: 'J’ai écrit MA thèse', d: 'Vous déclarez avoir formalisé, quelque part, la raison de détenir cette ligne. C’est une déclaration : aucun texte n’est rédigé ni stocké ici. Le desk en est informé au prochain jugement — il ne vous redemandera pas d’écrire une thèse que vous avez déjà, et concentrera sa lecture sur ce qui manque. Sans effet sur le score de discipline : c’est le bouton « Revue faite aujourd’hui » qui le nourrit. Décochable à tout moment.' },
   invalidation: { t: 'J’ai fixé MON invalidation', d: 'Vous déclarez avoir fixé le fait précis qui vous ferait sortir de cette ligne — le scénario qui prouverait la thèse fausse. Transmis au desk au même titre que la thèse écrite, et sans effet sur le score de discipline.' },
   objectif: { t: 'J’ai fixé MON objectif', d: 'Vous déclarez avoir fixé un objectif de cours ou de valorisation pour cette ligne. Transmis au desk au même titre que les deux autres, et sans effet sur le score de discipline.' }
 };
 const Cst_AideActions = {
+  'these-texte': { t: 'Écrire votre déclaration', d: 'Le texte de VOTRE thèse, de VOTRE invalidation ou de VOTRE objectif sur cette ligne. Il est transmis au desk au prochain jugement, qui le confrontera à ce qu’il observe au lieu d’écrire le sien à côté : il vous dira où il vous rejoint, où il diverge, et si votre condition d’invalidation vient d’être touchée. Enregistré en quittant le champ, modifiable à tout moment, jamais envoyé ailleurs qu’à api.anthropic.com lors d’un appel que vous lancez.' },
   'capture-coller': { t: 'Coller la capture', d: 'Lit le presse-papier, y reconnaît le document de capture à ses bornes et le répartit d’un seul geste dans les trois entrées d’écran. Une capture REMPLACE les entrées du jour : une section vide efface l’entrée correspondante, pour qu’un ordre annulé ne survive pas. Le texte reste sur cet appareil et n’est jamais synchronisé.' },
   'capture-saisie': { t: 'Zone de capture manuelle', d: 'Repli quand l’accès au presse-papier est refusé ou indisponible — c’est le cas en fichier local. Le texte est traité exactement comme s’il venait du presse-papier : découpé en sections, horodaté, conservé verbatim. Un texte sans borne de section est refusé ici plutôt que versé au hasard dans une entrée.' },
   'etat-exporter': { t: 'Télécharger une copie de l’état', d: 'Enregistre l’état complet du portefeuille dans un fichier, sur cet appareil. C’est le format que « Restaurer un état » sait relire : c’est la seule marche arrière avant une remise à zéro. Rien n’est envoyé nulle part, rien n’est modifié.' },
@@ -5639,12 +5651,25 @@ function Fn_HtmlThese(p) {
      bloc dit à quoi il sert avant de demander quoi que ce soit. */
   return '<div class="cours-ligne"><span class="lib">Vos décisions sur cette ligne</span>'
     + '<div class="tres-petit muted" style="margin-bottom:5px">Ce que VOUS avez formalisé, de votre côté — pas ce que le desk a écrit ci-dessus. Cocher ne rédige rien et ne change pas le score de discipline : cela dit au desk ce qu’il n’a plus à vous redemander, pour qu’il concentre sa lecture sur ce qui manque.</div>'
-    + '<div class="petit">'
-    // Les cases sont dérivées de Cst_AideThese : il est ainsi IMPOSSIBLE d'ajouter
-    // une case sans son aide — le contrôle est structurel, pas déclaratif.
-    + Object.keys(Cst_AideThese).map(c => '<label style="margin-right:12px"><input type="checkbox" data-action="these-check" data-id="'
-      + Fn_Esc(p.id) + '" data-champ="' + c + '"' + (th[c] ? ' checked' : '') + '> ' + Fn_Esc(Cst_AideThese[c].t) + '</label>').join('')
-    + '</div>'
+    + Object.keys(Cst_AideThese).map(c => {
+      const ch = Cst_ChampsThese[c] || {};
+      const val = ch.cle ? String(th[ch.cle] || '') : '';
+      return '<div style="margin:4px 0">'
+        + '<label class="petit"><input type="checkbox" data-action="these-check" data-id="' + Fn_Esc(p.id)
+        + '" data-champ="' + c + '"' + (th[c] ? ' checked' : '') + '> ' + Fn_Esc(Cst_AideThese[c].t) + '</label>'
+        /* Le champ n'apparaît QU'UNE FOIS la case cochée : déclarer d'abord, écrire
+           ensuite. Il reste facultatif — une thèse tenue dans un carnet reste une
+           thèse, et la déclarer seule vaut mieux que ne rien dire. Mais si le texte
+           est là, c'est LUI qui part au desk, et le jugement suivant se construit
+           avec, plutôt qu'à côté. */
+        + (th[c] ? '<textarea class="champ-texte" rows="2" maxlength="' + ch.max + '" data-action="these-texte" data-id="'
+            + Fn_Esc(p.id) + '" data-champ="' + Fn_Esc(ch.cle) + '" placeholder="' + Fn_Esc(ch.invite) + '">'
+            + Fn_Esc(val) + '</textarea>'
+            + '<div class="tres-petit muted">' + (val ? val.length + ' / ' + ch.max + ' caractères — transmis au desk au prochain jugement.'
+              : 'Facultatif : sans texte, le desk saura seulement que vous l’avez fait, pas ce que vous avez décidé.') + '</div>'
+          : '')
+        + '</div>';
+    }).join('')
     + '<div class="rang-btn"><button class="btn" data-action="these-revue" data-id="' + Fn_Esc(p.id) + '">Revue faite aujourd’hui</button>'
     + '<span class="tres-petit muted" style="align-self:center">' + (age == null ? 'jamais revue' : 'dernière revue il y a ' + age + ' j') + '</span></div></div>';
 }
@@ -6594,7 +6619,17 @@ function Fn_ContratDesk() {
     if (Object.keys(prec).length) o.deskPrec = prec;
     const declare = [th.ecrite ? 'these' : null, th.invalidation ? 'invalidation' : null,
       th.objectif ? 'objectif' : null].filter(Boolean);
-    if (declare.length || th.derniereRevue) o.vous = { declare: declare, revue: th.derniereRevue || null };
+    /* CE QUE VOUS AVEZ ÉCRIT PART AVEC. Sans le texte, le desk savait qu'une thèse
+       existait sans savoir ce qu'elle disait : il écrivait la sienne à côté de la
+       vôtre au lieu de dialoguer avec. Avec, il peut la confronter, dire où il
+       diverge, et surtout signaler qu'une invalidation VIENT D'ÊTRE TOUCHÉE — ce
+       que lui seul peut voir, puisqu'il est le seul à lire l'actualité. */
+    if (declare.length || th.derniereRevue) {
+      o.vous = { declare: declare, revue: th.derniereRevue || null };
+      if (th.texte) o.vous.these = String(th.texte).slice(0, 600);
+      if (th.invalTexte) o.vous.inval = String(th.invalTexte).slice(0, 300);
+      if (th.objTexte) o.vous.obj = String(th.objTexte).slice(0, 250);
+    }
     return o;
   });
   return {
@@ -6731,7 +6766,7 @@ function Fn_BuildPromptMAJ(ctx) {
   L.push('=== CONTEXTE ===');
   L.push('Date et heure de l’appel : ' + horodatage + '.');
   L.push('Portefeuille, marge, expositions nettes, écarts de contrôle déjà détectés, événements à traiter et découvertes déjà proposées — clés abrégées pour l’économie, légende ci-après.');
-  L.push('LÉGENDE : id=identifiant interne d’une ligne (à réutiliser TEL QUEL) · nom=libellé complet · qte=quantité · dev=devise · cours=dernier cours lu · varJour=variation du jour en % · expoEur=exposition en euros (delta pour un produit à levier) · pctVN=poids dans la valeur nette · poche=classement de gestion · fact=facteurs de risque · niveau=effort attendu sur cette ligne (complet / compact / ligne / derive) · profil=profil de valorisation · derive.sj=sous-jacent · derive.distBar=distance à la barrière en % · derive.portMens=portage mensuel en euros · valo/conso=ce qui est DÉJÀ connu, avec son âge · manque=ce qui n’a pas encore été collecté (ce n’est PAS ta mission dans cet appel) · marge.vl=valeur liquidative · marge.libre=marge disponible · marge.coussinPct=coussin en % · expoNetteFacteur=exposition NETTE par facteur, une jambe short compensant une jambe longue · gardeFous=plafonds chiffrés en vigueur · ecarts=écarts de contrôle déjà détectés par l’application · evSansTexte=les seuls événements dont tu dois écrire les textes · evADebriefer=les événements échus à débriefer · decVues=les dernières découvertes, une ligne chacune, pour ne pas les reproposer · deskPrec=TON jugement précédent sur cette ligne, avec sa date · vous=ce que l’utilisateur a déclaré sur cette ligne (thèse écrite, invalidation définie, objectif défini) et la date de sa dernière revue · arbitragesTranches=les arbitrages que tu as proposés et que l’utilisateur a acceptés ou rejetés · arbitragesEnAttente=ceux qu’il n’a pas encore tranchés.');
+  L.push('LÉGENDE : id=identifiant interne d’une ligne (à réutiliser TEL QUEL) · nom=libellé complet · qte=quantité · dev=devise · cours=dernier cours lu · varJour=variation du jour en % · expoEur=exposition en euros (delta pour un produit à levier) · pctVN=poids dans la valeur nette · poche=classement de gestion · fact=facteurs de risque · niveau=effort attendu sur cette ligne (complet / compact / ligne / derive) · profil=profil de valorisation · derive.sj=sous-jacent · derive.distBar=distance à la barrière en % · derive.portMens=portage mensuel en euros · valo/conso=ce qui est DÉJÀ connu, avec son âge · manque=ce qui n’a pas encore été collecté (ce n’est PAS ta mission dans cet appel) · marge.vl=valeur liquidative · marge.libre=marge disponible · marge.coussinPct=coussin en % · expoNetteFacteur=exposition NETTE par facteur, une jambe short compensant une jambe longue · gardeFous=plafonds chiffrés en vigueur · ecarts=écarts de contrôle déjà détectés par l’application · evSansTexte=les seuls événements dont tu dois écrire les textes · evADebriefer=les événements échus à débriefer · decVues=les dernières découvertes, une ligne chacune, pour ne pas les reproposer · deskPrec=TON jugement précédent sur cette ligne, avec sa date · vous=ce que l’utilisateur a déclaré sur cette ligne : declare=lesquelles des trois déclarations il a faites, revue=date de sa dernière relecture, et surtout these/inval/obj=SES PROPRES TEXTES quand il les a écrits — c’est sa position, pas la tienne · arbitragesTranches=les arbitrages que tu as proposés et que l’utilisateur a acceptés ou rejetés · arbitragesEnAttente=ceux qu’il n’a pas encore tranchés.');
   L.push(Fn_JsonCompact(contrat));
   L.push('Une clé ABSENTE vaut « inconnu » : elle a été omise pour ne pas consommer de jetons, jamais parce qu’elle vaut zéro.');
   L.push('');
@@ -6779,6 +6814,11 @@ function Fn_BuildPromptMAJ(ctx) {
   L.push('  · fact = les facteurs de risque communs à plusieurs lignes (secteur, thème, devise, sensibilité aux taux). Des lignes corrélées constituent UNE exposition, pas plusieurs : c’est de cette attribution que dépend tout l’indicateur d’exposition nette.');
   L.push('  · liqFaible = true si la ligne ne peut pas être soldée en une à deux séances.');
   L.push('  · these, valoRef, risques, tend : la lecture de desk. revue seulement si une publication est intervenue depuis ta dernière lecture.');
+  L.push('  · QUAND « vous » PORTE DES TEXTES (these, inval, obj), CE N’EST PLUS UN MONOLOGUE. L’utilisateur a écrit sa propre position : ta lecture doit DIALOGUER avec elle, jamais l’ignorer ni la paraphraser.');
+  L.push('    — vous.these : dis en une phrase où tu la REJOINS et où tu DIVERGES, avec le fait daté qui fonde la divergence. Si tu la partages entièrement, dis-le et n’en réécris pas une autre : « thèse de l’utilisateur confirmée par X du JJ/MM » vaut mieux qu’un doublon.');
+  L.push('    — vous.inval : VÉRIFIE si la condition est DÉJÀ TOUCHÉE, et dis-le en premier si c’est le cas — tu es le seul à lire l’actualité, c’est le service que personne d’autre ne peut rendre. Sinon, dis à quelle distance on en est, et si elle te paraît mal posée (invérifiable, trop lâche, sans date), dis-le et propose la formulation qui la rendrait vérifiable.');
+  L.push('    — vous.obj : confronte-le au multiple, au référentiel et au consensus que tu as sous les yeux. Atteignable, dépassé, ou hors d’atteinte au vu de ce que tu vois ? Chiffre l’écart.');
+  L.push('    Une thèse écrite par l’utilisateur mais que tu ne commentes pas est une occasion manquée : c’est le seul endroit où il t’a dit ce qu’il pense.');
   L.push('  · ACTIONS (bloc actions) : pour chaque position qui le justifie, la meilleure action envisageable, hiérarchisée (prio 1 = urgent, à 3), avec proposition concrète, déclencheur conditionnel, coût/bénéfice chiffré, horizon et condition d’invalidation. Une position sans action nécessaire le dit explicitement (« conserver, prochain point de décision : … ») — une entrée « conserver » vaut mieux qu’une ligne absente. Confronte chaque action au bloc arbitragesTranches AVANT de l’écrire : si elle y figure déjà comme rejetée, soit tu nommes le fait daté qui la rouvre, soit tu ne l’écris pas.');
   L.push('');
   L.push('=== CE QUE TU N’ÉCRIS JAMAIS ===');
@@ -7730,6 +7770,14 @@ function Fn_OnAction(e) {
     case 'sites-debloquer': { Var_State.sitesBloques = []; Fn_Save(); Fn_RenderParametres(); break; }
   }
 }
+function Fn_SauverTexteThese(id, champ, valeur) {
+  const th = Var_State.theses[id] = Var_State.theses[id] || { ecrite: false, invalidation: false, objectif: false, derniereRevue: null };
+  const max = Object.keys(Cst_ChampsThese).map(k => Cst_ChampsThese[k]).filter(c => c.cle === champ)[0];
+  if (!max) return false;
+  th[champ] = String(valeur || '').slice(0, max.max);
+  Fn_Save();
+  return true;
+}
 function Fn_OnChange(e) {
   const el = e.target.closest ? e.target.closest('[data-action]') : null;
   if (!el) return;
@@ -7737,6 +7785,13 @@ function Fn_OnChange(e) {
   const id = el.getAttribute('data-id');
   const rt = Var_State._runtime;
   switch (action) {
+    /* Le texte d'une déclaration s'enregistre au blur, comme toute saisie longue,
+       et NE redessine pas la zone : remplacer le DOM sous les doigts ferait perdre
+       le curseur. Le compteur de caractères se rafraîchit au prochain rendu. */
+    case 'these-texte': {
+      Fn_SauverTexteThese(id, el.getAttribute('data-champ'), el.value);
+      break;
+    }
     case 'capture-saisie': {
       if (Fn_PoserCapture(el.value)) { rt.collageErreur = null; el.value = ''; }
       else rt.collageErreur = 'Ce texte ne porte pas les bornes d’une capture. Utilisez les trois zones écran par écran ci-dessous, ou relancez la capture.';
