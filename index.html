@@ -50,6 +50,16 @@ nav#nav-onglets::-webkit-scrollbar{display:none}
 .onglet-btn.actif{background:var(--accent-dim);border-color:var(--accent);color:var(--accent)}
 /* Pastille de comptage : place réservée même à vide, pour qu'une apparition
    après un appel ne redimensionne pas le libellé de l'onglet. */
+/* BANDE D'AVANCEMENT — au-dessus des onglets, donc lisible depuis TOUS. Un appel
+   dure plusieurs minutes ; sans elle, il fallait rester sur l'onglet Vigie et
+   garder le panneau ouvert pour savoir qu'il se passait quelque chose. */
+#entete-maj:empty{display:none}
+#entete-maj{margin-top:6px;padding:5px 9px;border-radius:8px;background:var(--panneau);
+  border:1px solid var(--accent);display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;
+  font-size:11px;line-height:1.35}
+#entete-maj b{font-family:var(--mono);font-weight:600}
+#entete-maj .em-t{color:var(--accent);font-weight:600;letter-spacing:.02em}
+#entete-maj .em-ko{color:var(--crit)}
 .nav-n{font-family:var(--mono);font-size:10px;font-weight:800;color:var(--warn);margin-left:3px;display:inline-block;min-width:1.1em}
 main{padding-top:10px}
 .onglet{display:none}
@@ -390,6 +400,7 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
   <header id="entete">
     <h1>Vigie Portefeuille</h1>
     <div class="sous-titre" id="entete-info"></div>
+    <div id="entete-maj"></div>
   </header>
   <nav id="nav-onglets">
     <button type="button" class="onglet-btn actif" data-action="onglet" data-id="vigie">Vigie<span id="nav-valider-n" class="nav-n"></span></button>
@@ -419,7 +430,7 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202608261847';
+const Cst_Version = 'vigie-202608261914';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -1839,6 +1850,19 @@ function Fn_BadgeAge(ts, prefixe) {
    deux choses contraires au même moment : « 100 % de la VN documentée et
    fraîche » trois lignes sous « multiples ET référentiel manquants » sur la
    totalité du portefeuille. */
+/* Combien de jours avant de redemander un champ qu'on a cherché sans le trouver.
+   Sept jours seraient une relance hebdomadaire de l'échec ; un mois laisse le
+   temps à une publication sectorielle de paraître. */
+const Cst_RelanceIntrouvableJours = 30;
+/* A-T-ON DÉJÀ CHERCHÉ CE CHAMP EN VAIN, ET RÉCEMMENT ? Distinguer « jamais
+   collecté » de « cherché, introuvable » est ce qui sépare une lacune qu'on peut
+   combler d'une dépense qu'on répète. L'écran doit dire laquelle des deux. */
+function Fn_ChercheEnVain(p, champ) {
+  const d = p && p.valo && p.valo.cherche && p.valo.cherche[champ];
+  if (!d) return false;
+  const j = Fn_JoursDepuis(d);
+  return j != null && -j < Cst_RelanceIntrouvableJours;
+}
 function Fn_ValoExploitable(p) {
   const v = (p && p.valo) || {};
   const ref = Fn_Num(v.refHist) != null ? Fn_Num(v.refHist) : Fn_Num(v.refPairs);
@@ -4298,10 +4322,15 @@ function Fn_IndicateursDiscipline() {
         aff = Fn_FmtPct(valeur, 0) + ' de la VN documentée et fraîche';
         zone = Fn_ZoneSeuil(valeur, s.couvertureDonneesVert, s.couvertureDonneesRouge, 'bas');
         const aFaire = cibles.filter(p => !Fn_ValoExploitable(p) || Fn_DonneePerimee(p.valo && p.valo.freshTs));
+        /* CHERCHÉ ET INTROUVABLE n'est pas MANQUANT : le premier ne se comblera pas
+           en relançant la collecte, et le dire évite de la relancer pour rien. */
+        const vains = aFaire.filter(p => Fn_ChercheEnVain(p, 'ref'));
         extra = aFaire.length
           ? 'À collecter ou à rafraîchir : ' + aFaire.map(p => Fn_Esc(String(p.detention.nom || p.id).slice(0, 20))
-              + (Fn_ValoExploitable(p) ? ' (périmé)' : ' (multiple ou référentiel absent)')).join(', ')
+              + (Fn_ChercheEnVain(p, 'ref') ? ' (référentiel cherché le ' + Fn_Esc(Fn_FmtDateCourt(p.valo.cherche.ref)) + ', introuvable)'
+                : Fn_ValoExploitable(p) ? ' (périmé)' : ' (multiple ou référentiel absent)')).join(', ')
             + ' — une passe d’enrichissement les traite toutes, et seulement elles.'
+            + (vains.length ? ' Les lignes marquées « introuvable » n’y repartiront PAS avant ' + Cst_RelanceIntrouvableJours + ' jours : la collecte a déjà été payée sans résultat. Le référentiel peut être saisi à la main sur la fiche de la ligne.' : '')
           : 'Toutes les lignes matérielles portent un multiple, son référentiel, et des données de moins de '
             + (Fn_Num(s.fraicheurDonneesJours) || 7) + ' jours.';
       }
@@ -4528,6 +4557,7 @@ function Fn_RenderEntete() {
   const maj = Var_State.derniereMaj;
   const mode = Fn_ModeAcces();
   const cap = Var_State.captures.find(c => c.type === 'positions');
+  Fn_RenderBandeMAJ();
   el.innerHTML = 'Dernier jugement : <b class="mono">' + (maj ? Fn_Esc(Fn_FmtHeure(maj)) : 'jamais') + '</b>'
     + ' · entrées du <b class="mono">' + (cap ? Fn_Esc(Fn_FmtHeure(cap.ts)) : 'aucune') + '</b>'
     + ' · ' + Fn_Esc(mode.court)
@@ -4536,6 +4566,7 @@ function Fn_RenderEntete() {
 }
 function Fn_RenderVigie() {
   Fn_RenderEntete();
+  Fn_RenderBandeMAJ();
   Fn_RenderHero();
   Fn_RenderAcquisition();
   Fn_RenderMajPanel();
@@ -4866,7 +4897,7 @@ function Fn_LignesAEnrichir() {
     if (p.desk.niveau === 'derive') return false;
     return Fn_DonneePerimee(p.valo && p.valo.freshTs)
       || Fn_DonneePerimee(p.consensus && p.consensus.freshTs)
-      || !Fn_ValoExploitable(p);
+      || (!Fn_ValoExploitable(p) && !Fn_ChercheEnVain(p, 'ref'));
   });
 }
 /* LES INSTRUMENTS QUE L'ON NE DÉTIENT PAS ET DONT LA DATE COMPTE QUAND MÊME :
@@ -4960,7 +4991,7 @@ function Fn_RenderMajPanel() {
       + '<button class="btn btn-accent btn-large" data-action="maj-lancer">'
       + (relance ? 'Relancer le jugement de desk' : 'Lancer le jugement de desk') + '</button>'
       + (aEnrichir.length || agendas.length
-        ? '<button class="btn" data-action="maj-enrichir">Enrichir ' + aEnrichir.length + ' ligne(s)'
+        ? '<button class="btn btn-accent btn-large" data-action="maj-enrichir">Enrichir ' + aEnrichir.length + ' ligne(s)'
           + (agendas.length ? ' et ' + agendas.length + ' agenda(s)' : '') + '</button>'
         : '')
       + '</div>';
@@ -6149,8 +6180,38 @@ function Fn_Phase(journal, cle, statut, message) {
   ph.ts = Date.now();
   Fn_Save();
   Fn_RenderMajPanel();
+  Fn_RenderBandeMAJ();
+}
+/* CE QUE LA BANDE DIT, ET CE QU'ELLE NE DIT PAS. Elle rassure — « ça tourne, en
+   voici la preuve » — sans rejouer le journal détaillé, qui vit dans Paramètres.
+   Le compteur de recherches est affiché AVEC son budget, et annoncé pour ce
+   qu'il est : un décompte d'APPELS d'outil, pendant que la facturation compte
+   des REQUÊTES et déduplique. Sur un appel réel, 68 appels d'outil ont donné 35
+   requêtes facturées pour un budget de 36 — voir le compteur dépasser son budget
+   est alarmant si l'on ignore que les deux ne mesurent pas la même chose. */
+function Fn_HtmlBandeMAJ() {
+  const j = Var_State.majJournaux[0];
+  if (!j || j.statut !== 'en cours') return '';
+  const phase = (j.phases || []).filter(p => p.statut === 'en cours').slice(-1)[0];
+  const lib = phase ? (Cst_PhasesMAJ.filter(x => x[0] === phase.id)[0] || [null, phase.id])[1] : 'en cours';
+  const bud = j.budget && Fn_Num(j.budget.recherches);
+  return '<span class="em-t">⏳ ' + Fn_Esc(j.passe === 'enrichissement' ? 'ENRICHISSEMENT' : 'JUGEMENT DE DESK') + '</span>'
+    + '<span>' + Fn_Esc(lib) + '</span>'
+    + '<span>chrono <b id="em-chrono">' + Fn_Esc(Fn_DureeFmt(Date.now() - j.debutTs)) + '</b></span>'
+    + '<span>recherches <b id="em-rech">' + (j.recherches || 0) + '</b>' + (bud ? ' / ' + bud : '')
+    + (bud && (j.recherches || 0) > bud ? ' <span class="muted">— appels d’outil, pas requêtes facturées : l’API déduplique, le décompte final redescend</span>' : '') + '</span>'
+    + '<span>dépense <b id="em-cout">' + Fn_Esc(Fn_CoutVivant(j)) + '</b></span>'
+    + '<span class="muted">gardez cet onglet ouvert — vous pouvez naviguer entre les onglets</span>';
+}
+function Fn_RenderBandeMAJ() {
+  const el = document.getElementById('entete-maj');
+  if (el) el.innerHTML = Fn_HtmlBandeMAJ();
 }
 function Fn_MajCompteursDirect(journal) {
+  const bc = document.getElementById('em-chrono'); if (bc) bc.textContent = Fn_DureeFmt(Date.now() - journal.debutTs);
+  const br = document.getElementById('em-rech'); if (br) br.textContent = String(journal.recherches || 0);
+  const bk = document.getElementById('em-cout'); if (bk) bk.textContent = Fn_CoutVivant(journal);
+  if (!bc) Fn_RenderBandeMAJ();          // la bande n'existe pas encore : la poser
   const m = document.getElementById('maj-modele'); if (m) m.textContent = journal.modele || '…';
   const r = document.getElementById('maj-rech'); if (r) r.textContent = String(journal.recherches || 0);
   const jt = document.getElementById('maj-jetons'); if (jt) jt.textContent = '≈ ' + Fn_FmtNb(journal.jetonsSortie || 0, 0);
@@ -6520,7 +6581,12 @@ function Fn_ContratEnrichissement(lignes, agendas) {
       const manque = [];
       const prof = Cst_Profils.find(x => x.id === p.desk.profil);
       (prof ? prof.ratios : ['per', 'bpa', 'capi', 'margeOp']).forEach(k => { if (Fn_Num(v[k]) == null) manque.push(k); });
-      if (Fn_Num(v.refHist) == null && Fn_Num(v.refPairs) == null) manque.push('refHist');
+      /* Un champ CHERCHÉ ET NON TROUVÉ ne se redemande pas la semaine suivante :
+         une médiane sectorielle absente le 26 ne sera pas publiée le 2. On le
+         redemande après Cst_RelanceIntrouvableJours, pas avant — sans cela la
+         ligne restait éternellement dans la sélection et se repayait chaque
+         semaine pour le même échec. */
+      if (Fn_Num(v.refHist) == null && Fn_Num(v.refPairs) == null && !Fn_ChercheEnVain(p, 'ref')) manque.push('refPairs');
       if (!c.pubDate) manque.push('pubDate');
       if (!c.conso) manque.push('conso');
       return { id: p.id, nom: String(p.detention.nom || '').slice(0, 60), isin: p.isin || null,
@@ -6565,7 +6631,11 @@ function Fn_BuildPromptMAJ(ctx) {
     L.push('2. NE JAMAIS relancer une requête strictement identique. Si elle n’a rien donné, changer d’angle : autre source, autre libellé, identifiant au lieu du nom.');
     L.push('3. Après UNE tentative infructueuse sur une fiche à contenu chargé par script (Zone Bourse, Boursorama et analogues s’ouvrent sans restituer leurs tableaux chiffrés), CHANGER DE SOURCE — ne pas y revenir. Privilégier les sources qui rendent leurs chiffres en clair.');
     L.push('4. Un produit à levier compte pour SON SOUS-JACENT : ses multiples propres n’existent pas. Ne consomme aucun appel pour lui chercher un ratio.');
-    L.push('5. Le RÉFÉRENTIEL est aussi important que le multiple : un PER isolé n’est pas interprétable. Rapporte la médiane historique du titre (5 ou 10 ans) ou celle des pairs — sans elle, le multiple restera brut et n’entrera dans aucun indicateur.');
+    L.push('5. LE RÉFÉRENTIEL EST LE CHAMP QUI MANQUE TOUJOURS, et sans lui le multiple ne sert à rien : un PER de 22 n’est ni cher ni bon marché tant qu’on ne sait pas contre quoi le comparer. Deux passes complètes ont ramené neuf lignes valorisées et ZÉRO référentiel — parce que la « médiane historique sur 5 ans » n’est publiée à peu près nulle part. Voici donc, DANS L’ORDRE, ce qui est accepté ; prends le PREMIER que tu trouves et passe à la ligne suivante :');
+  L.push('   a. refPairs = le multiple MÉDIAN ou MOYEN du secteur ou de l’industrie du titre, tel qu’une source le publie (fiches sectorielles de StockAnalysis, comparables de Finviz, moyenne de secteur d’un agrégateur). C’est le plus facile à trouver : commence par là.');
+  L.push('   b. refPairs = la médiane des multiples de TROIS comparables cotés que tu nommes, si aucun chiffre sectoriel n’est publié. Tu as le droit de la calculer toi-même à partir de trois PER relevés — c’est une médiane, pas une opinion.');
+  L.push('   c. refHist = la médiane ou la moyenne historique du titre (5 ou 10 ans) si, et seulement si, une source la publie telle quelle.');
+  L.push('   Le référentiel est un NOMBRE, comparable au multiple que tu rends pour la même ligne : même nature (PER contre PER), jamais une fourchette, jamais une phrase. Si les trois voies échouent, OMETS le champ — mais alors omets aussi le multiple correspondant, un multiple orphelin n’entre dans aucun indicateur et coûte une recherche pour rien.');
     L.push('6. BUDGET DE COLLECTE, calculé pour cet appel : ' + budget.recherches + ' recherches et ' + budget.lectures + ' lectures de page pour ' + (contrat.lignes || []).length + ' ligne(s). Répartis-le : ne consomme pas la moitié sur les deux premières lignes. Si le budget approche de sa fin, termine par les lignes les plus lourdes en pourcentage de valeur nette.');
     L.push('7. Une DATE D’AGENDA vaut cher pour peu de recherche : c’est elle qui prévient d’un ordre sur le point de partir juste avant une publication. Traite les agendas EN PREMIER — une recherche chacun suffit le plus souvent — puis consacre le reste du budget aux valorisations.');
     L.push('8. Une valeur non trouvée s’OMET. Elle ne s’invente jamais, ne vaut jamais 0, et ne se remplace pas par une prose expliquant la recherche : cette prose coûte dix fois le chiffre qu’elle remplace.');
@@ -6813,6 +6883,14 @@ function Fn_IntegrerEnrichissement(data, journal) {
       p.valo.s = Fn_Ch(v, ['s']) || p.valo.s;
       p.valo.u = Fn_UrlSure(Fn_Ch(v, ['u'])) || p.valo.u;
       p.valo.freshTs = ts;
+      /* CHERCHÉ, PAS TROUVÉ. Une réponse est arrivée pour cette ligne : si le
+         référentiel n'y est toujours pas, c'est qu'il a été demandé et n'existe
+         pas dans les sources atteintes. On le DATE, ce qui vaut deux choses —
+         l'écran peut dire « cherché le JJ/MM, introuvable » au lieu de « manquant »,
+         et la ligne cesse de repartir chaque semaine pour le même échec. */
+      p.valo.cherche = p.valo.cherche || {};
+      if (Fn_ValoExploitable(p)) delete p.valo.cherche.ref;
+      else p.valo.cherche.ref = Fn_AujISO();
       det.valo++;
     }
     if (c && typeof c === 'object') {

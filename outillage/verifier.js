@@ -1014,6 +1014,37 @@ setTimeout(async () => {
     verifier('couverture pleine et tension de valorisation ne peuvent plus se contredire',
       !tension.manquant, String(tension.manquant || tension.valeurAff).slice(0, 80));
 
+    /* 7. CHERCHÉ ET INTROUVABLE N'EST PAS MANQUANT. Deux passes complètes ont
+       ramené neuf lignes valorisées et ZÉRO référentiel : la médiane historique
+       demandée n'est publiée à peu près nulle part. Sans mémoire de cet échec, la
+       ligne repartait à la collecte CHAQUE semaine pour le même résultat — un
+       abonnement à l'échec, payé au tarif de la recherche web. */
+    const aujISO = J('Fn_AujISO()');
+    const vieuxISO = new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10);
+    const poserLigne = valo => R(socle + 'Var_State.positions = ['
+      + ligne('L1', 'Alpha SA', 100, 10, 'long', 'action', ['tech'], valo)
+      + ']; Var_State.positions[0].consensus = { freshTs: Date.now() }; Fn_Recalculer();');
+    poserLigne('{ per: 12, freshTs: Date.now() }');
+    verifier('sans référentiel et sans recherche passée, la ligne repart à la collecte',
+      J('Fn_LignesAEnrichir().length') === 1, J('Fn_LignesAEnrichir().length') + ' ligne(s)');
+    poserLigne('{ per: 12, freshTs: Date.now(), cherche: { ref: "' + aujISO + '" } }');
+    verifier('CHERCHÉ AUJOURD’HUI et introuvable : la ligne ne repart PAS',
+      J('Fn_LignesAEnrichir().length') === 0, J('Fn_LignesAEnrichir().length') + ' ligne(s)');
+    verifier('et le cahier des charges cesse de le réclamer',
+      J('Fn_ContratEnrichissement([{ id: "L1", detention: { nom: "Alpha", dev: "EUR" }, produit: { type: "action" }, desk: {}, consensus: { conso: 1, pubDate: "2026-12-01" }, valo: { per: 12, cherche: { ref: "' + aujISO + '" } } }], []).lignes[0].manque')
+        .indexOf('refPairs') < 0,
+      JSON.stringify(J('Fn_ContratEnrichissement([{ id: "L1", detention: { nom: "Alpha", dev: "EUR" }, produit: { type: "action" }, desk: {}, consensus: { conso: 1, pubDate: "2026-12-01" }, valo: { per: 12, cherche: { ref: "' + aujISO + '" } } }], []).lignes[0].manque')));
+    /* Passé le délai, on retente : une fiche sectorielle a pu paraître. */
+    poserLigne('{ per: 12, freshTs: Date.now(), cherche: { ref: "' + vieuxISO + '" } }');
+    verifier('cherché il y a deux mois : on retente, l’échec n’est pas définitif',
+      J('Fn_LignesAEnrichir().length') === 1, J('Fn_LignesAEnrichir().length') + ' ligne(s)');
+    /* L'écran doit dire laquelle des deux lacunes, sans quoi l'utilisateur
+       relance une collecte qui ne peut rien rapporter. */
+    poserLigne('{ per: 12, freshTs: Date.now(), cherche: { ref: "' + aujISO + '" } }');
+    const couv = (J('Fn_IndicateursDiscipline()') || []).filter(x => x.nom === 'Couverture des données de valorisation')[0] || {};
+    verifier('l’écran distingue « cherché, introuvable » de « manquant »',
+      /introuvable/.test(String(couv.extra || '')) && /n’y repartiront PAS/.test(String(couv.extra || '')),
+      String(couv.extra || '').slice(0, 130));
     R('Var_State.positions = []; Fn_Recalculer();');
   } catch (e) { ko('ce que les indicateurs mesurent', String((e && e.stack) || e)); }
 
