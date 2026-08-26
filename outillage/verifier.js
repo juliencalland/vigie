@@ -732,6 +732,117 @@ setTimeout(async () => {
       meme.cv === 25 && meme.c === 21, JSON.stringify(meme) + ' (la veille doit rester 25, pas devenir 20)');
   } catch (e) { ko('l’arithmétique du portefeuille', e.message); }
 
+  /* --- CE QUE LES INDICATEURS MESURENT VRAIMENT ---
+     Deux d'entre eux annonçaient autre chose que ce qu'ils calculaient, et l'un
+     contredisait son voisin sur le même écran. Un indicateur faux est pire qu'un
+     indicateur absent : il est lu, et il oriente. */
+  console.log('\nG septies. Indicateurs — ce qu’ils annoncent et ce qu’ils calculent');
+  try {
+    const R = q => vm.runInContext(q, ctx);
+    const J = q => JSON.parse(JSON.stringify(R(q)));
+    // Extrait le pourcentage affiche par un indicateur, pour le comparer.
+    const pctDe = t => { const m = /(-?[\d  ]+(?:,\d+)?)\s*%/.exec(String(t || '')); return m ? Number(m[1].replace(/[  ]/g, '').replace(',', '.')) : null; };
+    const indic = nom => (J('Fn_IndicateursDiscipline()') || []).find(x => x.nom === nom) || {};
+    const socle = 'Var_State.controles = []; Var_State.calendrier = []; Var_State.decouvertes = [];'
+      + 'Var_State.fx = { taux: {}, ts: Date.now(), origine: "essai" };'
+      + 'Var_State.marge = { titres: 1000, cash: 0, vl: 1000, risque: 500, libre: 500, as: "18:00", ts: Date.now() };';
+    const ligne = (id, nom, qte, cours, sens, type, facteurs, valo) =>
+      '{ id: "' + id + '", ticker: null, isin: null, detention: { nom: "' + nom + '", qte: ' + qte
+      + ', dev: "EUR", cloture: ' + cours + ', clotureVeille: ' + cours + ', valEurExport: null, facteurs: '
+      + JSON.stringify(facteurs) + ', poche: "CONVICTION", ts: Date.now() },'
+      + ' produit: { type: "' + type + '", emetteur: null, sousJacent: null, sens: "' + sens + '",'
+      + ' barriere: null, strike: null, parite: 1, levier: 1, histBarriere: [] },'
+      + ' desk: { niveau: "complet" }, marche: {}, valo: ' + (valo || '{}') + ', consensus: {} }';
+
+    /* 1. QUE DES LIGNES LONGUES, chacune portant PLUSIEURS facteurs non compensés.
+       L'ancienne formule sommait un pourcentage PAR FACTEUR : la taille d'une
+       ligne était comptée autant de fois qu'elle a de facteurs, et le total
+       dépassait structurellement 100 % — 573 % relevés en usage réel, comparés à
+       un seuil rouge de 25 %. Rouge à jamais, donc muet. Sans jambe short, la
+       réponse juste est zéro. */
+    R(socle + 'Var_State.positions = ['
+      + ligne('L1', 'Alpha SA', 100, 4, 'long', 'action', ['tech', 'dollar', 'ia']) + ','
+      + ligne('L2', 'Beta SA', 100, 4, 'long', 'action', ['luxe', 'euro', 'conso'])
+      + ']; Fn_Recalculer();');
+    const sansShort = indic('Jambe directionnelle sans contrepartie');
+    verifier('sans aucune jambe short, « sans contrepartie » vaut ZÉRO, jamais la somme des facteurs',
+      /aucune position short/.test(sansShort.valeurAff || ''),
+      sansShort.valeurAff + ' [' + (sansShort.zone || 'exclu') + ']');
+
+    /* 2. Un short dont le facteur porte AUSSI une jambe longue est une vraie
+          contrepartie : il ne doit pas être compté. */
+    R(socle + 'Var_State.positions = ['
+      + ligne('L1', 'Alpha SA', 100, 6, 'long', 'action', ['tech']) + ','
+      + ligne('S1', 'Alpha Turbo Short', 100, 2, 'short', 'derive', ['tech'])
+      + ']; Fn_Recalculer();');
+    const couvert = indic('Jambe directionnelle sans contrepartie');
+    verifier('un short dont le facteur porte une jambe longue n’est PAS une jambe nue',
+      pctDe(couvert.valeurAff) === 0, couvert.valeurAff);
+
+    /* 2 bis. Le SENS survit à l'absence de delta. Paramètres de levier illisibles
+          = delta nul ; l'agrégation se rabattait alors sur la valeur de marché,
+          toujours positive, et comptait la jambe short comme une jambe longue. */
+    R(socle + 'Var_State.positions = ['
+      + ligne('L1', 'Alpha SA', 100, 6, 'long', 'action', ['tech']) + ','
+      + ligne('S1', 'Alpha Turbo Short', 100, 2, 'short', 'derive', ['tech'])
+      + ']; Var_State.positions[1].produit.deltaEur = null; Fn_Recalculer();');
+    const net = J("Fn_ProfilExposition().expositionNetteParFacteur.find(function (f) { return f.cle === 'tech'; })");
+    verifier('un short dont le delta est inconnu RÉDUIT l’exposition du facteur, jamais l’inverse',
+      net && net.deltaEur === 400, JSON.stringify(net) + ' (attendu 400 : 600 long − 200 short)');
+
+    /* 3. Un short seul sur son facteur est un pari autonome, compté UNE fois. */
+    R(socle + 'Var_State.positions = ['
+      + ligne('L1', 'Alpha SA', 100, 6, 'long', 'action', ['tech']) + ','
+      + ligne('S1', 'Gamma Turbo Short', 100, 2, 'short', 'derive', ['gamma', 'euro', 'cyclique'])
+      + ']; Fn_Recalculer();');
+    const nu = indic('Jambe directionnelle sans contrepartie');
+    verifier('un short seul sur ses facteurs compte UNE fois, pas une fois par facteur',
+      pctDe(nu.valeurAff) === 20, nu.valeurAff + ' (attendu 20 % : 200 € sur 1 000 € de VN, trois facteurs)');
+
+    /* 4. Sans facteurs, on ne peut pas dire si le short couvre : la lacune
+          s'affiche et l'indicateur sort du score, jamais compté zéro. */
+    R(socle + 'Var_State.positions = ['
+      + ligne('L1', 'Alpha SA', 100, 6, 'long', 'action', ['tech']) + ','
+      + ligne('S1', 'Delta Turbo Short', 100, 2, 'short', 'derive', [])
+      + ']; Fn_Recalculer();');
+    const aveugle = indic('Jambe directionnelle sans contrepartie');
+    verifier('un short SANS facteurs sort du score et nomme sa lacune, au lieu d’être ignoré',
+      !!aveugle.manquant && /Delta Turbo/.test(aveugle.manquant) && aveugle.zone == null,
+      String(aveugle.manquant || aveugle.valeurAff).slice(0, 90));
+
+    /* 5. LA COUVERTURE DES DONNÉES ne regardait que l'HORODATAGE. Une passe
+          d'enrichissement rentrée bredouille estampillait quand même la ligne,
+          qui comptait alors comme documentée : l'écran affichait « 100 % de la VN
+          documentée et fraîche » trois lignes sous « multiples ET référentiel
+          manquants » sur la totalité du portefeuille. */
+    R(socle + 'Var_State.positions = ['
+      + ligne('L1', 'Alpha SA', 100, 10, 'long', 'action', ['tech'], '{ freshTs: Date.now() }')
+      + ']; Var_State.positions[0].consensus = { freshTs: Date.now() }; Fn_Recalculer();');
+    const creuse = indic('Couverture des données de valorisation');
+    verifier('une ligne estampillée FRAÎCHE mais sans multiple ne compte pas comme documentée',
+      pctDe(creuse.valeurAff) === 0 && /absent/.test(creuse.extra || ''),
+      creuse.valeurAff + ' · ' + String(creuse.extra || '').slice(0, 70));
+    verifier('et elle repart à l’enrichissement au lieu d’attendre la péremption',
+      J('Fn_LignesAEnrichir().length') === 1, J('Fn_LignesAEnrichir().length') + ' ligne(s)');
+
+    /* 6. Avec un multiple ET son référentiel, la ligne est documentée — et sort
+          de la sélection : un champ complet et frais n'est jamais recollecté. */
+    R(socle + 'Var_State.positions = ['
+      + ligne('L1', 'Alpha SA', 100, 10, 'long', 'action', ['tech'], '{ per: 12, refHist: 15, freshTs: Date.now() }')
+      + ']; Var_State.positions[0].consensus = { freshTs: Date.now() }; Fn_Recalculer();');
+    const pleine = indic('Couverture des données de valorisation');
+    verifier('un multiple AVEC son référentiel documente la ligne, et la sort de la collecte',
+      pctDe(pleine.valeurAff) === 100 && J('Fn_LignesAEnrichir().length') === 0,
+      pleine.valeurAff + ' · ' + J('Fn_LignesAEnrichir().length') + ' ligne(s) à enrichir');
+    /* La contradiction d'origine : couverture pleine et tension calculable
+       doivent désormais aller de pair, puisqu'elles posent la MÊME question. */
+    const tension = indic('Tension de valorisation');
+    verifier('couverture pleine et tension de valorisation ne peuvent plus se contredire',
+      !tension.manquant, String(tension.manquant || tension.valeurAff).slice(0, 80));
+
+    R('Var_State.positions = []; Fn_Recalculer();');
+  } catch (e) { ko('ce que les indicateurs mesurent', String((e && e.stack) || e)); }
+
   /* --- L'EXPORT DU COURTIER, lu pour de bon ---
      Le lecteur de classeur n'était vérifié que par sa PRÉSENCE. Il fait pourtant
      foi sur les quantités, les identifiants et les devises, et c'est de lui que

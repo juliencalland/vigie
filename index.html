@@ -419,7 +419,7 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202608251837';
+const Cst_Version = 'vigie-202608260427';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -1770,6 +1770,19 @@ function Fn_BadgeAge(ts, prefixe) {
 // Fraîcheur d'un bloc enrichi : au-delà du seuil de Paramètres, il repart dans la
 // passe hebdomadaire. En deçà, il n'est JAMAIS recollecté — c'est ce qui divise
 // la facture.
+/* UNE LIGNE EST-ELLE VALORISABLE ? Il y faut un multiple ET un référentiel
+   auquel le comparer : un multiple isolé ne s'interprète pas. La MÊME condition
+   sert à trois endroits — l'indicateur de tension, la couverture des données, et
+   le choix des lignes à enrichir. Les laisser diverger faisait dire à l'écran
+   deux choses contraires au même moment : « 100 % de la VN documentée et
+   fraîche » trois lignes sous « multiples ET référentiel manquants » sur la
+   totalité du portefeuille. */
+function Fn_ValoExploitable(p) {
+  const v = (p && p.valo) || {};
+  const ref = Fn_Num(v.refHist) != null ? Fn_Num(v.refHist) : Fn_Num(v.refPairs);
+  const mult = Fn_Num(v.per) != null ? Fn_Num(v.per) : Fn_Num(v.perN);
+  return (ref != null && mult != null) ? { mult: mult, ref: ref } : null;
+}
 function Fn_DonneePerimee(freshTs) {
   const t = Fn_Num(freshTs);
   if (t == null) return true;
@@ -3516,8 +3529,18 @@ function Fn_ProfilExposition() {
   const s = Var_State.seuils;
   const parFacteur = {}, parDevise = {}, parPoche = {}, brutFacteur = {};
   Var_State.positions.forEach(p => {
+    /* DELTA INCONNU : on perd la MESURE, jamais le SENS. Quand les paramètres
+       d'un produit à levier n'ont pas pu être lus — c'est ce que signale la carte
+       « paramètres de levier illisibles » — le delta est nul et l'agrégation se
+       rabattait sur la valeur de marché, TOUJOURS POSITIVE. Une jambe short était
+       alors comptée comme longue : elle gonflait l'exposition du facteur au lieu
+       de la réduire, faisait passer une couverture pour un doublon, et masquait
+       sa propre nudité. La valeur de marché d'un produit à levier sous-estime de
+       toute façon largement son exposition ; c'est la carte à valider qui dit
+       comment obtenir la vraie, pas cette approximation. */
     const d = Fn_Num(p.produit.deltaEur);
-    const val = d != null ? d : (Fn_Num(p.detention.valEur) || 0);
+    const brut = Fn_Num(p.detention.valEur) || 0;
+    const val = d != null ? d : (p.produit.sens === 'short' ? -brut : brut);
     const facteurs = (p.detention.facteurs && p.detention.facteurs.length) ? p.detention.facteurs : ['non classé'];
     facteurs.forEach(f => {
       parFacteur[f] = (parFacteur[f] || 0) + val;
@@ -3963,25 +3986,53 @@ function Fn_IndicateursDiscipline() {
     let valeur = null, aff = '—', zone = null, manquant = null, extra = '';
     if (rien) manquant = manquePortefeuille;
     else {
-      const nus = [];
-      let total = 0;
+      /* CE QUI EST MESURÉ : la part de la valeur nette portée par des positions
+         SHORT qui ne compensent rien. C'est le sujet — un short sans jambe
+         longue en face n'est pas une couverture, c'est un second pari.
+         Deux erreurs corrigées ici, et elles se cumulaient :
+         1. On sommait des POURCENTAGES PAR FACTEUR. Une ligne porte trois à cinq
+            facteurs et pèse dans chacun : sa taille était donc comptée autant de
+            fois qu'elle a de facteurs. Le total dépassait structurellement 100 %
+            (573 % relevés sur un portefeuille à 1,66 de levier) et se comparait
+            à un seuil rouge de 25 % — rouge à jamais, donc muet.
+         2. On sommait les jambes LONGUES avec les autres. Un portefeuille sans
+            aucun short sortait « sans contrepartie » à hauteur de son exposition
+            brute, ce qui ne dit rien, pendant que le seul vrai short du
+            portefeuille — sans facteur attribué — n'était pas compté du tout.
+         Une ligne compte donc UNE fois, et seules les lignes short comptent. */
+      const compense = {};
       prof.expositionNetteParFacteur.forEach(f => {
         if (f.cle === 'non classé' || f.pctVN == null) return;
         const brut = (prof.expositionBruteParFacteur.find(x => x.cle === f.cle) || {}).pctVN;
         if (brut == null || brut === 0) return;
-        // Compensation nulle = jambe nue : |net| égal au brut.
-        const compensation = 1 - Math.abs(f.pctVN) / Math.abs(brut);
-        if (compensation < 0.05) { nus.push({ cle: f.cle, pct: f.pctVN }); total += Math.abs(f.pctVN); }
+        // Compensation nulle = facteur nu : |net| égal au brut.
+        compense[f.cle] = (1 - Math.abs(f.pctVN) / Math.abs(brut)) >= 0.05;
       });
-      if (!prof.expositionNetteParFacteur.length) manquant = 'facteurs de risque par ligne — attribués au prochain jugement de desk';
-      else {
-        valeur = total;
-        aff = Fn_FmtPct(total, 1) + ' de la VN sans contrepartie';
-        zone = Fn_ZoneSeuil(total, s.jambeNueVert, s.jambeNueRouge, 'haut');
-        extra = nus.length
-          ? 'Facteurs sans jambe opposée : ' + nus.map(n => Fn_Esc(n.cle) + ' ' + Fn_Esc(Fn_FmtPct(n.pct, 1))).join(' · ')
-            + '<br><span class="muted">Un produit short sans jambe longue correspondante n’est pas une couverture : c’est un pari directionnel autonome, qui doit porter sa propre thèse, son invalidation et son horizon.</span>'
-          : 'Chaque facteur exposé porte au moins une contrepartie partielle.';
+      const shorts = prof.lignes.filter(l => l.sens === 'short' && l.pctVN != null);
+      const sansFacteur = shorts.filter(l => !(l.facteurs && l.facteurs.length));
+      const jugeables = shorts.filter(l => l.facteurs && l.facteurs.length);
+      const nues = jugeables.filter(l => !l.facteurs.some(f => compense[f]));
+      const nom20 = l => Fn_Esc(String(l.nom || '').slice(0, 20));
+      if (!shorts.length) {
+        valeur = 0;
+        aff = '0 % — aucune position short';
+        zone = Fn_ZoneSeuil(0, s.jambeNueVert, s.jambeNueRouge, 'haut');
+        extra = 'Aucune jambe short dans le portefeuille : la question de la couverture ne se pose pas encore.';
+      } else if (sansFacteur.length && !jugeables.length) {
+        /* Jamais compté zéro : sans facteurs, on ne peut pas dire si le short
+           couvre quelque chose. La lacune s'affiche, avec le moyen de la combler. */
+        manquant = 'facteurs de risque sur ' + sansFacteur.map(nom20).join(', ')
+          + ' — attribués au prochain jugement de desk, sans quoi il est impossible de dire si ce short couvre une jambe longue ou parie seul';
+      } else {
+        valeur = nues.reduce((a, l) => a + Math.abs(l.pctVN), 0);
+        aff = Fn_FmtPct(valeur, 1) + ' de la VN en short non couvrant';
+        zone = Fn_ZoneSeuil(valeur, s.jambeNueVert, s.jambeNueRouge, 'haut');
+        extra = (nues.length
+          ? 'Shorts sans jambe longue en face : ' + nues.map(l => nom20(l) + ' ' + Fn_Esc(Fn_FmtPct(Math.abs(l.pctVN), 1))).join(' · ')
+          : 'Chaque short trouve au moins une jambe longue sur l’un de ses facteurs.')
+          + (sansFacteur.length ? '<br>Hors calcul faute de facteurs : ' + sansFacteur.map(nom20).join(', ')
+            + ' — attribués au prochain jugement de desk.' : '')
+          + '<br><span class="muted">Un produit short sans jambe longue correspondante n’est pas une couverture : c’est un pari directionnel autonome, qui doit porter sa propre thèse, son invalidation et son horizon.</span>';
       }
     }
     pousser({ bloc: 'EXPOSITION', nom: 'Jambe directionnelle sans contrepartie', valeurAff: aff, zone, manquant, extra,
@@ -4051,10 +4102,10 @@ function Fn_IndicateursDiscipline() {
         const pct = Fn_Num(p.detention.pctVN);
         if (pct != null) basePct += pct;
         const v = p.valo || {};
-        const ref = Fn_Num(v.refHist) != null ? Fn_Num(v.refHist) : Fn_Num(v.refPairs);
-        const mult = Fn_Num(v.per) != null ? Fn_Num(v.per) : Fn_Num(v.perN);
-        if (ref != null && mult != null && pct != null) evaluables.push({ p, tendue: mult > ref, pct });
-        else horsCalcul.push(String(p.detention.nom || p.id).slice(0, 20) + (pct == null ? ' (% VN manquant)' : (mult == null ? ' (multiple manquant)' : ' (référentiel manquant)')));
+        const util = Fn_ValoExploitable(p);
+        if (util && pct != null) evaluables.push({ p, tendue: util.mult > util.ref, pct });
+        else horsCalcul.push(String(p.detention.nom || p.id).slice(0, 20) + (pct == null ? ' (% VN manquant)'
+          : (Fn_Num(v.per) == null && Fn_Num(v.perN) == null ? ' (multiple manquant)' : ' (référentiel manquant)')));
       });
       if (!evaluables.length) manquant = 'multiples ET référentiel (médiane historique ou des pairs) — un multiple isolé n’est pas interprétable. Lancer la passe d’enrichissement'
         + (horsCalcul.length ? ' · hors calcul : ' + horsCalcul.join(', ') : '');
@@ -4086,15 +4137,25 @@ function Fn_IndicateursDiscipline() {
       if (!cibles.length) manquant = 'aucune ligne au-dessus du seuil de traitement compact (' + s.materialiteCompact + ' % VN)';
       else if (!totalPct) manquant = 'valeur nette (coller le bloc « espace libre » avec les positions)';
       else {
-        const fraiches = cibles.filter(p => !Fn_DonneePerimee(p.valo && p.valo.freshTs));
-        valeur = fraiches.reduce((a, p) => a + Math.abs(Fn_Num(p.detention.pctVN) || 0), 0) / totalPct * 100;
+        /* DOCUMENTÉE **ET** FRAÎCHE — les deux, comme le dit l'intitulé. Cet
+           indicateur ne regardait que l'horodatage : une passe d'enrichissement
+           qui rentrait bredouille sur une ligne l'estampillait quand même, et la
+           ligne comptait alors comme documentée. D'où « 100 % » affiché pendant
+           que la tension de valorisation, juste au-dessus, écartait du calcul la
+           totalité du portefeuille faute de multiples. Un indicateur dont le
+           métier est de dire quand relancer la collecte ne peut pas être celui
+           qui la déclare inutile. */
+        const documentees = cibles.filter(p => Fn_ValoExploitable(p) && !Fn_DonneePerimee(p.valo && p.valo.freshTs));
+        valeur = documentees.reduce((a, p) => a + Math.abs(Fn_Num(p.detention.pctVN) || 0), 0) / totalPct * 100;
         aff = Fn_FmtPct(valeur, 0) + ' de la VN documentée et fraîche';
         zone = Fn_ZoneSeuil(valeur, s.couvertureDonneesVert, s.couvertureDonneesRouge, 'bas');
-        const vieilles = cibles.filter(p => Fn_DonneePerimee(p.valo && p.valo.freshTs));
-        extra = vieilles.length
-          ? 'À rafraîchir : ' + vieilles.map(p => Fn_Esc(String(p.detention.nom || p.id).slice(0, 20))).join(', ')
+        const aFaire = cibles.filter(p => !Fn_ValoExploitable(p) || Fn_DonneePerimee(p.valo && p.valo.freshTs));
+        extra = aFaire.length
+          ? 'À collecter ou à rafraîchir : ' + aFaire.map(p => Fn_Esc(String(p.detention.nom || p.id).slice(0, 20))
+              + (Fn_ValoExploitable(p) ? ' (périmé)' : ' (multiple ou référentiel absent)')).join(', ')
             + ' — une passe d’enrichissement les traite toutes, et seulement elles.'
-          : 'Toutes les lignes matérielles portent des données de moins de ' + (Fn_Num(s.fraicheurDonneesJours) || 7) + ' jours.';
+          : 'Toutes les lignes matérielles portent un multiple, son référentiel, et des données de moins de '
+            + (Fn_Num(s.fraicheurDonneesJours) || 7) + ' jours.';
       }
     }
     pousser({ bloc: 'TENDANCE', nom: 'Couverture des données de valorisation', valeurAff: aff, zone, manquant, extra,
@@ -4637,10 +4698,19 @@ function Fn_MemoireDesk() {
     decouvertes: Math.min(Var_State.decouvertes.length, 20)
   };
 }
+/* Une passe d'enrichissement peut rentrer BREDOUILLE sur une ligne : le modèle
+   n'a pas trouvé le référentiel, ou la date de publication. L'horodatage était
+   posé quand même, et la ligne sortait alors de la sélection pour une semaine
+   entière — la lacune se figeait sans que rien ne la montre. Une ligne dont la
+   valorisation reste inexploitable est donc reproposée, exactement comme une
+   ligne périmée. Le nombre de lignes et le budget sont affichés avant l'appel :
+   c'est vous qui décidez de le relancer, jamais l'application. */
 function Fn_LignesAEnrichir() {
   return Var_State.positions.filter(p => {
     if (p.desk.niveau === 'ligne' || p.desk.niveau === 'derive') return false;
-    return Fn_DonneePerimee(p.valo && p.valo.freshTs) || Fn_DonneePerimee(p.consensus && p.consensus.freshTs);
+    return Fn_DonneePerimee(p.valo && p.valo.freshTs)
+      || Fn_DonneePerimee(p.consensus && p.consensus.freshTs)
+      || !Fn_ValoExploitable(p);
   });
 }
 /* ALERTE DU DERNIER APPEL. Placée EN TÊTE du panneau, et affichée MÊME PANNEAU
