@@ -857,6 +857,37 @@ setTimeout(async () => {
       Array.isArray(contrat.agendas) && Array.isArray(contrat.lignes),
       (contrat.lignes || []).length + ' ligne(s), ' + (contrat.agendas || []).length + ' agenda(s)');
 
+    /* 7. « INSTRUMENTS SUIVIS EN PLUS DES LIGNES DÉTENUES » — la bascule était à
+       l'envers : on y inscrivait les découvertes ANCRÉES sur une ligne détenue,
+       c'est-à-dire précisément des titres déjà en portefeuille, avec un
+       identifiant préfixé deux fois, ni ticker ni ISIN, et pour libellé la phrase
+       entière qui sert de titre à la découverte. */
+    const garder = id => R('Fn_SuivreInstrumentDecouverte(Var_State.decouvertes.find(function (x) { return x.id === ' + JSON.stringify(id) + '; }))');
+    R('Var_State.instruments = []; Var_State.decouvertes = ['
+      + '{ id: "d-ancree", ts: Date.now(), statut: "proposee", cible: "L1", titre: "Une phrase entière qui n’est pas un nom de titre" },'
+      + '{ id: "d-neuve", ts: Date.now(), statut: "proposee", cible: null, instr: "Untel SA", titre: "Une phrase entière qui n’est pas un nom de titre" }];');
+    garder('d-ancree');
+    verifier('garder une découverte sur une ligne DÉTENUE n’ajoute aucun instrument suivi',
+      J('Var_State.instruments.length') === 0, J('Var_State.instruments.length') + ' inscrit(s)');
+    garder('d-neuve');
+    const inst = J('Var_State.instruments');
+    verifier('garder une découverte de LIGNE NOUVELLE inscrit le titre, et son NOM seul',
+      inst.length === 1 && inst[0].libelle === 'Untel SA',
+      JSON.stringify(inst.map(i => i.id + ' → ' + i.libelle)));
+    /* Les entrées produites par la bascule inversée se retirent au chargement. */
+    R('Var_State.instruments = [{ id: "dec-dec-abc", ticker: "", isin: "", place: "", libelle: "Une phrase" },'
+      + ' { id: "inst-manuel", ticker: "ABC", isin: "", place: "", libelle: "Ajouté à la main" }];');
+    const retires = J('Fn_NettoyerInstrumentsDecouvertes()');
+    verifier('les entrées de l’ancienne bascule sont retirées, celles saisies à la main restent',
+      retires === 1 && J('Var_State.instruments.length') === 1 && J('Var_State.instruments[0].id') === 'inst-manuel',
+      retires + ' retiré(e), reste ' + J('Var_State.instruments.map(function (i) { return i.id; })').join(', '));
+    /* Un titre suivi mérite son agenda, au même titre qu'un titre visé par un ordre. */
+    R('Var_State.instruments = [{ id: "suivi-x", ticker: "", isin: "", place: "", libelle: "Autre Inc" }];'
+      + 'Var_State.ordres = []; Var_State.positions = []; Var_State.agenda = {};');
+    verifier('un instrument suivi entre en collecte d’agenda',
+      J('Fn_AgendasAEnrichir().some(function (a) { return a.motif === "instrument suivi"; })') === true,
+      J('Fn_AgendasAEnrichir().map(function (a) { return a.nom + " [" + a.motif + "]"; })').join(' | ') || 'aucun');
+    R('Var_State.instruments = []; Var_State.decouvertes = [];');
     R('Var_State.positions = []; Var_State.ordres = []; Var_State.calendrier = []; Var_State.agenda = {}; Fn_Recalculer();');
   } catch (e) { ko('les ordres en attente et leurs annonces', String((e && e.stack) || e)); }
 

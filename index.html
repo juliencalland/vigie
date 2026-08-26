@@ -419,7 +419,7 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202608261812';
+const Cst_Version = 'vigie-202608261822';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -974,6 +974,7 @@ async function Fn_Load() {
   Fn_ReparerJournauxOrphelins();
   Fn_FusionnerControlesDoublons();
   Fn_ClasserOrdresDatesAnciennes();
+  Fn_NettoyerInstrumentsDecouvertes();
   Fn_MajStatutsCalendrier();
   Fn_ElaguerEtat();
   Fn_Recalculer();
@@ -1002,6 +1003,7 @@ function Fn_AdopterEtat(s) {
   Fn_ReparerJournauxOrphelins();
   Fn_FusionnerControlesDoublons();
   Fn_ClasserOrdresDatesAnciennes();
+  Fn_NettoyerInstrumentsDecouvertes();
   Fn_MajStatutsCalendrier();
   Fn_Recalculer();
   Fn_GenererSquelette();
@@ -1022,6 +1024,27 @@ function Fn_AdopterEtat(s) {
    « échu », donc en attente de débrief. Ces exemplaires périmés n'ont rien à
    débriefer — l'ordre qu'ils décrivent est toujours vivant sous son identifiant
    stable. On les CLASSE, ce qui les sort du calendrier vif sans les effacer. */
+/* La bascule qui inscrivait un instrument suivi était à l'envers : elle y mettait
+   les découvertes ANCRÉES sur une ligne détenue, avec un identifiant préfixé deux
+   fois, ni ticker ni ISIN, et pour libellé une phrase entière. Ces entrées ne
+   désignent aucun titre et doublonnent des lignes déjà suivies : on les retire.
+   Le double préfixe « dec-dec- » les identifie sans ambiguïté — les entrées
+   ajoutées à la main, elles, portent « inst- », et les nouvelles « suivi- ». */
+/* Extraite du gestionnaire de clic pour être VÉRIFIABLE : tant qu'elle vivait au
+   milieu d'un « switch », le test ne pouvait que réécrire la règle à côté — et un
+   test qui rejoue sa propre copie de la logique ne garde rien du tout. */
+function Fn_SuivreInstrumentDecouverte(d) {
+  if (!d || d.cible) return false;
+  if (Var_State.instruments.some(i => i.id === 'suivi-' + d.id)) return false;
+  Var_State.instruments.push({ id: 'suivi-' + d.id, ticker: '', isin: '', place: '',
+    libelle: String(d.instr || d.titre || '').slice(0, 60), origine: 'découverte gardée' });
+  return true;
+}
+function Fn_NettoyerInstrumentsDecouvertes() {
+  const avant = (Var_State.instruments || []).length;
+  Var_State.instruments = (Var_State.instruments || []).filter(i => String(i.id || '').indexOf('dec-dec-') !== 0);
+  return avant - Var_State.instruments.length;
+}
 function Fn_ClasserOrdresDatesAnciennes() {
   let n = 0;
   (Var_State.calendrier || []).forEach(e => {
@@ -4824,6 +4847,9 @@ function Fn_AgendasAEnrichir() {
     sortie.push({ cle: cle, nom: String(nom).slice(0, 60), motif: motif });
   };
   Var_State.ordres.forEach(o => ajouter(o.nom, 'ordre en attente'));
+  /* Une idée gardée est une idée qu'on surveille : sa date de publication compte
+     autant que celle d'un titre visé par un ordre. C'est la même question. */
+  Var_State.instruments.forEach(i => ajouter(i.libelle, 'instrument suivi'));
   Var_State.positions.forEach(p => {
     if (p.produit && p.produit.type === 'derive' && p.produit.sousJacent) {
       ajouter(p.produit.sousJacent, 'sous-jacent de ' + String(p.detention.nom || p.id).slice(0, 24));
@@ -5958,6 +5984,7 @@ function Fn_RenderParametres() {
         + '<button class="btn btn-danger' + (Var_State._runtime.armes['inst-' + i.id] ? ' arme' : '') + '" data-action="inst-suppr" data-id="' + Fn_Esc(i.id) + '">'
         + (Var_State._runtime.armes['inst-' + i.id] ? 'Confirmer ?' : 'Retirer') + '</button></div>').join('')
       : '<div class="vide">Aucun instrument suivi hors portefeuille.</div>')
+      + '<div class="tres-petit muted" style="margin-top:6px">Des titres que vous ne détenez PAS et que vous voulez garder à l’œil. Une découverte gardée qui propose d’ouvrir une ligne nouvelle s’y inscrit toute seule ; une découverte portant sur une ligne déjà détenue, non — celle-ci est déjà suivie par ailleurs. Leur agenda est collecté avec celui des titres visés par un ordre en attente.</div>'
       + '<div class="form-grille" style="margin-top:8px">'
       + '<div><label class="champ">Ticker</label><input id="i-ticker" type="text"></div>'
       + '<div><label class="champ">Identifiant ISIN</label><input id="i-isin" type="text"></div>'
@@ -6605,8 +6632,8 @@ function Fn_BuildPromptMAJ(ctx) {
   L.push('   → id=l’identifiant EXACT reçu dans evSansTexte · m=métriques à AJOUTER, facultatif.');
   L.push(' "debriefs":[{"id","faits","ecart","these","action","suite","s","u"}],');
   L.push('   → id=l’identifiant EXACT reçu dans evADebriefer · suite=ce qui a changé depuis sur la ligne, avec sa date et sa source, et le prochain rendez-vous daté.');
-  L.push(' "decouvertes":[{"intention","cible","titre","fait","dateFait","entree","inval","hor","taille","verdict","discipline","s","u"}],');
-  L.push('   → intention=une des cinq exactement · cible=l’id de la ligne du portefeuille concernée · fait=le fait daté qui la fonde · dateFait=AAAA-MM-JJ · entree=niveau d’entrée · inval=condition d’invalidation · hor=horizon · taille=allocation cible en % de la valeur nette · verdict=cohérente / sous conditions / incohérente · discipline=le calcul explicite contre les garde-fous (« porterait le facteur X de 77 % à 81 % de la valeur nette, plafond rouge 40 % ») · u=lien direct vers la source du fait.');
+  L.push(' "decouvertes":[{"intention","cible","instr","titre","fait","dateFait","entree","inval","hor","taille","verdict","discipline","s","u"}],');
+  L.push('   → intention=une des cinq exactement · cible=l’id de la ligne du portefeuille concernée, VIDE pour une ligne nouvelle · instr=le NOM DU TITRE visé, et lui seul (« Sanofi SA »), obligatoire quand cible est vide : il sert à l’inscrire dans les instruments suivis et à collecter son agenda — n’y mets jamais une phrase, le titre de la découverte est ailleurs · fait=le fait daté qui la fonde · dateFait=AAAA-MM-JJ · entree=niveau d’entrée · inval=condition d’invalidation · hor=horizon · taille=allocation cible en % de la valeur nette · verdict=cohérente / sous conditions / incohérente · discipline=le calcul explicite contre les garde-fous (« porterait le facteur X de 77 % à 81 % de la valeur nette, plafond rouge 40 % ») · u=lien direct vers la source du fait.');
   L.push(' "positions":[{"id","poche","profil","fact":["…"],"liqFaible","tend","these","valoRef","risques","revue"}],');
   L.push(' "actions":[{"id","prio","propo","decl","cb","hor","inval"}]}');
   L.push('   → id=l’identifiant de la ligne concernée, omis si l’action porte sur le portefeuille entier · prio=1 à 3.');
@@ -6659,7 +6686,8 @@ function Fn_IntegrerDesk(data, journal) {
     Var_State.decouvertes.push({
       id: Fn_Uid('dec'), ts, statut: 'proposee',
       intention: Cst_Intentions.indexOf(Fn_Ch(o, ['intention'])) >= 0 ? Fn_Ch(o, ['intention']) : null,
-      cible: Fn_Ch(o, ['cible']), titre, fait: Fn_Ch(o, ['fait']) || '',
+      cible: Fn_Ch(o, ['cible']), titre, instr: Fn_Ch(o, ['instr']) || null,
+      fait: Fn_Ch(o, ['fait']) || '',
       dateFait: Fn_Ch(o, ['dateFait']), entree: Fn_Ch(o, ['entree']) || '',
       inval: Fn_Ch(o, ['inval']) || '', hor: Fn_Ch(o, ['hor']) || '',
       taille: Fn_Num(Fn_Ch(o, ['taille'])),
@@ -7337,11 +7365,18 @@ function Fn_OnAction(e) {
       const d = Var_State.decouvertes.find(x => x.id === id);
       if (d) {
         d.statut = 'gardee';
-        // Seule bascule qui touche au reste de l'application : l'instrument entre
-        // dans la liste suivie. Aucun ordre n'est passé, aucune position créée.
-        if (d.cible && !Var_State.instruments.some(i => i.id === 'dec-' + d.id)) {
-          Var_State.instruments.push({ id: 'dec-' + d.id, ticker: '', isin: '', place: '', libelle: d.titre });
-        }
+        /* Seule bascule qui touche au reste de l'application : l'instrument entre
+           dans la liste suivie. Aucun ordre n'est passé, aucune position créée.
+           LA CONDITION ÉTAIT À L'ENVERS. Le panneau s'intitule « instruments suivis
+           EN PLUS des lignes détenues », et l'on y inscrivait justement les
+           découvertes ANCRÉES sur une ligne détenue : garder une idée sur un titre
+           déjà en portefeuille l'ajoutait à la liste de ceux qu'on ne possède pas.
+           C'est l'inverse — une découverte sans cible désigne un titre qu'on ne
+           détient pas, et c'est LUI qu'il vaut la peine de suivre.
+           Ce qui était écrit n'identifiait rien non plus : identifiant préfixé deux
+           fois, ticker et ISIN vides, et pour libellé le TITRE de la découverte,
+           c'est-à-dire une phrase entière au lieu d'un nom de titre. */
+        Fn_SuivreInstrumentDecouverte(d);
         Fn_Save(); Fn_RenderDecouvertes();
       }
       break;
