@@ -1794,6 +1794,32 @@ setTimeout(async () => {
     verifier('et un champ inconnu n’écrit rien du tout',
       J('Fn_SauverTexteThese("L1", "inconnu", "x")') === false && J('Var_State.theses.L1.inconnu === undefined'),
       'champ refusé');
+    /* COCHER DOIT FAIRE APPARAÎTRE LE CHAMP. La case ne faisait qu'enregistrer
+       un booléen, et ne redessinait rien : l'état coché est natif, cela suffisait.
+       Depuis qu'elle commande l'ouverture d'une zone de saisie, ne pas re-rendre
+       signifie que cocher ne produit RIEN de visible. Ce test passe par le
+       gestionnaire réel, avec un faux événement — le tester sur la seule fonction
+       de rendu aurait laissé le trou exactement là où il était. */
+    R('Var_State.theses = {}; Var_State.positions = [{ id: "L1", ticker: null, isin: null,'
+      + ' detention: { nom: "Alpha SA", qte: 10, dev: "EUR", cloture: 10, clotureVeille: 10, valEurExport: null,'
+      + '   facteurs: [], poche: null, ts: Date.now() },'
+      + ' produit: { type: "action", sens: "long", histBarriere: [] }, desk: { niveau: "complet" },'
+      + ' marche: {}, valo: {}, consensus: {} }]; Fn_Recalculer();');
+    verifier('case décochée : aucune zone de saisie, l’écran ne promet rien',
+      String(R('Fn_HtmlThese(Var_State.positions[0])')).indexOf('these-texte') < 0,
+      'aucune zone avant de cocher');
+    ctx.__faux = { target: { closest: () => ({
+      getAttribute: n => ({ 'data-action': 'these-check', 'data-id': 'L1', 'data-champ': 'ecrite' })[n],
+      checked: true }) } };
+    R('Fn_OnChange(__faux);');
+    const apresCoche = String(R('Fn_HtmlThese(Var_State.positions[0])'));
+    verifier('cocher la case fait APPARAÎTRE la zone de saisie, avec son invite',
+      /these-texte/.test(apresCoche) && /data-champ="texte"/.test(apresCoche)
+      && /maxlength="600"/.test(apresCoche),
+      J('Var_State.theses.L1.ecrite') ? 'case enregistrée, zone présente' : 'case non enregistrée');
+    verifier('et le gestionnaire re-rend la vue, sans quoi rien n’apparaîtrait à l’écran',
+      /case 'these-check':[\s\S]{0,700}?Fn_RenderCours\(\)/.test(js),
+      'Fn_RenderCours appelé après la coche');
     R('Var_State.theses = {}; Var_State.positions = []; Fn_Recalculer();');
   } catch (e) { ko('la répartition Vigie / Paramètres', String((e && e.stack) || e)); }
 

@@ -441,7 +441,7 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202608262016';
+const Cst_Version = 'vigie-202608262021';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -7827,6 +7827,11 @@ function Fn_OnChange(e) {
       const th = Var_State.theses[id] = Var_State.theses[id] || { ecrite: false, invalidation: false, objectif: false, derniereRevue: null };
       th[el.getAttribute('data-champ')] = !!el.checked;
       Fn_Save();
+      /* LA COCHE COMMANDE MAINTENANT UN AFFICHAGE. Tant qu'elle ne faisait
+         qu'enregistrer un booléen, ne rien redessiner suffisait — l'état coché est
+         natif. Depuis qu'elle ouvre le champ de saisie, il faut re-rendre, sinon
+         cocher ne produit rien de visible et la zone promise n'apparaît jamais. */
+      Fn_RenderCours();
       break;
     }
     case 'site-recherche': {
