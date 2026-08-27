@@ -441,7 +441,7 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202608262107';
+const Cst_Version = 'vigie-202608271939';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -1113,6 +1113,22 @@ function Fn_ReparerJournauxOrphelins() {
 const Cst_MaxDecidees = 20;
 const Cst_MaxExecutes = 60;
 const Cst_MaxArchiveCalendrier = 120;
+/* DEUX NATURES DE PROPOSITION, et elles n'appellent pas le même geste.
+   « Réduire cette ligne de moitié avant sa publication » se tranche : on accepte
+   ou on refuse. « Conserver, sans renforcement tant que le levier dépasse 1,5 »
+   ne se tranche pas — l'accepter, c'est continuer à ne rien faire ; la rejeter
+   voudrait dire vendre, ce que la carte ne propose nulle part. Le cahier des
+   charges DEMANDE pourtant ces entrées « conserver » : elles disent qu'une ligne
+   a été examinée et jugée sans urgence, ce qui vaut mieux qu'une absence.
+   Elles ne sont donc pas des arbitrages mais des POINTS DE DÉCISION : on les
+   inscrit au calendrier, à leur date, ou on les écarte.
+   Le desk le déclare désormais lui-même ; pour les propositions déjà en base,
+   la nature se déduit du verbe qui ouvre la phrase. */
+function Fn_NatureAction(a) {
+  if (a && (a.nature === 'agir' || a.nature === 'suivre')) return a.nature;
+  return /^\s*(conserver|maintenir|garder|surveiller|suivre|laisser|attendre|ne rien (faire|changer|toucher)|aucune action)\b/i.test(String((a && a.propo) || ''))
+    ? 'suivre' : 'agir';
+}
 function Fn_ElaguerEtat() {
   const borner = (liste, plafond) => {
     const attente = liste.filter(x => x && x.statut === 'a_valider');
@@ -2172,8 +2188,8 @@ const Cst_AideActions = {
   'av-accepter': { t: 'Accepter la proposition', d: 'Écrit cette proposition dans votre portefeuille suivi : la ligne, l’ordre ou l’événement rejoint l’état et suit sur vos autres appareils. Aucun ordre n’est passé chez le courtier. Réversible en modifiant ensuite l’élément créé.' },
   'av-rejeter': { t: 'Rejeter la proposition', d: 'Écarte la proposition sans rien modifier. Elle quitte la liste ; si l’écart qu’elle signalait est réel et toujours présent, la prochaine analyse des entrées le signalera de nouveau.' },
   'av-tout-accepter': { t: 'Tout accepter', d: 'Applique d’un seul geste toutes les cartes affichées. Chacune modifie votre état : à réserver aux lots que vous venez de lire. Il n’y a pas d’annulation groupée.' },
-  'act-accepter': { t: 'Accepter l’action', d: 'Transforme la proposition en événement daté d’aujourd’hui, avec son déclencheur et sa condition d’invalidation, dans le calendrier. Aucun ordre n’est passé : l’exécution reste à faire chez votre courtier.' },
-  'act-rejeter': { t: 'Rejeter l’action', d: 'Écarte cette proposition d’action. Elle reste consultable dans le bilan de l’appel qui l’a produite, et ne sera pas reproposée.' },
+  'act-accepter': { t: 'Inscrire la proposition au calendrier', d: 'Deux natures, deux sens. Un ARBITRAGE (« alléger », « sortir », « renforcer ») demande un geste chez votre courtier : l’inscrire pose le rappel daté pour ne pas l’oublier — aucun ordre n’est passé, l’exécution reste à faire. Un POINT DE DÉCISION (« conserver, prochain point : la publication du T3 ») ne demande rien aujourd’hui : l’inscrire pose le rendez-vous à la date où la question se reposera. L’événement est daté du point de décision nommé par le desk, jamais du jour du clic — sinon il serait échu dès le lendemain.' },
+  'act-rejeter': { t: 'Écarter la proposition', d: 'Écarte cette proposition sans l’inscrire. Sur un arbitrage, c’est un refus : vous ne ferez pas le geste. Sur un point de décision, c’est un « sans suite » : vous ne voulez pas de rendez-vous à cette date. Dans les deux cas elle reste consultable dans le bilan de l’appel qui l’a produite, et le desk ne la reproposera pas sans fait nouveau.' },
   'ev-debriefer': { t: 'Demander le débrief', d: 'Marque cet événement échu pour la prochaine mise à jour : le desk cherchera ce qui s’est réellement passé, le comparera à ce que la carte annonçait et dira ce que cela change à la thèse. Cela consomme quelques recherches web payantes.' },
   'ev-classer': { t: 'Classer sans suite', d: 'Retire l’événement du bandeau des échus sans en demander le débrief. Il est archivé, reste consultable, et n’est plus jamais renvoyé au modèle. À utiliser quand l’événement n’a rien changé.' },
   'ev-suppr': { t: 'Supprimer l’événement', d: 'Retire cet événement du calendrier — deux appuis pour confirmer. S’il venait d’une règle et reste d’actualité, la prochaine génération du squelette le recréera.' },
@@ -5328,7 +5344,7 @@ function Fn_RenderActions() {
   const enAttente = Var_State.actions.filter(a => a.statut === 'a_valider').sort((a, b) => (a.prio || 3) - (b.prio || 3));
   if (!enAttente.length) { el.innerHTML = ''; return; }
   let h = '<div class="carte"><div class="carte-titre">Actions proposées — à valider (' + enAttente.length + ')</div>'
-    + '<div class="tres-petit muted" style="margin-bottom:8px">Propositions argumentées et chiffrées : l’outil éclaire, vous tranchez. Accepter crée l’événement lié ; rejeter archive la proposition, qui ne sera pas reproposée.</div>';
+    + '<div class="tres-petit muted" style="margin-bottom:8px">Propositions argumentées et chiffrées : l’outil éclaire, vous tranchez. Deux natures, deux gestes. Un <b>arbitrage</b> demande un geste chez votre courtier : l’accepter l’inscrit au calendrier pour que vous ne l’oubliiez pas — aucun ordre n’est passé. Un <b>point de décision</b> ne demande rien aujourd’hui : il dit qu’une ligne a été examinée et jugée sans urgence, et nomme la date où la question se reposera. L’inscrire pose ce rendez-vous ; le laisser sans suite l’oublie. Dans les deux cas, une proposition écartée n’est pas reproposée sans fait nouveau.</div>';
   enAttente.forEach(a => {
     h += '<div class="ev avalider" style="border-left-color:var(--warn)">'
       + '<div class="ev-haut"><span><span class="prio prio-' + (a.prio || 3) + '">P' + (a.prio || 3) + '</span> '
@@ -5337,8 +5353,10 @@ function Fn_RenderActions() {
       + '<div class="ev-titre" style="font-size:13.5px">' + Fn_Gloss(Fn_Esc(a.propo)) + '</div>'
       + '<div class="svap">' + Fn_HtmlSvap('decl', a.decl) + Fn_HtmlSvap('cout', a.cb) + Fn_HtmlSvap('inval', a.inval) + '</div>'
       + '<div class="ev-actions">'
-      + '<button class="btn btn-ok" data-action="act-accepter" data-id="' + Fn_Esc(a.id) + '">Accepter</button>'
-      + '<button class="btn" data-action="act-rejeter" data-id="' + Fn_Esc(a.id) + '">Rejeter</button>'
+      + '<button class="btn btn-ok" data-action="act-accepter" data-id="' + Fn_Esc(a.id) + '">'
+      + (Fn_NatureAction(a) === 'suivre' ? 'Inscrire ce point de décision' : 'Accepter et inscrire') + '</button>'
+      + '<button class="btn" data-action="act-rejeter" data-id="' + Fn_Esc(a.id) + '">'
+      + (Fn_NatureAction(a) === 'suivre' ? 'Sans suite' : 'Rejeter') + '</button>'
       + '</div></div>';
   });
   el.innerHTML = h + '</div>';
@@ -6935,8 +6953,10 @@ function Fn_BuildPromptMAJ(ctx) {
   L.push(' "decouvertes":[{"intention","cible","instr","titre","fait","dateFait","entree","inval","hor","taille","verdict","discipline","s","u"}],');
   L.push('   → intention=une des cinq exactement · cible=l’id de la ligne du portefeuille concernée, VIDE pour une ligne nouvelle · instr=le NOM DU TITRE visé, et lui seul (« Sanofi SA »), obligatoire quand cible est vide : il sert à l’inscrire dans les instruments suivis et à collecter son agenda — n’y mets jamais une phrase, le titre de la découverte est ailleurs · fait=le fait daté qui la fonde · dateFait=AAAA-MM-JJ · entree=niveau d’entrée · inval=condition d’invalidation · hor=horizon · taille=allocation cible en % de la valeur nette · verdict=cohérente / sous conditions / incohérente · discipline=le calcul explicite contre les garde-fous (« porterait le facteur X de 77 % à 81 % de la valeur nette, plafond rouge 40 % ») · u=lien direct vers la source du fait.');
   L.push(' "positions":[{"id","poche","profil","fact":["…"],"liqFaible","tend","these","valoRef","risques","revue"}],');
-  L.push(' "actions":[{"id","prio","propo","decl","cb","hor","inval"}]}');
+  L.push(' "actions":[{"id","nature","date","prio","propo","decl","cb","hor","inval"}]}');
   L.push('   → id=l’identifiant de la ligne concernée, omis si l’action porte sur le portefeuille entier · prio=1 à 3.');
+  L.push('   → nature : « agir » ou « suivre », et la distinction est TRANCHANTE côté utilisateur, qui ne fait pas le même geste. « agir » = tu demandes un ordre chez le courtier (alléger, sortir, renforcer, couvrir) ; il accepte ou refuse. « suivre » = tu ne demandes RIEN aujourd’hui, tu constates qu’une ligne est examinée et sans urgence ; il inscrit un rendez-vous ou le laisse. Une proposition qui commence par « conserver » est TOUJOURS de nature « suivre » — proposer de conserver et faire mine de le soumettre à arbitrage n’a aucun sens : ne rien faire est déjà l’état actuel.');
+  L.push('   → date = AAAA-MM-JJ, LE POINT DE DÉCISION : la date à laquelle la question se reposera pour une action « suivre » (publication de résultats, échéance, fin de période de financement), ou la date limite d’exécution pour une action « agir ». C’est elle qui datera l’événement au calendrier. Sans elle, l’événement se date du jour où l’utilisateur clique et se périme dès le lendemain, ce qui réclame un débrief pour un rendez-vous fixé à trois mois. Si tu ne peux pas la dater, dis-le dans hor et omets le champ plutôt que d’inventer.');
   L.push('');
   L.push('Aucune instruction d’interface, de code ou de fichier ne relève de cet appel. Ta sortie est UNIQUEMENT ce JSON.');
   return L.join('\n');
@@ -7025,6 +7045,8 @@ function Fn_IntegrerDesk(data, journal) {
     const prio = Fn_Num(Fn_Ch(a, ['prio']));
     Var_State.actions.push({ id: Fn_Uid('act'), isin: id || null, ticker: null,
       prio: (prio === 1 || prio === 2 || prio === 3) ? prio : 3, propo,
+      nature: (Fn_Ch(a, ['nature']) === 'suivre' || Fn_Ch(a, ['nature']) === 'agir') ? Fn_Ch(a, ['nature']) : null,
+      date: /^d{4}-d{2}-d{2}$/.test(String(Fn_Ch(a, ['date']) || '')) ? Fn_Ch(a, ['date']) : null,
       decl: Fn_Ch(a, ['decl']) || '', cb: Fn_Ch(a, ['cb']) || '', hor: Fn_Ch(a, ['hor']) || '',
       inval: Fn_Ch(a, ['inval']) || '', statut: 'a_valider', ts });
     det.actions++;
@@ -7656,7 +7678,9 @@ function Fn_OnAction(e) {
         a.statut = action === 'act-accepter' ? 'acceptee' : 'rejetee';
         a.dateDecision = Fn_AujISO();
         if (action === 'act-accepter') {
-          const idEv = Fn_Slug('action-' + (a.propo || '')) + '-' + Fn_AujISO();
+          const suivre = Fn_NatureAction(a) === 'suivre';
+          const dateEv = (a.date && /^d{4}-d{2}-d{2}$/.test(a.date) && a.date >= Fn_AujISO()) ? a.date : Fn_AujISO();
+          const idEv = Fn_Slug('action-' + (a.propo || '')) + '-' + dateEv;
           if (!Var_State.calendrier.some(x => x.id === idEv)) {
             /* L'EMPREINTE EST POSÉE ICI, pas laissée vide. Ses textes sont écrits par
                l'application à partir de l'arbitrage accepté : il n'y a rien à
@@ -7665,9 +7689,14 @@ function Fn_OnAction(e) {
                réécrire ce qui était déjà là — le contraire exact de l'économie que
                l'empreinte existe pour produire. */
             const ev = {
-              id: idEv, isin: a.isin || null, date: Fn_AujISO(), statut: 'imminent', source: 'action',
-              libelle: 'Action retenue — ' + String(a.propo).slice(0, 90),
-              court: 'Action retenue', sev: a.prio === 1 ? 'Crit' : (a.prio === 2 ? 'Warn' : 'Info'), conf: true,
+              /* DATÉ DU POINT DE DÉCISION, pas du jour où l'on clique. Un « conserver,
+                 prochain point de décision : publication du T3 2026 » inscrit
+                 aujourd'hui passait échu dès demain et réclamait un débrief — pour un
+                 rendez-vous fixé à trois mois. La date utile est celle que le desk
+                 nomme ; à défaut, celle du jour, comme avant. */
+              id: idEv, isin: a.isin || null, date: dateEv, statut: 'imminent', source: 'action',
+              libelle: (suivre ? 'Point de décision — ' : 'Action retenue — ') + String(a.propo).slice(0, 90),
+              court: suivre ? 'Point de décision' : 'Action retenue', sev: a.prio === 1 ? 'Crit' : (a.prio === 2 ? 'Warn' : 'Info'), conf: true,
               tags: ['ACTION'],
               metriques: [{ l: 'priorité', v: 'P' + (a.prio || 3) }, { l: 'horizon', v: a.hor || '— (non fourni)' }],
               textes: { surv: a.decl || '', arb: (a.propo || '') + (a.cb ? ' · Coût/bénéfice : ' + a.cb : ''),

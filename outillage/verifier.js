@@ -1873,6 +1873,39 @@ setTimeout(async () => {
       /case 'these-check':[\s\S]{0,700}?Fn_RenderCours\(\)/.test(js),
       'Fn_RenderCours appelé après la coche');
     R('Var_State.theses = {}; Var_State.positions = []; Fn_Recalculer();');
+    /* DEUX NATURES DE PROPOSITION, DEUX GESTES. « Accepter / Rejeter » convient à
+       « alléger cette ligne avant sa publication ». Sur « conserver, sans
+       renforcement tant que le levier dépasse 1,5 », les deux verbes ne veulent
+       rien dire : accepter, c'est continuer à ne rien faire ; rejeter voudrait
+       dire vendre, ce que la carte ne propose nulle part. Le cahier des charges
+       DEMANDE pourtant ces entrées — elles disent qu'une ligne a été examinée et
+       jugée sans urgence. Ce sont des POINTS DE DÉCISION, pas des arbitrages. */
+    const nat = propo => J('Fn_NatureAction(' + JSON.stringify({ propo: propo }) + ')');
+    const suivre = ['Conserver, sans renforcement tant que le levier dépasse 1,5.',
+      'Ne rien changer avant la revue du 25/09/26.', 'Maintenir la ligne en l’état.',
+      'Aucune action nécessaire : rien de neuf depuis le trimestre.'];
+    const agir = ['Réduire cette ligne de moitié avant sa publication.',
+      'Programmer la sortie, fractionnée sur plusieurs séances.',
+      'Trancher le sort de l’ordre d’achat dormant.'];
+    verifier('une proposition qui ne demande AUCUN geste est un point de décision',
+      suivre.every(p => nat(p) === 'suivre'),
+      suivre.map(p => nat(p)).join(' · '));
+    verifier('et une proposition qui demande un geste reste un arbitrage',
+      agir.every(p => nat(p) === 'agir'), agir.map(p => nat(p)).join(' · '));
+    verifier('la nature déclarée par le desk l’emporte sur la formulation',
+      J('Fn_NatureAction({ nature: "agir", propo: "Conserver la ligne." })') === 'agir',
+      'nature explicite prioritaire');
+    /* Les VERBES des boutons suivent la nature : un point de décision ne
+       s'« accepte » pas, il s'inscrit — ou il reste sans suite. */
+    R('Var_State.actions = [{ id: "a1", isin: null, prio: 3, statut: "a_valider",'
+      + ' propo: "Conserver, sans renforcement.", decl: "", cb: "", hor: "", inval: "" }];'
+      + 'Fn_RenderActions();');
+    const carte = texte('v-actions');
+    verifier('la carte d’un point de décision propose de l’INSCRIRE, pas de l’accepter',
+      /Inscrire ce point de décision/.test(carte) && /Sans suite/.test(carte)
+      && carte.indexOf('>Accepter<') < 0,
+      carte.slice(-90));
+    R('Var_State.actions = [];');
   } catch (e) { ko('la répartition Vigie / Paramètres', String((e && e.stack) || e)); }
 
   console.log('\nI. Aide des commandes et codes d’erreur');
