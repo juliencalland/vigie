@@ -1,0 +1,38 @@
+# Relevé hebdomadaire des tarifs Claude sur la page officielle d'Anthropic.
+# Le résultat est publié en tarifs.json sur la branche « tarifs » — jamais sur main :
+# ni conflit avec les publications de Vigie, ni redéploiement de la page.
+# Vigie le lit sur raw.githubusercontent.com. Aucune donnée de portefeuille ici.
+name: Tarifs Claude
+
+on:
+  schedule:
+    - cron: '17 5 * * 1'   # chaque lundi, 05:17 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  releve:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Relever la page Tarifs
+        run: node outillage/tarifs.js > "$RUNNER_TEMP/tarifs.json"
+      - name: Publier sur la branche tarifs
+        run: |
+          git config user.name "vigie-tarifs"
+          git config user.email "vigie-tarifs@users.noreply.github.com"
+          if git fetch --depth 1 origin tarifs; then
+            git checkout -B tarifs FETCH_HEAD
+          else
+            git checkout --orphan tarifs
+            git rm -rf --quiet .
+          fi
+          cp "$RUNNER_TEMP/tarifs.json" tarifs.json
+          git add tarifs.json
+          git commit -m "Tarifs relevés le $(date -u +%F)" || echo "Rien de neuf"
+          git push origin tarifs

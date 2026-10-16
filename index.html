@@ -519,27 +519,27 @@ body.v2 .v2-eteinte{opacity:.6}
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202610161156';
+const Cst_Version = 'vigie-202610161218';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
 const Cst_ModeleMAJ   = 'claude-opus-5-5'; // défaut ; le modèle réellement appelé est Fn_ModeleMAJ()
 const Cst_EffortMAJ   = 'high';          // défaut du DESK ; l'effort réellement demandé est Fn_EffortPasse()
 const Cst_EffortEnrichissement = 'medium'; // défaut de la DOCUMENTATION : de la collecte, pas du jugement
-// CATALOGUE DES MODÈLES. Les tarifs voyagent AVEC le modèle : sans cela, changer
-// de modèle rendait l'estimation de coût fausse sans prévenir. Haiku est
-// volontairement absent : son plafond de sortie (64 000 jetons) est inférieur au
-// JSON produit ici. Tarifs relevés le 16/10/2026 dans la documentation de l'API.
-// « cacheLecture » est le coefficient de RELECTURE du cache, propre à chaque
-// modèle : 0,05× sur Opus 5.5, 0,025× sur Fable 5.1. Un coefficient unique de
-// 0,1× surestimait le coût de chaque reprise dès qu'on quittait Opus 5.
+// TABLE DE REPLI DES MODÈLES — elle ne sert plus que lorsque le catalogue vivant
+// (plus bas) se tait : hors ligne, sans clé, ou relevé de tarifs indisponible.
+// Haiku est volontairement absent : son plafond de sortie est inférieur au JSON
+// produit ici, et la collecte de chiffres y est plus fragile. Tarifs de la page
+// officielle au 16/10/2026. « cacheLecture » est le coefficient de RELECTURE du
+// cache, propre à chaque modèle : 0,05× sur Opus 5.5 et Sonnet 5.5, 0,025× sur
+// Fable 5.1, 0,1× ailleurs.
 const Cst_Modeles = [
   { id: 'claude-opus-5-5', nom: 'Claude Opus 5.5', entreeParM: 4, sortieParM: 20, cacheLecture: 0.05,
     note: 'Recommandé pour le desk. Analyste plus fiable qu’Opus 5 — il avance nettement moins de chiffres que ses sources ne portent — et 20 % moins cher (4 / 20 $ contre 5 / 25 $).' },
   { id: 'claude-fable-5-1', nom: 'Claude Fable 5.1', entreeParM: 10, sortieParM: 50, cacheLecture: 0.025,
     note: 'Le plus capable, deux fois et demie le prix d’Opus 5.5. Pour une journée d’arbitrage lourd ; l’éditeur exige une conservation des données de 30 jours.' },
-  { id: 'claude-sonnet-5-5', nom: 'Claude Sonnet 5.5', entreeParM: 2, sortieParM: 10, cacheLecture: 0.1,
-    note: 'Moitié prix d’Opus 5.5. Suffisant pour documenter ; plus faible sur les raisonnements longs — textes d’arbitrage et débriefs.' },
+  { id: 'claude-sonnet-5-5', nom: 'Claude Sonnet 5.5', entreeParM: 2, sortieParM: 10, cacheLecture: 0.05,
+    note: 'Moitié prix d’Opus 5.5. Choisi d’office pour documenter : de la collecte, pas du jugement. Plus faible sur les raisonnements longs — textes d’arbitrage et débriefs.' },
   { id: 'claude-opus-5', nom: 'Claude Opus 5', entreeParM: 5, sortieParM: 25, cacheLecture: 0.1,
     note: 'Opus précédent, plus cher qu’Opus 5.5 et moins précis. Repli seulement.' },
   { id: 'claude-sonnet-5', nom: 'Claude Sonnet 5', entreeParM: 2, sortieParM: 10, cacheLecture: 0.1,
@@ -547,10 +547,143 @@ const Cst_Modeles = [
   { id: 'claude-opus-4-8', nom: 'Claude Opus 4.8', entreeParM: 5, sortieParM: 25, cacheLecture: 0.1,
     note: 'Ancienne génération d’Opus. Repli seulement.' }
 ];
-// Coefficient de relecture du cache pour un modèle donné (celui du journal, sinon celui choisi).
+// Coefficient de relecture du cache pour un modèle donné (celui du journal, sinon celui du desk).
 function Fn_CoefCacheLecture(id) {
-  const m = Cst_Modeles.find(x => x.id === id) || Cst_Modeles.find(x => x.id === Var_State.modeleMAJ);
-  return m && m.cacheLecture != null ? m.cacheLecture : Cst_CoefCacheLecture;
+  const p = Fn_PrixModele(id) || Fn_PrixModele(Fn_ModeleMAJ());
+  return p && p.entree ? p.cacheLecture / p.entree : Cst_CoefCacheLecture;
+}
+/* LE CATALOGUE VIVANT. Les modèles accessibles se lisent sur le COMPTE, par l'API
+   Models (gratuite, une fois par jour, avec la clé de l'appareil) ; leurs tarifs, sur
+   la page Tarifs d'Anthropic, relevée chaque lundi par un robot du dépôt
+   (outillage/tarifs.js) et publiée en tarifs.json sur la branche « tarifs ». L'API
+   Models ne donne AUCUN prix : sans ce relevé, un modèle nouveau n'aurait pas de
+   coût, et un tarif changé resterait faux dans la table jusqu'à la publication
+   suivante — c'est arrivé : la relecture du cache de Sonnet 5.5 y était à 0,1×,
+   la page dit 0,05×. Les deux copies vivent dans CET appareil, jamais synchronisées. */
+const Cst_UrlTarifs = 'https://raw.githubusercontent.com/juliencalland/vigie/tarifs/tarifs.json';
+const Cst_UrlModelesApi = 'https://api.anthropic.com/v1/models?limit=100';
+const Cst_CatalogueAgeMaxH = 24;
+let Var_Catalogue = null;
+function Fn_LireCache(cle) { try { const v = localStorage.getItem(cle); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
+function Fn_EcrireCache(cle, v) { try { localStorage.setItem(cle, JSON.stringify(v)); } catch (e) { /* le temps de la session */ } }
+function Fn_Catalogue() {
+  if (!Var_Catalogue) Var_Catalogue = { api: Fn_LireCache('vigie-modeles-api'), tarifs: Fn_LireCache('vigie-tarifs'), erreurApi: null, erreurTarifs: null };
+  return Var_Catalogue;
+}
+function Fn_FamilleModele(id) { const m = /(opus|sonnet|fable|haiku|mythos)/.exec(String(id || '')); return m ? m[1] : null; }
+function Fn_NomModele(id) {
+  const cat = Fn_Catalogue();
+  const a = cat.api && (cat.api.modeles || []).find(x => x.id === id);
+  if (a && a.nom) return a.nom;
+  const m = Cst_Modeles.find(x => x.id === id);
+  return m ? m.nom : String(id || '');
+}
+function Fn_NomCourtModele(id) { return Fn_NomModele(id).replace(/^Claude\s+/, ''); }
+// Prix d'un modèle en dollars par million de jetons : le relevé d'abord, la table ensuite.
+function Fn_PrixModele(id) {
+  if (!id) return null;
+  const cat = Fn_Catalogue();
+  const t = cat.tarifs && cat.tarifs.modeles ? cat.tarifs.modeles[Fn_NomModele(id)] : null;
+  if (t && Fn_Num(t.entree) > 0 && Fn_Num(t.sortie) > 0) {
+    return { entree: Fn_Num(t.entree), sortie: Fn_Num(t.sortie),
+      cacheLecture: Fn_Num(t.cacheLecture) != null ? Fn_Num(t.cacheLecture) : Fn_Num(t.entree) * Cst_CoefCacheLecture,
+      cacheEcriture: Fn_Num(t.cacheEcriture1h) != null ? Fn_Num(t.cacheEcriture1h) : Fn_Num(t.entree) * Cst_CoefCacheEcriture,
+      source: 'page Tarifs d’Anthropic, relevée le ' + Fn_FmtDateCourt(String(cat.tarifs.verifie || '').slice(0, 10)) };
+  }
+  const m = Cst_Modeles.find(x => x.id === id);
+  if (!m) return null;
+  return { entree: m.entreeParM, sortie: m.sortieParM, cacheLecture: m.entreeParM * m.cacheLecture,
+    cacheEcriture: m.entreeParM * Cst_CoefCacheEcriture, source: 'table intégrée du 16/10/26' };
+}
+function Fn_PrixRecherche() {
+  const cat = Fn_Catalogue();
+  return Fn_Num(cat.tarifs && cat.tarifs.recherchePour1000) || Fn_Num(Var_State.tarifs && Var_State.tarifs.recherchePour1000) || 10;
+}
+/* Les modèles proposés : ceux du COMPTE quand on les connaît, la table sinon. Sont
+   écartés Haiku (sortie trop courte pour le JSON du desk, collecte de chiffres plus
+   fragile) et Mythos (accès restreint), ainsi que tout modèle dont l'API dit qu'il ne
+   pense pas en mode adaptatif ou ne sort pas assez de jetons. */
+function Fn_ModelesProposes() {
+  const cat = Fn_Catalogue();
+  const familles = ['opus', 'sonnet', 'fable'];
+  const liste = (cat.api && (cat.api.modeles || []).length)
+    ? cat.api.modeles.filter(m => familles.indexOf(Fn_FamilleModele(m.id)) >= 0
+        && (m.maxSortie == null || m.maxSortie >= Cst_MaxTokensRepli) && m.adaptatif !== false)
+      .map(m => ({ id: m.id, cree: m.cree || '', compte: true }))
+    : Cst_Modeles.map((m, i) => ({ id: m.id, cree: '', rang: i, compte: false }));
+  return liste.map(m => Object.assign(m, { nom: Fn_NomModele(m.id), famille: Fn_FamilleModele(m.id), prix: Fn_PrixModele(m.id) }));
+}
+/* LE CHOIX AUTOMATIQUE. Juger demande le meilleur raisonnement au meilleur prix : le
+   plus récent des Opus. Documenter est de la collecte : le plus récent des Sonnet,
+   moitié prix. Fable, deux fois et demie plus cher, ne se choisit qu'à la main. Un
+   modèle sans tarif connu n'est jamais choisi d'office : son coût serait invisible. */
+function Fn_ModeleAuto(passe) {
+  const fam = passe === 'enrichissement' ? 'sonnet' : 'opus';
+  const c = Fn_ModelesProposes().filter(m => m.famille === fam && m.prix);
+  if (!c.length) return passe === 'enrichissement' ? 'claude-sonnet-5-5' : Cst_ModeleMAJ;
+  c.sort((a, b) => (a.cree && b.cree) ? (a.cree < b.cree ? 1 : (a.cree > b.cree ? -1 : 0)) : ((a.rang || 0) - (b.rang || 0)));
+  return c[0].id;
+}
+function Fn_ChoixModele(passe) {
+  const ch = (Var_State.choixModeles || {})[passe === 'enrichissement' ? 'doc' : 'desk'];
+  return ch && ch !== 'auto' ? ch : 'auto';
+}
+// Le modèle réellement appelé pour une étape. Un modèle forcé puis retiré du compte retombe en automatique.
+function Fn_ModelePasse(passe) {
+  const ch = Fn_ChoixModele(passe);
+  if (ch !== 'auto' && Fn_ModelesProposes().some(m => m.id === ch)) return ch;
+  return Fn_ModeleAuto(passe);
+}
+/* Rafraîchit le catalogue : la liste du compte (si une clé est enregistrée) et le
+   relevé des tarifs, chacun au plus une fois par jour sauf demande. Jamais bloquant :
+   en cas d'échec, la copie précédente reste, et l'erreur est dite dans Réglages. */
+function Fn_TarifsValides(t) {
+  const noms = t && t.modeles ? Object.keys(t.modeles) : [];
+  return noms.length >= 3 && noms.every(k => {
+    const x = t.modeles[k];
+    return Fn_Num(x.entree) > 0 && Fn_Num(x.sortie) > Fn_Num(x.entree) && (x.cacheLecture == null || Fn_Num(x.cacheLecture) < Fn_Num(x.entree));
+  });
+}
+async function Fn_ActualiserCatalogue(forcer) {
+  const cat = Fn_Catalogue();
+  const vieux = x => !x || Fn_Num(x.ts) == null || Date.now() - Fn_Num(x.ts) > Cst_CatalogueAgeMaxH * 3600000;
+  const cle = Cst_IsArtifact ? '' : Fn_GetApiKey();
+  let change = false;
+  if (cle && (forcer || vieux(cat.api))) {
+    try {
+      const modeles = [];
+      let apres = null;
+      for (let page = 0; page < 5; page++) {
+        const r = await fetch(Cst_UrlModelesApi + (apres ? '&after_id=' + encodeURIComponent(apres) : ''),
+          { headers: { 'x-api-key': cle, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' } });
+        if (!r.ok) throw new Error('API Models : HTTP ' + r.status);
+        const d = await r.json();
+        (d.data || []).forEach(m => {
+          const cap = m.capabilities || {};
+          const ad = cap.thinking && cap.thinking.types && cap.thinking.types.adaptive;
+          modeles.push({ id: m.id, nom: m.display_name || m.id, cree: m.created_at || '',
+            maxSortie: Fn_Num(m.max_tokens), maxEntree: Fn_Num(m.max_input_tokens), adaptatif: ad ? ad.supported !== false : null });
+        });
+        if (!d.has_more || !d.last_id) break;
+        apres = d.last_id;
+      }
+      if (modeles.length) { cat.api = { ts: Date.now(), modeles: modeles }; Fn_EcrireCache('vigie-modeles-api', cat.api); change = true; }
+      cat.erreurApi = null;
+    } catch (e) { cat.erreurApi = String((e && e.message) || e); }
+  }
+  if (forcer || vieux(cat.tarifs)) {
+    try {
+      const r = await fetch(Cst_UrlTarifs + '?t=' + Date.now(), { cache: 'no-store' });
+      if (!r.ok) throw new Error('relevé des tarifs : HTTP ' + r.status);
+      const t = await r.json();
+      if (!Fn_TarifsValides(t)) throw new Error('relevé des tarifs incohérent, ignoré');
+      cat.tarifs = Object.assign({}, t, { ts: Date.now() });
+      Fn_EcrireCache('vigie-tarifs', cat.tarifs);
+      change = true;
+      cat.erreurTarifs = null;
+    } catch (e) { cat.erreurTarifs = String((e && e.message) || e); }
+  }
+  return change;
 }
 // EFFORT : profondeur de réflexion ET nombre d'appels d'outils. Levier de coût le
 // plus rentable après le cache, parce qu'il agit sur la SORTIE (5× plus chère que
@@ -837,6 +970,7 @@ const Var_State = {
   seuils: Object.assign({}, Cst_SeuilsDefaut),
   tarifs: Object.assign({}, Cst_TarifsDefaut),
   modeleMAJ: Cst_ModeleMAJ,
+  choixModeles: { desk: 'auto', doc: 'auto' },   // « auto » ou l'identifiant d'un modèle forcé
   effortMAJ: Cst_EffortMAJ,
   effortEnrichissement: Cst_EffortEnrichissement,
   modeleRevu: null,   // date de la dernière remise à niveau automatique du modèle (Fn_RemettreModeleANiveau)
@@ -907,7 +1041,7 @@ function Fn_PersisterSansHorodatage() {
 const Cst_ClesEtat = ['onglet', 'captures', 'fx', 'marge', 'positions', 'ordres', 'executes',
   'calendrier', 'decouvertes', 'actions', 'controles', 'instruments', 'majJournaux',
   'filtreTag', 'filtreJour', 'filtreDecouvertes', 'derniereMaj', 'derniereEnrichissement',
-  'freqRappel', 'sitesRecherche', 'sitesBloques', 'modeleMAJ', 'effortMAJ', 'effortEnrichissement', 'modeleRevu', 'razTs'];
+  'freqRappel', 'sitesRecherche', 'sitesBloques', 'modeleMAJ', 'choixModeles', 'effortMAJ', 'effortEnrichissement', 'modeleRevu', 'razTs'];
 const Cst_ClesEtatObjet = ['theses', 'agenda'];
 const Cst_ClesEtatFusion = ['seuils', 'tarifs', 'cumulApi', 'panneaux'];
 
@@ -1046,6 +1180,7 @@ function Fn_MigrerEtat(s) {
     controles, instruments: s.instruments || [],
     theses: s.theses || {}, seuils: s.seuils || {}, tarifs: s.tarifs || {},
     modeleMAJ: s.modeleMAJ || Cst_ModeleMAJ, effortMAJ: s.effortMAJ || Cst_EffortMAJ,
+    choixModeles: (s.choixModeles && typeof s.choixModeles === 'object') ? { desk: s.choixModeles.desk || 'auto', doc: s.choixModeles.doc || 'auto' } : { desk: 'auto', doc: 'auto' },
     sitesRecherche: s.sitesRecherche || [], sitesBloques: s.sitesBloques || [],
     cumulApi: s.cumulApi || null, majJournaux: s.majJournaux || [],
     panneaux: s.panneaux || null, filtreTag: null, filtreJour: null, filtreDecouvertes: 'vives',
@@ -1269,11 +1404,15 @@ function Fn_ElaguerEtat() {
   Var_State.decouvertes = Var_State.decouvertes.filter(d => d.statut === 'proposee' || d.statut === 'gardee')
     .concat(Var_State.decouvertes.filter(d => d.statut === 'ecartee').slice(-Cst_MaxDecidees));
 }
-function Fn_ModeleMAJ() {
-  const m = Cst_Modeles.find(x => x.id === Var_State.modeleMAJ);
-  return m ? m.id : Cst_ModeleMAJ;
+// Le modèle du DESK. La documentation a le sien : Fn_ModelePasse('enrichissement').
+function Fn_ModeleMAJ() { return Fn_ModelePasse('desk'); }
+function Fn_ModeleMeta(id) {
+  const i = id || Fn_ModeleMAJ();
+  const m = Cst_Modeles.find(x => x.id === i);
+  const p = Fn_PrixModele(i);
+  return { id: i, nom: Fn_NomModele(i), entreeParM: p ? p.entree : null, sortieParM: p ? p.sortie : null, prix: p,
+    note: m ? m.note : 'Modèle du compte absent de la table intégrée : tarif lu sur le relevé de la page officielle.' };
 }
-function Fn_ModeleMeta() { return Cst_Modeles.find(x => x.id === Fn_ModeleMAJ()) || Cst_Modeles[0]; }
 function Fn_EffortMAJ() {
   const e = Cst_Efforts.find(x => x.id === Var_State.effortMAJ);
   return e ? e.id : Cst_EffortMAJ;
@@ -1291,9 +1430,14 @@ function Fn_EffortPasse(passe) { return passe === 'enrichissement' ? Fn_EffortEn
    l'ÉCRITURE du cache (majorée), sa RELECTURE (à 0,1×), la sortie, les recherches.
    Ignorer les deux postes de cache rendait le coût affiché faux dès que le cache
    agissait — précisément ce qui devait se voir. */
+/* Le prix est celui du modèle RÉELLEMENT appelé par ce journal : la documentation sur
+   Sonnet et l'analyse sur Opus ne se facturent pas au même tarif, et un tarif global
+   unique faussait l'une des deux (Sonnet 5 a ainsi été compté à 3 / 15 $ au lieu de 2 / 10). */
 function Fn_CoutJournal(journal) {
-  const t = Var_State.tarifs;
-  const pe = Fn_Num(t.entreeParM) || 0, ps = Fn_Num(t.sortieParM) || 0, pr = Fn_Num(t.recherchePour1000) || 0;
+  const t = Var_State.tarifs || {};
+  const p = Fn_PrixModele(journal.modele) || Fn_PrixModele(Fn_ModeleMAJ());
+  const pe = p ? p.entree : (Fn_Num(t.entreeParM) || 0), ps = p ? p.sortie : (Fn_Num(t.sortieParM) || 0), pr = Fn_PrixRecherche();
+  const pcw = p ? p.cacheEcriture : pe * Cst_CoefCacheEcriture, pcr = p ? p.cacheLecture : pe * Cst_CoefCacheLecture;
   const entree = Fn_Num(journal.jetonsEntree) || 0;
   const cw = Fn_Num(journal.jetonsCacheEcriture) || 0;
   const cr = Fn_Num(journal.jetonsCacheLecture) || 0;
@@ -1301,8 +1445,8 @@ function Fn_CoutJournal(journal) {
   const rech = Fn_Num(journal.recherches) || 0;
   return {
     entree: entree / 1e6 * pe,
-    cacheEcriture: cw / 1e6 * pe * Cst_CoefCacheEcriture,
-    cacheLecture: cr / 1e6 * pe * Fn_CoefCacheLecture(journal.modele),
+    cacheEcriture: cw / 1e6 * pcw,
+    cacheLecture: cr / 1e6 * pcr,
     sortie: sortie / 1e6 * ps,
     // Les LECTURES de page ne sont pas facturées à l'appel : leur coût est déjà
     // compté dans les jetons d'entrée. Seules les recherches le sont.
@@ -2354,6 +2498,9 @@ const Cst_AideActions = {
   'inst-suppr': { t: 'Ne plus suivre', d: 'Retire l’instrument de la liste suivie — deux appuis pour confirmer. Les données déjà collectées restent affichées mais ne seront plus rafraîchies.' },
   'seuil': { t: 'Modifier ce seuil', d: 'Change la limite à partir de laquelle l’indicateur passe en ambre ou en rouge. L’effet est immédiat sur les couleurs et sur le score de discipline, et suit sur vos autres appareils.' },
   'seuils-reset': { t: 'Seuils par défaut', d: 'Rétablit tous les seuils d’origine — deux appuis pour confirmer. Vos réglages personnalisés sont perdus et le score de discipline peut changer aussitôt.' },
+  'modele-desk': { t: 'Modèle de l’analyse', d: 'Automatique : le plus récent des Opus de votre compte, au tarif relevé sur la page officielle. Forcer un modèle le garde tant qu’il existe sur le compte ; retiré, l’étape revient d’elle-même en automatique.' },
+  'modele-doc': { t: 'Modèle de la documentation', d: 'Automatique : le plus récent des Sonnet — de la collecte de multiples, de consensus et de dates, pas du jugement, à moitié prix d’Opus.' },
+  'catalogue-actualiser': { t: 'Actualiser modèles et tarifs', d: 'Relit tout de suite la liste des modèles de votre compte (API Models, gratuite) et le relevé hebdomadaire de la page Tarifs d’Anthropic. Sinon, c’est fait seul une fois par jour.' },
   'modele': { t: 'Modèle appelé', d: 'Change le modèle qui réalise le jugement, et réaligne aussitôt les tarifs d’estimation. Sans effet sur les données déjà intégrées ; le modèle réellement utilisé est enregistré dans chaque journal d’appel.' },
   'effort': { t: 'Effort du modèle — analyse', d: 'Règle la profondeur de réflexion et le nombre d’appels d’outils que le modèle s’autorise. Agit surtout sur les jetons de sortie, cinq fois plus chers que ceux d’entrée : c’est le levier de coût le plus efficace après le cache.' },
   'effort-enrichissement': { t: 'Effort du modèle — documentation', d: 'Profondeur de réflexion de la PREMIÈRE étape du bouton « Analyser avec le desk » : la collecte des multiples, du consensus et des agendas. De la recherche, pas du jugement — « medium » suffit le plus souvent, et laisse l’analyse garder son propre effort.' },
@@ -4728,6 +4875,12 @@ function Fn_GenererSquelette() {
       e.motif = 'classé seul : le constat ne tient plus (' + (e.source === 'regle:these' ? 'thèse revue, ou ligne sortie' : 'coussin revenu au-dessus du seuil') + ')';
     } else if (e.source === 'regle:ordre' && !e.horsCarnet) {
       e.horsCarnet = auj;
+    } else if (e.source === 'regle:ordre-annonce'
+      && !Var_State.ordres.some(o => String(e.id).indexOf('ordre-annonce-' + Fn_Slug((o.nom || '') + '-' + (o.sens || '')) + '-') === 0)) {
+      // Une annonce attendue AVANT l'exécution d'un ordre qui n'est plus en carnet n'a plus d'objet.
+      e.statut = 'classe';
+      e.classeAuto = auj;
+      e.motif = 'classé seul : l’ordre visé n’est plus dans le carnet';
     }
   });
   Fn_MajStatutsCalendrier();
@@ -5535,12 +5688,18 @@ function Fn_HtmlBilanTraitement(journal) {
 /* PROJECTION AVANT LANCEMENT. Calée sur les appels réellement facturés, jamais
    sur un barème théorique. Sans historique : AUCUN montant n'est affiché — une
    estimation fabriquée serait pire que pas d'estimation du tout. */
+/* La projection reprend les jetons des derniers appels de même nature et les PRICE au
+   tarif du modèle qui sera appelé : documenter sur Sonnet après des documentations
+   faites sur Opus ne coûtera pas le prix d'Opus. */
 function Fn_ProjectionAppel(passe, unites) {
   const n = Math.max(0, Math.round(Fn_Num(unites) || 0));
+  const cible = Fn_ModelePasse(passe);
   const refs = (Var_State.majJournaux || []).filter(j => j && j.coutUsd != null && j.statut !== 'echec'
     && j.passe === passe && Fn_Num(j.unites) > 0).slice(0, 3);
+  const coutRef = j => (Fn_Num(j.jetonsSortie) || Fn_Num(j.jetonsCacheLecture) || Fn_Num(j.jetonsEntree))
+    ? Fn_CoutJournal(Object.assign({}, j, { modele: cible })).total : (Fn_Num(j.coutUsd) || 0);
   let parUnite = null;
-  if (refs.length) parUnite = refs.reduce((a, j) => a + (Fn_Num(j.coutUsd) || 0) / Fn_Num(j.unites), 0) / refs.length;
+  if (refs.length) parUnite = refs.reduce((a, j) => a + coutRef(j) / Fn_Num(j.unites), 0) / refs.length;
   return { unites: n, parUnite, nbRefs: refs.length, cout: parUnite == null ? null : parUnite * n };
 }
 function Fn_HtmlProjection(passe, unites, budget, libUnite) {
@@ -5560,7 +5719,10 @@ function Fn_HtmlProjection(passe, unites, budget, libUnite) {
 // Ce que le desk aura à faire : c'est ce décompte, et lui seul, qui détermine le
 // budget. Zéro événement sans texte et zéro échu = un appel très court.
 function Fn_ChargeDesk() {
-  const sansTexte = Fn_CalendrierVif().filter(e => e.statut !== 'echu' && Fn_TextesAEcrire(e));
+  /* Une « thèse à revoir » n'appelle pas trois textes d'événement : la revue
+     d'après publication est déjà écrite dans la lecture de la position (champ revue).
+     Les rédiger deux fois coûtait une douzaine de textes par analyse, sans rien dire de plus. */
+  const sansTexte = Fn_CalendrierVif().filter(e => e.statut !== 'echu' && e.source !== 'regle:these' && Fn_TextesAEcrire(e));
   const aDebriefer = Fn_ADebriefer().filter(e => e.debriefDemande && !e.debrief);
   const sansProfil = Var_State.positions.filter(p => !p.desk.profil);
   return { sansTexte, aDebriefer, sansProfil,
@@ -7637,7 +7799,7 @@ function Fn_BuildPromptMAJ(ctx) {
   L.push(' "debriefs":[{"id","faits","ecart","these","action","suite","s","u"}],');
   L.push('   → id=l’identifiant EXACT reçu dans evADebriefer · suite=ce qui a changé depuis sur la ligne, avec sa date et sa source, et le prochain rendez-vous daté.');
   L.push(' "decouvertes":[{"intention","cible","instr","titre","fait","dateFait","entree","inval","hor","taille","verdict","discipline","s","u"}],');
-  L.push('   → intention=une des cinq exactement · cible=l’id de la ligne du portefeuille concernée, VIDE pour une ligne nouvelle · instr=le NOM DU TITRE visé, et lui seul (« Sanofi SA »), obligatoire quand cible est vide : il sert à l’inscrire dans les instruments suivis et à collecter son agenda — n’y mets jamais une phrase, le titre de la découverte est ailleurs · fait=le fait daté qui la fonde · dateFait=AAAA-MM-JJ · entree=niveau d’entrée · inval=condition d’invalidation · hor=horizon · taille=allocation cible en % de la valeur nette · verdict=cohérente / sous conditions / incohérente · discipline=le calcul explicite contre les garde-fous (« porterait le facteur X de 77 % à 81 % de la valeur nette, plafond rouge 40 % ») · u=lien direct vers la source du fait.');
+  L.push('   → intention=une des six exactement · cible=l’id de la ligne du portefeuille concernée, VIDE pour une ligne nouvelle · instr=le NOM DU TITRE visé, et lui seul (« Sanofi SA »), obligatoire quand cible est vide : il sert à l’inscrire dans les instruments suivis et à collecter son agenda — n’y mets jamais une phrase, le titre de la découverte est ailleurs · fait=le fait daté qui la fonde · dateFait=AAAA-MM-JJ · entree=niveau d’entrée · inval=condition d’invalidation · hor=horizon · taille=allocation cible en % de la valeur nette · verdict=cohérente / sous conditions / incohérente · discipline=le calcul explicite contre les garde-fous (« porterait le facteur X de 77 % à 81 % de la valeur nette, plafond rouge 40 % ») · u=lien direct vers la source du fait.');
   L.push(' "positions":[{"id","poche","profil","fact":["…"],"liqFaible","tend","these","valoRef","risques","revue"}],');
   L.push(' "actions":[{"id","nature","date","prio","propo","decl","cb","hor","inval"}]}');
   L.push('   → id=l’identifiant de la ligne concernée, omis si l’action porte sur le portefeuille entier · prio=1 à 3.');
@@ -7969,7 +8131,8 @@ async function Fn_LancerAppel(passe) {
       outils.forEach(o => { if (domaines.length) o.allowed_domains = domaines; else delete o.allowed_domains; });
     };
     appliquerDomaines();
-    const modele = Fn_ModeleMAJ();
+    const modele = Fn_ModelePasse(passe);
+    journal.modele = modele;
     Fn_Phase(journal, 'envoi', 'ok', 'Requête envoyée (' + modele + ', effort ' + Fn_EffortPasse(passe) + ', plafond ' + Fn_FmtNb(Cst_MaxTokens, 0)
       + ' jetons, cache de contexte actif' + (mode.mode === 'byok' ? ', flux' : ', pont sans flux')
       + ', budget ' + budget.recherches + ' recherches et ' + budget.lectures + ' pages'
@@ -8364,6 +8527,10 @@ function Fn_OnAction(e) {
       Fn_RenderTout();
       break;
     }
+    case 'catalogue-actualiser': {
+      Fn_ActualiserCatalogue(true).then(() => Fn_RenderTout()).catch(() => Fn_RenderTout());
+      break;
+    }
     case 'maj-chaine': Fn_LancerChaine(); break;
     case 'maj-lancer': Fn_LancerDesk(); break;
     case 'maj-enrichir': Fn_LancerEnrichissement(); break;
@@ -8586,7 +8753,10 @@ function Fn_OnAction(e) {
     case 'cle-enregistrer': {
       const inp = document.getElementById('p-cle');
       const v = inp ? String(inp.value || '').trim() : '';
-      if (v) { Fn_SetApiKey(v); if (inp) inp.value = ''; Fn_RenderParametres(); Fn_RenderEntete(); Fn_RenderMajPanel(); }
+      if (v) {
+        Fn_SetApiKey(v); if (inp) inp.value = ''; Fn_RenderParametres(); Fn_RenderEntete(); Fn_RenderMajPanel();
+        Fn_ActualiserCatalogue(true).then(() => Fn_RenderTout()).catch(() => {});   // la liste du compte change avec la clé
+      }
       break;
     }
     case 'cle-effacer': {
@@ -8724,10 +8894,21 @@ function Fn_OnChange(e) {
       if (v != null) { Var_State.seuils[id] = v; Fn_Recalculer(); Fn_Save(); }
       break;
     }
+    case 'modele-desk':
+    case 'modele-doc': {
+      const v = String(el.value || 'auto');
+      if (v === 'auto' || Fn_ModelesProposes().some(m => m.id === v)) {
+        Var_State.choixModeles = Object.assign({ desk: 'auto', doc: 'auto' }, Var_State.choixModeles);
+        Var_State.choixModeles[action === 'modele-doc' ? 'doc' : 'desk'] = v;
+        Fn_Save(); Fn_RenderParametres(); Fn_RenderMajPanel();
+      }
+      break;
+    }
     case 'modele': {
       const m = Cst_Modeles.find(x => x.id === el.value);
       if (m) {
         Var_State.modeleMAJ = m.id;
+        Var_State.choixModeles = Object.assign({ desk: 'auto', doc: 'auto' }, Var_State.choixModeles, { desk: m.id });
         Var_State.modeleRevu = Var_State.modeleRevu || Fn_AujISO(); // un choix explicite n'est jamais réécrit
         // Les tarifs suivent le modèle : les laisser en arrière rendrait toute
         // estimation fausse dès le changement, sans le dire.
@@ -9029,7 +9210,7 @@ function Fn_V2CarteDesk() {
   if (rt.enCours || rt.chaine) {
     const etape = rt.chaine && rt.chaine.etape;
     return h + '<div class="petit"><b>' + (etape === 'documenter' ? 'Étape 1/2 — documentation' : 'Étape 2/2 — analyse') + '</b> · '
-      + Fn_Esc(Fn_ModeleMeta().nom) + ', effort ' + Fn_Esc(Fn_EffortPasse(etape === 'documenter' ? 'enrichissement' : 'desk')) + '</div>'
+      + Fn_Esc(Fn_NomModele(Fn_ModelePasse(etape === 'documenter' ? 'enrichissement' : 'desk'))) + ', effort ' + Fn_Esc(Fn_EffortPasse(etape === 'documenter' ? 'enrichissement' : 'desk')) + '</div>'
       + '<div class="tres-petit muted">L’avancement s’affiche en haut de page. Gardez cette page ouverte : une requête ne survit pas au rechargement.</div>'
       + '<div class="v2-btns"><button class="btn btn-danger arme" data-action="maj-annuler">■ Annuler</button></div></div>';
   }
@@ -9038,16 +9219,25 @@ function Fn_V2CarteDesk() {
   const cout = (pDesk.cout != null ? pDesk.cout : 0) + (pEnr && pEnr.cout != null ? pEnr.cout : 0);
   const connu = pDesk.cout != null && (!pEnr || pEnr.cout != null);
   const relance = dernier && (dernier.statut === 'echec' || dernier.statut === 'interrompue');
+  /* UN PORTEFEUILLE NON RÉCONCILIÉ NE S'ANALYSE PAS. Tant qu'une ligne vendue y figure
+     encore ou qu'un achat n'y est pas entré, le desk jugerait — et ferait payer — un
+     portefeuille qui n'est plus le vôtre : revues d'un produit soldé, idées calibrées
+     sur de faux poids. Le bouton reste là pour qui sait ce qu'il fait. */
+  const ecarts = Var_State.controles.filter(c => c.statut === 'a_valider' && Cst_KindsStructure.indexOf(c.kind) >= 0);
   const nb = (n, un, plusieurs) => n + ' ' + (n > 1 ? plusieurs : un);
   const doc = [aEnr.length ? nb(aEnr.length, 'ligne', 'lignes') : '', agendas.length ? nb(agendas.length, 'agenda', 'agendas') : ''].filter(Boolean).join(' et ');
   h += Fn_HtmlAlerteAppel(Var_State.majJournaux[0])
-    + '<div class="v2-btns"><button class="btn btn-accent v2-gros" data-action="maj-chaine">' + (relance ? 'Relancer l’analyse' : 'Analyser avec le desk') + '</button></div>'
+    + (ecarts.length ? '<div class="note note-warn tres-petit" style="margin:0 0 6px"><b>' + ecarts.length + ' écart(s) de capture à trancher d’abord</b> (ligne vendue, achat non intégré, quantité) :'
+      + ' sans cela le desk analyserait un portefeuille qui n’est plus le vôtre. <button class="btn btn-mini" data-action="aller-avalider">Voir</button></div>' : '')
+    + '<div class="v2-btns"><button class="btn ' + (ecarts.length ? '' : 'btn-accent ') + 'v2-gros" data-action="maj-chaine">'
+    + (ecarts.length ? 'Analyser quand même' : (relance ? 'Relancer l’analyse' : 'Analyser avec le desk')) + '</button></div>'
     + '<div class="tres-petit muted" style="margin-top:6px">'
     + (doc ? 'Documente ' + doc + ', puis analyse : ' : 'Analyse : ')
     + nb(charge.sansTexte.length, 'événement', 'événements') + ' à commenter'
     + (charge.aDebriefer.length ? ', ' + nb(charge.aDebriefer.length, 'échu', 'échus') + ' à débriefer' : '')
     + ', ' + nb(Cst_DecouvertesVisees, 'idée', 'idées') + ' à chercher. '
-    + Fn_Esc(Fn_ModeleMeta().nom) + (connu ? ' · ≈ ' + Fn_FmtUsd(Math.round(cout * 100) / 100, 2) : '') + '.</div>'
+    + Fn_Esc((doc ? Fn_NomCourtModele(Fn_ModelePasse('enrichissement')) + ' puis ' : '') + Fn_NomCourtModele(Fn_ModelePasse('desk')))
+    + (connu ? ' · ≈ ' + Fn_FmtUsd(Math.round(cout * 100) / 100, 2) : '') + '.</div>'
     + (dernier ? '<div class="tres-petit muted">Dernière analyse : ' + Fn_Esc(Fn_FmtHeure(dernier.debutTs)) + ' — '
       + Fn_Esc({ terminee: 'terminée', partielle: 'partielle', echec: 'échec', interrompue: 'interrompue' }[dernier.statut] || dernier.statut)
       + (dernier.coutUsd != null ? ' — ' + Fn_Esc(Fn_FmtUsd(dernier.coutUsd)) : '') + '.</div>' : '<div class="tres-petit muted">Jamais lancée sur cet état.</div>');
@@ -9060,6 +9250,8 @@ function Fn_V2CarteDesk() {
    rang 1 : arbitrage prioritaire du desk, contrôle non expliqué ;
    rang 2 : arbitrage ordinaire, échu à débriefer ;
    rang 3 : point de décision (rien à faire aujourd'hui), écart expliqué. */
+// Les écarts qui disent que l'état ne décrit plus le portefeuille détenu.
+const Cst_KindsStructure = ['nouvelle_ligne', 'ligne_non_appariee', 'position_soldee', 'ligne_absente_capture', 'ecart_quantite', 'ecart_quantite_export'];
 const Cst_V2KindsCritiques = ['position_soldee', 'nouvelle_ligne', 'ligne_non_appariee', 'ligne_absente_capture', 'ecart_quantite',
   'ecart_quantite_export', 'parametres_levier', 'capture_degradee', 'ecart_lecture', 'capture_paginee', 'ecart_ordres', 'ecart_executes'];
 function Fn_V2RangCarte(c) {
@@ -9325,16 +9517,28 @@ function Fn_V2Reglages() {
       + '<div class="v2-btns"><button class="btn btn-ok" data-action="cle-enregistrer">Enregistrer</button><button class="btn" data-action="cle-voir">Afficher</button>'
       + '<button class="btn btn-danger' + (arme('cle-effacer') ? ' arme' : '') + '" data-action="cle-effacer">' + (arme('cle-effacer') ? 'Confirmer ?' : 'Effacer') + '</button></div>'),
     mode.mode === 'aucun');
-  // ---- Desk
+  // ---- Desk : un modèle par étape, choisi d'office, forçable
   const m = Fn_ModeleMeta();
   const journaux = (Var_State.majJournaux || []).filter(j => j.statut !== 'en cours');
-  h += Fn_V2Section('Desk : modèle, effort, dépense',
-    '<div class="form-grille"><div class="col2"><label class="champ">Modèle</label><select data-action="modele">'
-    + Cst_Modeles.map(x => '<option value="' + x.id + '"' + (x.id === Fn_ModeleMAJ() ? ' selected' : '') + '>' + Fn_Esc(x.nom) + ' — ' + x.entreeParM + ' / ' + x.sortieParM + ' $</option>').join('') + '</select></div>'
+  const tarifModele = id => { const p = Fn_PrixModele(id); return p ? ' — ' + Fn_FmtNb(p.entree, 2) + ' / ' + Fn_FmtNb(p.sortie, 2) + ' $' : ' — tarif inconnu'; };
+  const optionsModele = passe => {
+    const ch = Fn_ChoixModele(passe), auto = Fn_ModeleAuto(passe);
+    return '<option value="auto"' + (ch === 'auto' ? ' selected' : '') + '>Automatique — ' + Fn_Esc(Fn_NomCourtModele(auto) + tarifModele(auto)) + '</option>'
+      + Fn_ModelesProposes().map(x => '<option value="' + Fn_Esc(x.id) + '"' + (x.id === ch ? ' selected' : '') + '>' + Fn_Esc(x.nom + tarifModele(x.id)) + '</option>').join('');
+  };
+  const cat = Fn_Catalogue();
+  const sources = (cat.api ? 'Modèles : liste de votre compte, lue le ' + Fn_FmtHeure(cat.api.ts) : 'Modèles : table intégrée — liste du compte pas encore lue (clé absente ou API injoignable)')
+    + ' · ' + (cat.tarifs ? 'tarifs : page officielle d’Anthropic, relevée le ' + Fn_FmtDateCourt(String(cat.tarifs.verifie || '').slice(0, 10)) : 'tarifs : table intégrée du 16/10/26');
+  h += Fn_V2Section('Desk : modèles, effort, dépense',
+    '<div class="form-grille"><div class="col2"><label class="champ">Modèle — analyse</label><select data-action="modele-desk">' + optionsModele('desk') + '</select></div>'
+    + '<div class="col2"><label class="champ">Modèle — documentation</label><select data-action="modele-doc">' + optionsModele('enrichissement') + '</select></div>'
     + '<div><label class="champ">Effort — analyse</label><select data-action="effort">'
     + Cst_Efforts.map(x => '<option value="' + x.id + '"' + (x.id === Fn_EffortMAJ() ? ' selected' : '') + '>' + Fn_Esc(x.nom) + '</option>').join('') + '</select></div>'
     + '<div><label class="champ">Effort — documentation</label><select data-action="effort-enrichissement">'
     + Cst_Efforts.map(x => '<option value="' + x.id + '"' + (x.id === Fn_EffortEnrichissement() ? ' selected' : '') + '>' + Fn_Esc(x.nom) + '</option>').join('') + '</select></div></div>'
+    + '<div class="tres-petit muted">Automatique : le plus récent des Opus pour juger, le plus récent des Sonnet pour documenter, à moitié prix. Un modèle nouveau sur votre compte est pris dès que son tarif est relevé. '
+    + Fn_Esc(sources) + '.' + ((cat.erreurApi || cat.erreurTarifs) ? ' <b>' + Fn_Esc([cat.erreurApi, cat.erreurTarifs].filter(Boolean).join(' · ')) + '</b>' : '') + '</div>'
+    + '<div class="v2-btns"><button class="btn" data-action="catalogue-actualiser">Actualiser modèles et tarifs</button></div>'
     + '<div class="tres-petit muted">' + Fn_Esc(m.note) + ' La recherche web est libre : aucun site n’est imposé.</div>'
     + '<div class="carte-titre" style="margin-top:10px">Derniers appels</div>'
     + (journaux.length ? '<table class="tbl"><tr><th>date</th><th>étape</th><th>issue</th><th>coût</th></tr>'
@@ -9440,6 +9644,8 @@ function Fn_V2Reglages() {
   document.addEventListener('mouseout', Fn_OnFinSurvol);
   window.addEventListener('scroll', Fn_FermerGloss, { passive: true });
   Var_State._runtime.timers.tick = setInterval(Fn_TickCompteurs, 60000);
+  // Modèles du compte et tarifs relevés : une fois par jour, sans bloquer l'ouverture.
+  Fn_ActualiserCatalogue(false).then(ch => { if (ch) Fn_RenderTout(); }).catch(() => {});
   Fn_RenderTout();
   Fn_MontrerOnglet(Fn_UiV2() ? 'jour' : (Var_State.onglet || 'vigie'));
   // Ouverte par la macro après une capture : le document attend dans le presse-papier.

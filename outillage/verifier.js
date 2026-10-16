@@ -2179,8 +2179,8 @@ setTimeout(async () => {
     R('Var_State.tarifs = Object.assign({}, Var_State.tarifs, { entreeParM: 4, sortieParM: 20 });');
     const c55 = J('Fn_CoutJournal({ jetonsCacheLecture: 1000000, modele: "claude-opus-5-5" }).cacheLecture');
     const c5 = J('Fn_CoutJournal({ jetonsCacheLecture: 1000000, modele: "claude-opus-5" }).cacheLecture');
-    verifier('coût : un million de jetons relus coûte 0,20 $ sur Opus 5.5 (0,05×), pas 0,40 $',
-      Math.abs(c55 - 0.2) < 1e-9 && Math.abs(c5 - 0.4) < 1e-9, c55 + ' / ' + c5);
+    verifier('coût : un million de jetons relus coûte 0,20 $ sur Opus 5.5 (0,05×) et 0,50 $ sur Opus 5 — le tarif suit le modèle du journal',
+      Math.abs(c55 - 0.2) < 1e-9 && Math.abs(c5 - 0.5) < 1e-9, c55 + ' / ' + c5);
 
     /* Remise à niveau, une fois : un état réglé sur une génération précédente passe
        sur Opus 5.5 avec ses tarifs ; un choix postérieur n'est jamais réécrit. */
@@ -2450,7 +2450,7 @@ setTimeout(async () => {
       && /data-action="ev-debriefer" data-id="k-rec"/.test(vue()) && /classé seul dans 11 j/.test(texte(vue())));
     R('Var_State._runtime.v2ToutVoir = false; Fn_V2Rendre();');
     verifier('le desk en UN bouton, avec ce qu’il fera',
-      (vue().match(/data-action="maj-chaine"/g) || []).length === 1 && /Analyser avec le desk/.test(vue()) && /à commenter/.test(texte(vue())));
+      (vue().match(/data-action="maj-chaine"/g) || []).length === 1 && /Analyser (avec le desk|quand même)/.test(vue()) && /à commenter/.test(texte(vue())));
     verifier('la semaine à venir est là, le calendrier complet à la demande',
       /Détachement Danica/.test(vue()) && /data-action="v2-calendrier"/.test(vue()));
 
@@ -2486,7 +2486,7 @@ setTimeout(async () => {
     R('Var_State._runtime.v2IdeesToutes = false;');
     const hReg = vues.reglages;
     verifier('Réglages : accès, desk, synchronisation, seuils, secours de collage et retour à l’ancienne interface',
-      ['cle-enregistrer', 'modele', 'effort', 'effort-enrichissement', 'ghtoken-enregistrer', 'seuil', 'v2-coller', 'v2-ui'].every(a => hReg.indexOf('data-action="' + a + '"') >= 0));
+      ['cle-enregistrer', 'modele-desk', 'modele-doc', 'catalogue-actualiser', 'effort', 'effort-enrichissement', 'ghtoken-enregistrer', 'seuil', 'v2-coller', 'v2-ui'].every(a => hReg.indexOf('data-action="' + a + '"') >= 0));
     R('Fn_MontrerOnglet("decouvertes");');
     verifier('les renvois de l’ancien code tombent sur la bonne vue (« Découvertes » → Idées)', J('Var_State._runtime.v2Vue') === 'idees');
     R('Var_State.sitesRecherche = ["boursorama.com"];');
@@ -2554,7 +2554,95 @@ setTimeout(async () => {
       !J('Var_State.positions.some(p => /ZED/.test(p.detention.nom))')
       && J('Var_State.controles.find(c => c.kind === "parametres_levier" && c.id === ' + JSON.stringify(idZed) + ').statut') === 'remplacee'
       && J('Var_State.actions.find(a => a.id === "k-zed").statut') === 'perimee');
+
+    // ---- Le catalogue vivant des modèles (données fictives : un « Opus 6 » imaginaire).
+    R('Var_Catalogue = { api: null, tarifs: null }; Var_State.choixModeles = { desk: "auto", doc: "auto" };');
+    verifier('sans liste du compte ni relevé : Opus 5.5 pour juger, Sonnet 5.5 pour documenter',
+      J('Fn_ModelePasse("desk")') === 'claude-opus-5-5' && J('Fn_ModelePasse("enrichissement")') === 'claude-sonnet-5-5',
+      J('[Fn_ModelePasse("desk"), Fn_ModelePasse("enrichissement")]').join(' / '));
+    R('Var_Catalogue = { api: { ts: Date.now(), modeles: ['
+      + '{ id: "claude-opus-5-5", nom: "Claude Opus 5.5", cree: "2026-08-01T00:00:00Z", maxSortie: 128000, adaptatif: true },'
+      + '{ id: "claude-opus-6", nom: "Claude Opus 6", cree: "2026-12-01T00:00:00Z", maxSortie: 128000, adaptatif: true },'
+      + '{ id: "claude-sonnet-5-5", nom: "Claude Sonnet 5.5", cree: "2026-08-15T00:00:00Z", maxSortie: 128000, adaptatif: true },'
+      + '{ id: "claude-haiku-5-5", nom: "Claude Haiku 5.5", cree: "2026-10-01T00:00:00Z", maxSortie: 64000, adaptatif: true }] },'
+      + ' tarifs: { verifie: "2026-10-19T05:17:00Z", recherchePour1000: 10, modeles: {'
+      + ' "Claude Opus 5.5": { entree: 4, sortie: 20, cacheLecture: 0.2, cacheEcriture1h: 8 },'
+      + ' "Claude Sonnet 5.5": { entree: 2, sortie: 10, cacheLecture: 0.1, cacheEcriture1h: 4 },'
+      + ' "Claude Haiku 5.5": { entree: 0.1, sortie: 0.5, cacheLecture: 0.01, cacheEcriture1h: 0.2 } } } };');
+    verifier('un modèle nouveau du compte SANS tarif relevé n’est jamais choisi d’office : son coût serait invisible',
+      J('Fn_ModelePasse("desk")') === 'claude-opus-5-5', J('Fn_ModelePasse("desk")'));
+    R('Var_Catalogue.tarifs.modeles["Claude Opus 6"] = { entree: 3, sortie: 15, cacheLecture: 0.15, cacheEcriture1h: 6 };');
+    verifier('son tarif relevé, le plus récent des Opus du compte est pris pour juger',
+      J('Fn_ModelePasse("desk")') === 'claude-opus-6' && J('Fn_ModelePasse("enrichissement")') === 'claude-sonnet-5-5',
+      J('[Fn_ModelePasse("desk"), Fn_ModelePasse("enrichissement")]').join(' / '));
+    verifier('Haiku n’est pas proposé, et les tarifs relevés priment sur la table (relecture du cache de Sonnet 5.5 à 0,05×)',
+      !J('Fn_ModelesProposes().some(m => /haiku/.test(m.id))') && Math.abs(J('Fn_CoefCacheLecture("claude-sonnet-5-5")') - 0.05) < 1e-9);
+    R('Var_State.choixModeles = { desk: "claude-opus-5-5", doc: "claude-sonnet-4-6" };');
+    verifier('un modèle forcé est gardé tant qu’il est sur le compte ; absent, l’étape revient en automatique',
+      J('Fn_ModelePasse("desk")') === 'claude-opus-5-5' && J('Fn_ModelePasse("enrichissement")') === 'claude-sonnet-5-5');
+    R('Var_State.choixModeles = { desk: "auto", doc: "auto" };');
+    const jeu = '{ jetonsEntree: 0, jetonsCacheEcriture: 0, jetonsCacheLecture: 0, jetonsSortie: 1000000, recherches: 0 }';
+    verifier('chaque étape est chiffrée au prix de SON modèle : un million de jetons de sortie, 10 $ sur Sonnet 5.5, 15 $ sur « Opus 6 »',
+      Math.abs(J('Fn_CoutJournal(Object.assign(' + jeu + ', { modele: "claude-sonnet-5-5" })).total') - 10) < 1e-9
+      && Math.abs(J('Fn_CoutJournal(Object.assign(' + jeu + ', { modele: "claude-opus-6" })).total') - 15) < 1e-9);
+    R('Var_State.majJournaux = [{ id: "k-ref", passe: "enrichissement", statut: "terminee", modele: "claude-opus-5", unites: 10, coutUsd: 99,'
+      + ' jetonsEntree: 0, jetonsCacheEcriture: 0, jetonsCacheLecture: 0, jetonsSortie: 1000000, recherches: 0 }];');
+    verifier('la projection reprend les jetons d’une documentation faite sur Opus 5 et les chiffre au prix de Sonnet 5.5',
+      Math.abs(J('Fn_ProjectionAppel("enrichissement", 10).cout') - 10) < 1e-9, String(J('Fn_ProjectionAppel("enrichissement", 10).cout')));
+    R('Var_State.majJournaux = []; Var_Catalogue = { api: null, tarifs: null };');
+
+    // ---- Pertinence du desk.
+    R('Var_State._runtime.v2Vue = "jour"; Var_State.controles.filter(c => c.statut === "a_valider").forEach(c => { c.statut = "rejetee"; });'
+      + 'Var_State.controles.push({ id: "k-nouv", kind: "nouvelle_ligne", statut: "a_valider", payload: { id: "XX-NOUV" }, resume: "Nouvelle ligne (fictive)." }); Fn_V2Rendre();');
+    const avecEcart = vue();
+    R('Var_State.controles.find(c => c.id === "k-nouv").statut = "rejetee"; Fn_V2Rendre();');
+    verifier('un portefeuille non réconcilié ne s’analyse pas d’un appui : l’écart est dit, le bouton devient « Analyser quand même »',
+      /écart\(s\) de capture à trancher d’abord/.test(avecEcart) && /Analyser quand même/.test(avecEcart)
+      && /Analyser avec le desk/.test(vue()) && !/Analyser quand même/.test(vue()));
+    const ordre0 = J('Var_State.ordres[0] ? "ordre-annonce-" + Fn_Slug((Var_State.ordres[0].nom || "") + "-" + (Var_State.ordres[0].sens || "")) + "-pubDate-" + ' + JSON.stringify(jour(9)) + ' : ""');
+    R('Var_State.calendrier.push({ id: "ordre-annonce-fantome-sa-achat-pubDate-' + jour(9) + '", isin: null, date: ' + JSON.stringify(jour(9)) + ', statut: "prevu", sev: "Warn",'
+      + ' libelle: "Publication de résultats AVANT exécution d’un ordre — Fantôme SA (fictif)", source: "regle:ordre-annonce" });'
+      + 'Var_State.calendrier.push({ id: ' + JSON.stringify(ordre0) + ', isin: null, date: ' + JSON.stringify(jour(9)) + ', statut: "prevu", sev: "Warn",'
+      + ' libelle: "Publication de résultats AVANT exécution d’un ordre — encore en carnet (fictif)", source: "regle:ordre-annonce" });'
+      + 'Fn_GenererSquelette();');
+    verifier('une annonce attendue avant l’exécution d’un ordre sorti du carnet est classée ; celle d’un ordre en carnet reste',
+      J('Var_State.calendrier.find(e => e.id === "ordre-annonce-fantome-sa-achat-pubDate-' + jour(9) + '").statut') === 'classe'
+      && J('Var_State.calendrier.find(e => e.id === ' + JSON.stringify(ordre0) + ').statut') !== 'classe', ordre0);
+    R('Var_State.calendrier.push({ id: "these-k", isin: "XX0060000047", date: ' + JSON.stringify(jour(0)) + ', statut: "imminent", sev: "Warn",'
+      + ' libelle: "Thèse périmée par une publication — Danica (fictif)", source: "regle:these" });');
+    verifier('une « thèse à revoir » ne coûte pas trois textes d’événement : la revue est déjà dans la lecture de la position',
+      !J('Fn_ChargeDesk().sansTexte.some(e => e.id === "these-k")'));
+    verifier('le texte envoyé au desk compte six intentions de découverte, partout',
+      !/une des cinq exactement/.test(R('Fn_BuildPromptMAJ({ passe: "desk", contrat: Fn_ContratDesk(), budget: Fn_BudgetDesk(0), sitesAutorises: [] })')));
   } catch (e) { ko('nouvelle interface', String((e && e.stack) || e)); }
+
+  /* --- L. LE RELEVÉ DES TARIFS (outillage/tarifs.js, exécuté chaque lundi par GitHub) --- */
+  console.log('\nL. Relevé des tarifs — lecture de la page officielle');
+  try {
+    const { analyser, valider } = require('./tarifs.js');
+    const page = ['# Pricing', '', '## Model pricing', '',
+      '| Model | Base input tokens | 5m cache writes | 1h cache writes | Cache hits and refreshes | Output tokens |',
+      '| --- | --- | --- | --- | --- | --- |',
+      '| Claude Fable 5.1 | $10 / MTok | $12.50 / MTok | $20 / MTok | $0.25 / MTok<sup>1</sup> | $50 / MTok |',
+      '| Claude Opus 5.5 | $4 / MTok | $5 / MTok | $8 / MTok | $0.20 / MTok<sup>2</sup> | $20 / MTok |',
+      '| Claude Opus 4.1 ([retired, except on Bedrock](https://exemple.invalid)) | $15 / MTok | $18.75 / MTok | $30 / MTok | $1.50 / MTok | $75 / MTok |',
+      '| Claude Sonnet 5.5 | $2 / MTok | $2.50 / MTok | $4 / MTok | $0.10 / MTok<sup>2</sup> | $10 / MTok |',
+      '| Claude Haiku 5.5 (for prompts up to 100,000 tokens) | $0.10 / MTok | $0.125 / MTok | $0.20 / MTok | $0.01 / MTok | $0.50 / MTok |',
+      '| Claude Haiku 5.5 (for prompts over 100,000 tokens) | $0.50 / MTok | $0.625 / MTok | $1 / MTok | $0.05 / MTok | $2.50 / MTok |',
+      '', '## Cloud platform pricing', '', '| Claude Opus 5.5 | $99 / MTok | | | | $99 / MTok |', '',
+      'Web search is available on the Claude API for **$10 per 1,000 searches**.'].join('\n');
+    const r = valider(analyser(page));
+    verifier('la page se lit par intitulé de colonne : prix, relecture et écriture du cache, recherche web',
+      r.modeles['Claude Opus 5.5'].entree === 4 && r.modeles['Claude Opus 5.5'].sortie === 20 && r.modeles['Claude Opus 5.5'].cacheLecture === 0.2
+      && r.modeles['Claude Opus 5.5'].cacheEcriture1h === 8 && r.recherchePour1000 === 10, JSON.stringify(r.modeles['Claude Opus 5.5']));
+    verifier('seul le tableau des prix de l’API est lu : la section des plateformes cloud ne l’écrase pas',
+      r.modeles['Claude Opus 5.5'].entree !== 99);
+    verifier('modèle retiré marqué, modèle à deux paliers ramené au palier ordinaire',
+      r.modeles['Claude Opus 4.1'].retire === true && r.modeles['Claude Haiku 5.5'].entree === 0.1 && r.modeles['Claude Haiku 5.5'].auDelaDuPalier.entree === 0.5);
+    let refuse = false;
+    try { valider(analyser(page.replace('| $4 / MTok |', '| $40 / MTok |'))); } catch (e) { refuse = /incohérentes/.test(e.message); }
+    verifier('un relevé incohérent (entrée plus chère que la sortie) est refusé plutôt que publié', refuse);
+  } catch (e) { ko('relevé des tarifs', String((e && e.stack) || e)); }
 
   console.log('\n' + (echecs === 0
     ? 'TOUT EST VERT — publication possible (penser à incrémenter le CACHE de sw.js).'
