@@ -2511,7 +2511,7 @@ setTimeout(async () => {
     R('Var_State.controles.push({ id: "k-vieille", kind: "ligne_non_appariee", statut: "a_valider", payload: { id: "XX-VIEILLE" },'
       + ' resume: "Ligne lue à l’écran sans correspondance dans l’export : Vieille SA (fictive)." });'
       + 'Var_State.positions.find(p => /Danica/.test(p.detention.nom)).detention.clotureVeille = 999;'
-      + 'Var_State._runtime.capture.moteur = 1;');
+      + 'Var_State.captureLue = null;');
     const relu1 = J('Fn_RelireCaptureDuJour()'), relu2 = J('Fn_RelireCaptureDuJour()');
     const veilleDanica = J('Var_State.positions.find(p => /Danica/.test(p.detention.nom)).detention.clotureVeille');
     verifier('la capture du jour est relue UNE fois par un moteur plus récent : la clôture de la veille revient de l’écran',
@@ -2671,8 +2671,22 @@ setTimeout(async () => {
     verifier('un paramètre absent d’une lecture mais déjà connu ne lève pas de carte, et la carte en attente se referme',
       !!idZ && J('Var_State.controles.find(c => c.id === "ctl-k-lev").statut') === 'remplacee'
       && !J('Var_State.controles.some(c => c.statut === "a_valider" && c.kind === "parametres_levier" && c.cible === ' + JSON.stringify(idZ) + ')'));
+    // La marque de relecture tombe avec l'état qu'elle décrivait.
+    const etatAncien = J('JSON.parse(Fn_SerialiserEtat())');
+    delete etatAncien.captureLue; etatAncien.etatTs = 1;
+    R('Var_State.captureLue = { ts: Var_State._runtime.capture.ts, moteur: Cst_MoteurCapture };');
+    const avant = J('Fn_RelireCaptureDuJour()');
+    R('Fn_AdopterEtat(' + JSON.stringify(etatAncien) + ');');
+    const apres = J('Fn_RelireCaptureDuJour()');
+    verifier('un état plus ancien repris efface la marque de relecture : la capture du jour est relue de nouveau',
+      avant === false && apres === true && J('Var_State.captureLue.moteur') === J('Cst_MoteurCapture'), avant + ' / ' + apres);
     verifier('le texte envoyé au desk compte six intentions de découverte, partout',
       !/une des cinq exactement/.test(R('Fn_BuildPromptMAJ({ passe: "desk", contrat: Fn_ContratDesk(), budget: Fn_BudgetDesk(0), sitesAutorises: [] })')));
+    // En dernier : un onglet remplacé par un plus récent s'endort et n'écrit plus rien.
+    const tsAvant = J('Var_State.etatTs');
+    R('Fn_Endormir(); Var_State.positions.push({ id: "XX-DORMANT" }); Fn_Save();');
+    verifier('un onglet endormi (remplacé par un plus récent) n’enregistre plus et ne relit plus la capture',
+      J('Var_State._runtime.dormant') === true && J('Var_State.etatTs') === tsAvant && J('Fn_RelireCaptureDuJour()') === false);
   } catch (e) { ko('nouvelle interface', String((e && e.stack) || e)); }
 
   /* --- L. LE RELEVÉ DES TARIFS (outillage/tarifs.js, exécuté chaque lundi par GitHub) --- */

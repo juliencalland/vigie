@@ -519,7 +519,7 @@ body.v2 .v2-eteinte{opacity:.6}
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202610161629';
+const Cst_Version = 'vigie-202610161635';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -1025,6 +1025,7 @@ function Fn_SerialiserEtat() {
 // chargement, sinon un appareil vierge se croirait « plus récent » que l'état du
 // dépôt distant et l'écraserait.
 function Fn_Save() {
+  if (Var_State._runtime.dormant) return;   // onglet remplacé par un plus récent : il n'écrit plus
   try {
     // Un seuil modifié change les zones du profil sans passer par le recalcul :
     // le cache tombe ici aussi, sur le seul point d'écriture de l'application.
@@ -1035,7 +1036,43 @@ function Fn_Save() {
   } catch (e) { /* stockage indisponible : l'app reste utilisable en session */ }
 }
 function Fn_PersisterSansHorodatage() {
+  if (Var_State._runtime.dormant) return;
   try { Fn_StorageSet(Fn_SerialiserEtat()); } catch (e) { /* session seulement */ }
+}
+/* UN SEUL ONGLET VIVANT. Chaque capture ouvre Vigie dans un NOUVEL onglet, et
+   l'ancien continuait de tourner — avec son code et son état en mémoire : le
+   16/10/26, sept onglets Vigie coexistaient, dont un en version antérieure portant
+   l'état de 14 h 46. Deux onglets écrivaient le même état. Le plus récent annonce
+   son ouverture ; les autres s'endorment — plus d'enregistrement ni de
+   synchronisation — et le disent. Un onglet en plein appel au desk ne s'endort pas. */
+function Fn_OngletUnique() {
+  const rt = Var_State._runtime;
+  if (typeof BroadcastChannel === 'undefined') return;
+  rt.ongletId = Fn_Uid('onglet');
+  try {
+    const canal = new BroadcastChannel('vigie-onglets');
+    canal.onmessage = ev => {
+      const m = (ev && ev.data) || {};
+      if (m.type === 'ouvert' && m.id !== rt.ongletId && !rt.enCours) Fn_Endormir();
+    };
+    canal.postMessage({ type: 'ouvert', id: rt.ongletId, ts: Date.now() });
+    rt.canalOnglets = canal;
+  } catch (e) { /* navigateur sans canal entre onglets : comportement d'avant */ }
+}
+function Fn_Endormir() {
+  const rt = Var_State._runtime;
+  if (rt.dormant) return;
+  rt.dormant = true;
+  Object.keys(rt.timers || {}).forEach(k => { try { clearInterval(rt.timers[k]); clearTimeout(rt.timers[k]); } catch (e) { /* déjà arrêté */ } });
+  rt.timers = {};
+  try {
+    document.body.innerHTML = '<div style="padding:24px;font:16px/1.5 system-ui,sans-serif;color:#E7EEFB;background:#0B1220;min-height:100vh">'
+      + '<h2 style="margin:0 0 12px">Vigie est ouverte dans un onglet plus récent</h2>'
+      + '<p>Cet onglet est mis en sommeil pour ne pas écrire par-dessus l’autre : vous pouvez le fermer.</p>'
+      + '<p><button type="button" id="reprendre-ici" style="font:inherit;padding:10px 16px;border-radius:10px;border:1px solid #3B82F6;background:#16233B;color:#E7EEFB">Reprendre ici</button></p></div>';
+    const b = document.getElementById('reprendre-ici');
+    if (b) b.addEventListener('click', () => location.reload());
+  } catch (e) { /* page sans corps */ }
 }
 // Clés reprises telles quelles d'un état adopté (distant, importé ou local).
 const Cst_ClesEtat = ['onglet', 'captures', 'fx', 'marge', 'positions', 'ordres', 'executes',
@@ -1180,6 +1217,7 @@ function Fn_MigrerEtat(s) {
     controles, instruments: s.instruments || [],
     theses: s.theses || {}, seuils: s.seuils || {}, tarifs: s.tarifs || {},
     modeleMAJ: s.modeleMAJ || Cst_ModeleMAJ, effortMAJ: s.effortMAJ || Cst_EffortMAJ,
+    captureLue: (s.captureLue && typeof s.captureLue === 'object') ? s.captureLue : null,
     choixModeles: (s.choixModeles && typeof s.choixModeles === 'object') ? { desk: s.choixModeles.desk || 'auto', doc: s.choixModeles.doc || 'auto' } : { desk: 'auto', doc: 'auto' },
     sitesRecherche: s.sitesRecherche || [], sitesBloques: s.sitesBloques || [],
     cumulApi: s.cumulApi || null, majJournaux: s.majJournaux || [],
@@ -1190,6 +1228,8 @@ function Fn_MigrerEtat(s) {
 }
 function Fn_AppliquerEtat(s) {
   Cst_ClesEtat.forEach(c => { if (s[c] !== undefined && s[c] !== null) Var_State[c] = s[c]; });
+  // Absente d'un état plus ancien, la marque de relecture doit TOMBER avec lui.
+  Var_State.captureLue = (s.captureLue && typeof s.captureLue === 'object') ? s.captureLue : null;
   Cst_ClesEtatObjet.forEach(c => { if (s[c] && typeof s[c] === 'object') Var_State[c] = s[c]; });
   Cst_ClesEtatFusion.forEach(c => { if (s[c] && typeof s[c] === 'object') Var_State[c] = Object.assign({}, Var_State[c], s[c]); });
   // Les seuils inconnus d'une version antérieure retombent sur leur défaut plutôt
@@ -1678,7 +1718,7 @@ function Fn_SyncRequete(methode, corps) {
 }
 async function Fn_SyncTirer() {
   const rt = Var_State._runtime;
-  if (!Fn_GetSyncToken()) return;
+  if (rt.dormant || !Fn_GetSyncToken()) return;
   try {
     Fn_SyncStatut('⟳ synchronisation…');
     const rep = await Fn_SyncRequete('GET');
@@ -1707,6 +1747,7 @@ async function Fn_SyncTirer() {
       Fn_AdopterEtat(distant);
       rt.syncDernierPushTs = tsDistant;
       Fn_SyncStatut('✓ état distant repris (' + Fn_FmtHeure(tsDistant) + ')', true);
+      Fn_RelireCaptureDuJour();   // l'état repris peut précéder la lecture de la capture du jour
       Fn_RenderTout();
     } else if (distant && tsDistant < tsLocal) {
       Fn_SyncStatut('état local plus récent — envoi…');
@@ -1725,7 +1766,7 @@ function Fn_SyncPlanifier() {
 }
 async function Fn_SyncPousser() {
   const rt = Var_State._runtime;
-  if (!Fn_GetSyncToken()) return;
+  if (rt.dormant || !Fn_GetSyncToken()) return;
   if (rt.syncEnvoiEnCours) { rt.syncReplanifier = true; return; }
   if (rt.syncDernierPushTs === Var_State.etatTs) return; // rien de neuf à envoyer
   rt.syncEnvoiEnCours = true;
@@ -5959,10 +6000,16 @@ function Fn_RecevoirTexte(txt, forcer) {
    l'utilisateur — ce qui change la structure du portefeuille reste en carte.
    Cst_MoteurCapture s'incrémente quand la lecture d'une capture change. */
 const Cst_MoteurCapture = 3;   // 3 : paramètres de levier déjà connus (16/10/26)
+/* LA MARQUE « DÉJÀ RELUE » VIT DANS L'ÉTAT, pas avec la capture. Rangée avec la
+   capture, elle survivait à l'état qu'elle décrivait : un état plus ancien repris
+   ensuite (autre onglet, rechargement avant l'envoi) effaçait la relecture, et la
+   marque interdisait de la refaire (vécu le 16/10/26). Dans l'état, elle disparaît
+   avec lui : la relecture se refait d'elle-même. */
 function Fn_RelireCaptureDuJour() {
   const rt = Var_State._runtime, cap = rt.capture;
-  if (!cap || !rt.collages.positions || !Fn_MemeJour(cap.ts, Date.now())) return false;
-  if ((Fn_Num(cap.moteur) || 0) >= Cst_MoteurCapture) return false;
+  if (rt.dormant || !cap || !rt.collages.positions || !Fn_MemeJour(cap.ts, Date.now())) return false;
+  const lue = Var_State.captureLue || {};
+  if (lue.ts === cap.ts && (Fn_Num(lue.moteur) || 0) >= Cst_MoteurCapture) return false;
   if (cap.meta && cap.meta.statut && !/^ok$/i.test(cap.meta.statut)) return false;
   const an = Fn_AnalyserEntrees();
   rt.analyse = Fn_IntegrerEntrees(an);
@@ -5971,6 +6018,7 @@ function Fn_RelireCaptureDuJour() {
   Fn_MajStatutsCalendrier();
   cap.moteur = Cst_MoteurCapture;
   Fn_DocEnregistrer('capture', cap);
+  Var_State.captureLue = { ts: cap.ts, moteur: Cst_MoteurCapture };
   Fn_Save();
   return true;
 }
@@ -8445,6 +8493,7 @@ function Fn_PoserCapture(texte) {
   rt.capture = { ts: Date.now(), taille: brut.length, meta: meta, moteur: Cst_MoteurCapture,
     sections: { positions: doc.positions.length, ordres: doc.ordres.length, executes: doc.executes.length } };
   Fn_DocEnregistrer('capture', rt.capture);
+  Var_State.captureLue = { ts: rt.capture.ts, moteur: Cst_MoteurCapture };   // lue par le moteur courant
   const rien = /aucune\s+transaction/i.test(String(meta.historique || ''));
   if (rien || doc.executes) {
     rt.aucuneTransac = rien;
@@ -9690,6 +9739,7 @@ function Fn_V2Reglages() {
    INIT
    ================================================================ */
 (async function Fn_Init() {
+  Fn_OngletUnique();
   await Fn_Load();
   // Collages du jour restaurés AVANT le premier rendu : un rechargement d'onglet
   // ne doit pas obliger à tout recoller.
