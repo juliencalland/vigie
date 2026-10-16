@@ -2450,7 +2450,7 @@ setTimeout(async () => {
       && /data-action="ev-debriefer" data-id="k-rec"/.test(vue()) && /classé seul dans 11 j/.test(texte(vue())));
     R('Var_State._runtime.v2ToutVoir = false; Fn_V2Rendre();');
     verifier('le desk en UN bouton, avec ce qu’il fera',
-      (vue().match(/data-action="maj-chaine"/g) || []).length === 1 && /Analyser avec le desk/.test(vue()) && /texte\(s\) d’événement/.test(texte(vue())));
+      (vue().match(/data-action="maj-chaine"/g) || []).length === 1 && /Analyser avec le desk/.test(vue()) && /à commenter/.test(texte(vue())));
     verifier('la semaine à venir est là, le calendrier complet à la demande',
       /Détachement Danica/.test(vue()) && /data-action="v2-calendrier"/.test(vue()));
 
@@ -2493,6 +2493,67 @@ setTimeout(async () => {
     verifier('la recherche est toujours libre : une ancienne liste de sites est ignorée', J('Fn_SitesAutorises().length') === 0);
     verifier('un export de plus de 18 heures n’est plus une source ; un export du jour, si',
       J('Fn_ExportUtilisable({ ts: Date.now() - 48 * 3600000 })') === false && J('Fn_ExportUtilisable({ ts: Date.now() - 3600000 })') === true);
+
+    // Recette sur téléphone : la file avant la semaine, la semaine nommée, le jour lu à l'écran.
+    R('Var_State._runtime.v2Vue = "jour"; Fn_V2Rendre();');
+    const hJ = vue();
+    verifier('sur téléphone, « À trancher » vient avant la semaine',
+      hJ.indexOf('id="ancre-avalider"') > 0 && hJ.indexOf('id="ancre-avalider"') < hJ.indexOf('Cette semaine'));
+    verifier('la variation du jour est celle de l’écran : somme des « P/L jour » (74,72 + 103,50 + 82,50)',
+      Math.abs(J('Fn_V2VariationJour().eur') - 260.72) < 0.005 && J('Fn_V2VariationJour().ecran') === true, JSON.stringify(J('Fn_V2VariationJour()')));
+    R('Var_State.calendrier.push({ id: "k-ord", isin: null, date: ' + JSON.stringify(jour(0)) + ', statut: "imminent", sev: "Info",'
+      + ' libelle: "Ordre en attente — achat Orbis Luxe S.p.A.", court: "Ordre en attente", source: "regle:ordre" });');
+    const libOrd = J('Fn_V2LibelleEv(Var_State.calendrier.find(e => e.id === "k-ord"))');
+    verifier('une ligne de la semaine nomme son titre (« Ordre en attente » seul ne disait pas lequel)',
+      libOrd === 'achat Orbis Luxe S.p.A. · Ordre en attente', libOrd);
+
+    // Une capture intégrée par un moteur plus ancien est relue une fois ; ses cartes non reproduites tombent.
+    R('Var_State.controles.push({ id: "k-vieille", kind: "ligne_non_appariee", statut: "a_valider", payload: { id: "XX-VIEILLE" },'
+      + ' resume: "Ligne lue à l’écran sans correspondance dans l’export : Vieille SA (fictive)." });'
+      + 'Var_State.positions.find(p => /Danica/.test(p.detention.nom)).detention.clotureVeille = 999;'
+      + 'Var_State._runtime.capture.moteur = 1;');
+    const relu1 = J('Fn_RelireCaptureDuJour()'), relu2 = J('Fn_RelireCaptureDuJour()');
+    const veilleDanica = J('Var_State.positions.find(p => /Danica/.test(p.detention.nom)).detention.clotureVeille');
+    verifier('la capture du jour est relue UNE fois par un moteur plus récent : la clôture de la veille revient de l’écran',
+      relu1 === true && relu2 === false && Math.abs(veilleDanica - 255.95) < 0.01, relu1 + ' / ' + relu2 + ' / ' + veilleDanica);
+    verifier('une carte de capture que la capture suivante ne reproduit pas est remplacée, motif à l’appui',
+      J('Var_State.controles.find(c => c.id === "k-vieille").statut') === 'remplacee'
+      && /capture suivante/.test(J('Var_State.controles.find(c => c.id === "k-vieille").motif')));
+
+    // Événements d'état : un ordre sorti du carnet passe échu tout de suite, un constat levé est classé.
+    R('Var_State.calendrier.push({ id: "ordre-fantome", isin: null, date: ' + JSON.stringify(jour(0)) + ', statut: "imminent", sev: "Info",'
+      + ' libelle: "Ordre en attente — achat Fantôme SA (fictif)", court: "Ordre en attente", source: "regle:ordre" });'
+      + 'Var_State.calendrier.push({ id: "these-fantome", isin: "XX-FANTOME", date: ' + JSON.stringify(jour(0)) + ', statut: "imminent", sev: "Warn",'
+      + ' libelle: "Thèse périmée par une publication — Fantôme SA (fictif)", court: "Thèse à revoir", source: "regle:these" });'
+      + 'Fn_GenererSquelette();');
+    const evK = id => J('(Var_State.calendrier.find(e => e.id === "' + id + '") || {}).statut');
+    const ordresVifs = J('Var_State.calendrier.filter(e => e.source === "regle:ordre" && e.statut === "imminent").length');
+    verifier('un ordre sorti du carnet passe échu le jour même ; les ordres encore en carnet restent en attente',
+      evK('ordre-fantome') === 'echu' && ordresVifs === 3, evK('ordre-fantome') + ' · ' + ordresVifs + ' en attente');
+    verifier('un constat qui ne tient plus (thèse revue, coussin remonté) est classé, sans débrief à faire',
+      evK('these-fantome') === 'classe' && /ne tient plus/.test(J('Var_State.calendrier.find(e => e.id === "these-fantome").motif')));
+    verifier('la file dit ce qu’est devenu l’ordre : absent du carnet, exécuté ou annulé',
+      /n’est plus dans le carnet/.test(J('Fn_V2File().filter(i => i.cle === "e-ordre-fantome").map(i => i.detail.join(" ")).join("")')));
+
+    // Une proposition du desk sans réponse se périme après 14 jours ; une récente reste.
+    R('Var_State.actions.push({ id: "k-vieux-conseil", statut: "a_valider", prio: 3, propo: "Conserver (fictif, vieux d’un mois)", isin: "XX0060000047", nature: "suivre", ts: Date.now() - 30 * 86400000 });'
+      + 'Var_State.actions.push({ id: "k-conseil-frais", statut: "a_valider", prio: 2, propo: "Alléger (fictif, d’hier)", isin: "XX0060000047", nature: "agir", ts: Date.now() - 86400000 });'
+      + 'Fn_MajStatutsCalendrier();');
+    const stA = id => J('Var_State.actions.find(a => a.id === "' + id + '").statut');
+    verifier('une proposition du desk restée 14 jours sans réponse se périme seule ; celle d’hier reste à trancher',
+      stA('k-vieux-conseil') === 'perimee' && stA('k-conseil-frais') === 'a_valider'
+      && !J('Fn_V2File().some(i => i.cle === "a-k-vieux-conseil")') && J('Fn_V2File().some(i => i.cle === "a-k-conseil-frais")'));
+
+    // Une position soldée emporte ses cartes et arbitrages en attente.
+    const idZed = J('Var_State.positions.find(p => /ZED/.test(p.detention.nom)).id');
+    R('Var_State.controles.push({ id: ' + JSON.stringify(idZed) + ', kind: "parametres_levier", statut: "a_valider", resume: "Paramètres illisibles (fictif)." });'
+      + 'Var_State.actions.push({ id: "k-zed", statut: "a_valider", prio: 2, propo: "Alléger le turbo (fictif)", isin: ' + JSON.stringify(idZed) + ', nature: "agir", ts: Date.now() });'
+      + 'var __sold = { id: ' + JSON.stringify(idZed) + ', kind: "position_soldee", statut: "a_valider", payload: { id: ' + JSON.stringify(idZed) + ' }, resume: "Soldée (fictif)." };'
+      + 'Var_State.controles.push(__sold); Fn_AppliquerControle(__sold, true);');
+    verifier('accepter « position soldée » ferme aussi ses cartes et arbitrages en attente',
+      !J('Var_State.positions.some(p => /ZED/.test(p.detention.nom))')
+      && J('Var_State.controles.find(c => c.kind === "parametres_levier" && c.id === ' + JSON.stringify(idZed) + ').statut') === 'remplacee'
+      && J('Var_State.actions.find(a => a.id === "k-zed").statut') === 'perimee');
   } catch (e) { ko('nouvelle interface', String((e && e.stack) || e)); }
 
   console.log('\n' + (echecs === 0
