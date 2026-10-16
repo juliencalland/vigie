@@ -316,6 +316,64 @@ const CAPTURE = [
 // la disposition des ordres, ce qui est le comportement attendu — à reconfirmer
 // sur un relevé qui contient de vraies transactions.
 const EXECUTE = 'Novax Semiconducteurs Inc Achat  | 14:02 $ 118,20  | 1 182,00  | Qté 10 04/08/2026  ';
+/* DOCUMENT v11 — la macro lit les trois tableaux en PAYSAGE. Les positions restent
+   une ligne de texte ; les ordres et les TRANSACTIONS (onglet Transactions, les
+   exécutions réelles) arrivent en CELLULES séparées par « ¦ », chaque cellule
+   doublée quand l'écran expose aussi sa description. Disposition, doublons, devises,
+   colonnes vides (« € — », « — ») et paramètres de turbo accolés au nom sont ceux
+   d'un relevé réel du 15/10 ; libellés, identifiants et montants sont FICTIFS. */
+const CAPTURE_V11 = [
+  '===VIGIE:META===',
+  'version=11',
+  'capture=2026-10-15T19:45:00',
+  'statut=OK',
+  'maj_degiro=19:01:27',
+  'format_ordres=paysage-cellules',
+  'format_executes=transactions-cellules',
+  'noeuds_positions=210',
+  'noeuds_ordres=96',
+  'noeuds_transactions=150',
+  'lignes_positions=3',
+  'lignes_ordres=3',
+  'lignes_transactions=3',
+  'pages_positions=1',
+  'pages_ordres=1',
+  'pages_transactions=1',
+  'ordres_ouverts=3',
+  'ordres_executes=0',
+  'transactions_depuis=2026-09-16',
+  'historique=renseigne',
+  'valeur_gage=8.500,00',
+  'facilite_credit=4.000,00',
+  'duree_s=52',
+  '===VIGIE:POSITIONS===',
+  // Ticker à ESPACE, cours en couronnes danoises : le code devise n'est pas un symbole.
+  'Danica Pharma A/S Class B Danica Pharma A/S Class B DANI B | DKK 263,45 75 75 XX0060000047 DKK 263,45 DKK 2 643,18 2 643,18 250,00 250,00 +74,72 +74,72 +2,93% +2,93% +128,76 (+5,12%) +128,76 (+5,12%) +123,86 +123,86',
+  // Un nom qui COMMENCE par « Total » n'est pas la ligne de total.
+  'Totalis Énergies SE Totalis Énergies SE TTS | € 55,40 90 90 XX0000120005 € 55,40 EUR 4 986,00 4 986,00 52,383333 52,383333 +103,50 +103,50 +2,44% +2,44% -372,00 (-7,89%) -372,00 (-7,89%) +248,07 +248,07',
+  // Ticker qui commence par des CHIFFRES : il n'est pas un nombre.
+  'ZED Orbis Turbo illimités Put ZED Orbis Turbo illimités Put 1234T | € 1,97 1 500 1 500 XX000ZE1ABC4 € 1,97 EUR 2 955,00 2 955,00 2,65 2,65 +82,50 +82,50 +4,23% +4,23% -1 020,00 (-25,66%) -1 020,00 (-25,66%) -1 020,50 -1 020,50 BAR 87.06 STR 89.6477 P 5 LV 8.03 BAR 87.06 STR 89.6477 P 5 LV 8.03',
+  'Valeur des titres € 10 584,18',
+  'Liquidités € -4 000,00',
+  'Valeur liquidative du portefeuille € 6 584,18',
+  'Risque du portefeuille € 5 000,00',
+  'Marge disponible (déficit/surplus) € 1 584,18',
+  'Dernière mise à jour à 19:01:27',
+  '===VIGIE:ORDRES===',
+  'Orbis Luxe S.p.A. ¦ Orbis Luxe S.p.A. ¦ 14/10/2026 23:09:39 ¦ 14/10/2026 23:09:39 ¦ ORB | XX0004965148 ¦ MIL ¦ Achat ¦ 15 ¦ 15 ¦ € 42,00 ¦ € 42,00 ¦ € — ¦ 630,00 ¦ 630,00 ¦ 15 ¦ 15 ¦ 0 ¦ 0',
+  'Novax Semiconducteurs Inc ¦ Novax Semiconducteurs Inc ¦ 13/10/2026 18:02:11 ¦ 13/10/2026 18:02:11 ¦ NVX | XX0382221051 ¦ NDQ ¦ Achat ¦ 10 ¦ 10 ¦ $ 120,00 ¦ $ 120,00 ¦ $ — ¦ 1 200,00 ¦ 1 200,00 ¦ 10 ¦ 10 ¦ 0 ¦ 0',
+  'ZED Orbis Turbo illimités Put ¦ ZED Orbis Turbo illimités Put ¦ 12/10/2026 09:15:00 ¦ 12/10/2026 09:15:00 ¦ 1234T | XX000ZE1ABC4 ¦ SCG ¦ Vente ¦ 1 500 ¦ 1 500 ¦ € 3,10 ¦ € 3,10 ¦ € 1,80 ¦ € 1,80 ¦ 4 650,00 ¦ 4 650,00 ¦ 1 500 ¦ 1 500 ¦ 0 ¦ 0',
+  '===VIGIE:EXECUTES===',
+  'ZED Orbis Turbo illimités Put BAR 87.06 STR 89.6477 P 5 LV 8.12 ¦ ZED Orbis Turbo illimités Put BAR 87.06 STR 89.6477 P 5 LV 8.12 ¦ 08/10/2026 10:30:02 ¦ 08/10/2026 10:30:02 ¦ 1234T | XX000ZE1ABC4 ¦ SCG ¦ XZED ¦ XZED ¦ Achat ¦ 1500 ¦ € 2,65 ¦ € 2,65 ¦ € -3 975,00 ¦ € -3 975,00 ¦ € -3 975,00 ¦ € -3 975,00 ¦ — ¦ — ¦ € -0,50 ¦ € -0,50 ¦ € -3 975,50 ¦ € -3 975,50',
+  'Danica Pharma A/S Class B ¦ Danica Pharma A/S Class B ¦ 01/10/2026 09:18:12 ¦ 01/10/2026 09:18:12 ¦ DANI B | XX0060000047 ¦ OMK ¦ XCSE ¦ XCSE ¦ Achat ¦ 75 ¦ DKK 250,00 ¦ DKK 250,00 ¦ DKK -18 750,00 ¦ DKK -18 750,00 ¦ € -2 508,14 ¦ € -2 508,14 ¦ 7,4757 ¦ 7,4757 ¦ € -6,27 ¦ € -6,27 ¦ € -4,90 ¦ € -4,90 ¦ € -2 519,31 ¦ € -2 519,31',
+  'KAP Veridian Turbo Mini-Future Short SL 51.3036 STR 58.4412 R 10 LV 1.42 ¦ KAP Veridian Turbo Mini-Future Short SL 51.3036 STR 58.4412 R 10 LV 1.42 ¦ 18/09/2026 17:13:48 ¦ 18/09/2026 17:13:48 ¦ XX000KA54321 ¦ KAP ¦ KAPS ¦ KAPS ¦ Vente ¦ -200 ¦ € 27,64 ¦ € 27,64 ¦ € 5 528,00 ¦ € 5 528,00 ¦ € 5 528,00 ¦ € 5 528,00 ¦ — ¦ — ¦ € -0,50 ¦ € -0,50 ¦ € 5 527,50 ¦ € 5 527,50',
+  '===VIGIE:FIN==='
+].join('\n');
+// L'onglet Ordres > Historique d'un document v10 : des ÉVÉNEMENTS d'ordre, pas des exécutions.
+const HISTORIQUE_V10 = [
+  'Orbis Luxe S.p.A.  Achat  |  23:09   € 42,00  |  A cours limité  |  Continu 15 Qté Création',
+  'Orbis Luxe S.p.A.  Achat  |  22:51   € 41,00  |  A cours limité  |  Continu 15 Qté Suppression'
+].join('\n');
 
 setTimeout(async () => {
   const rendus = ['Fn_RenderEntete', 'Fn_RenderVigie', 'Fn_RenderAcquisition', 'Fn_RenderMajPanel',
@@ -430,18 +488,26 @@ setTimeout(async () => {
     verifier('ordres : 3 lignes reconnues, aucune rejetée',
       ord.lignes.length === 3 && ord.inconnues.length === 0,
       ord.lignes.length + ' reconnue(s), ' + ord.inconnues.length + ' rejetée(s)');
-    verifier('ordres : quantité, limite et montant par ANCRAGE (l’écran les donne dans l’ordre inverse)',
-      ord.lignes.map(o => [o.qte, o.limite, o.montantEur].join('/')).join(' · ')
-      === '25/72/1800 · 10/120/1200 · 200/27/5400',
-      ord.lignes.map(o => [o.qte, o.limite, o.montantEur].join('/')).join(' · '));
+    /* Le MONTANT d'un ordre est dans SA devise : 1 200 pour dix titres à 120 $. Il
+       n'a de valeur en euros qu'avec un taux (Fn_AnalyserEntrees) — jamais 1 200 €. */
+    const champsOrd = o => [o.qte, o.limite, o.montantDev, o.dev, o.montantEur == null ? '' : o.montantEur].join('/');
+    verifier('ordres : quantité, limite et montant par ANCRAGE, montant dans la devise de l’ordre',
+      ord.lignes.map(champsOrd).join(' · ') === '25/72/1800/EUR/1800 · 10/120/1200/USD/ · 200/27/5400/EUR/5400',
+      ord.lignes.map(champsOrd).join(' · '));
     verifier('ordres : le sens vient du mot d’ordre, jamais du nom du produit',
       ord.lignes.map(o => o.sens).join(',') === 'achat,achat,vente',
       ord.lignes.map(o => o.nom + '=' + o.sens).join(' · '));
-    verifier('ordres : nom du produit isolé, validité et échéance relevées',
+    /* En portrait, la liste des ordres est groupée sous des EN-TÊTES DE DATE, et le
+       lecteur d'écran colle chaque en-tête à la fin de la ligne qui le précède. La
+       date en fin de ligne est donc la date de création de l'ordre SUIVANT — la lire
+       comme une échéance (« Continu jusqu'au … ») était un contresens. */
+    verifier('ordres : nom isolé, validité seule, date d’en-tête rattachée à l’ordre SUIVANT',
       ord.lignes[0].nom === 'Orbis Luxe S.p.A.'
       && ord.lignes[2].nom === 'ZED Orbis Luxe Turbo Mini-Future Short'
-      && ord.lignes[1].validite === 'Continu jusqu’au 2026-02-02',
-      ord.lignes.map(o => o.nom + ' [' + o.validite + ']').join(' · '));
+      && ord.lignes.every(o => o.validite === 'Continu')
+      && ord.lignes[0].dateCreation == null && ord.lignes[1].dateCreation == null
+      && ord.lignes[2].dateCreation === '2026-02-02',
+      ord.lignes.map(o => o.nom + ' [' + o.validite + ' · créé ' + o.dateCreation + ']').join(' · '));
 
     /* Exécutés : même écran, mêmes ancrages. Section vide le jour du relevé. */
     const exeVide = app('Fn_ParserCapture', ['executes', doc.executes]);
@@ -488,6 +554,97 @@ setTimeout(async () => {
       bruit.lignes.length === 2 && bruit.inconnues.length === 1,
       bruit.lignes.length + ' reconnue(s), ' + bruit.inconnues.length + ' signalée(s)');
   } catch (e) { ko('capture unique de l’automate', e.message); }
+
+  /* --- Document v11 : les trois tableaux lus en paysage --- */
+  console.log('\nF ter. Acquisition — document v11 (paysage, cellules)');
+  try {
+    const ev = q => vm.runInContext(q, ctx);
+    const app = (f, a) => JSON.parse(JSON.stringify(ev(f + '(' + a.map(x => JSON.stringify(x)).join(',') + ')')));
+    const doc = app('Fn_DecouperDocument', [CAPTURE_V11]);
+    const meta = app('Fn_ParserMeta', [doc.meta]);
+    verifier('v11 : en-tête lu, comptes de lignes et de pages compris',
+      meta.version === '11' && meta.lignes_positions === '3' && meta.lignes_transactions === '3'
+      && meta.pages_ordres === '1' && meta.transactions_depuis === '2026-09-16' && meta.format_executes === 'transactions-cellules',
+      JSON.stringify(meta));
+
+    const pos = app('Fn_ParserCapture', ['positions', doc.positions]);
+    verifier('v11 positions : 3 lignes, aucune rejetée — dont celle dont le nom commence par « Total »',
+      pos.lignes.length === 3 && pos.inconnues.length === 0,
+      pos.lignes.length + ' reconnue(s) : ' + pos.lignes.map(l => l.nom).join(' | ') + ' · rejetées : ' + pos.inconnues.join(' | '));
+    verifier('v11 positions : ticker à espace et ticker qui commence par des chiffres',
+      pos.lignes.map(l => l.ticker).join(',') === 'DANI B,TTS,1234T'
+      && pos.lignes[0].nom === 'Danica Pharma A/S Class B' && pos.lignes[2].nom === 'ZED Orbis Turbo illimités Put',
+      pos.lignes.map(l => l.nom + ' [' + l.ticker + ']').join(' · '));
+    verifier('v11 positions : cours ancré sur la devise, code devise compris (DKK), PRU lu',
+      JSON.stringify(pos.lignes.map(l => [l.cloture, l.dev, l.pru])) === JSON.stringify([[263.45, 'DKK', 250], [55.4, 'EUR', 52.383333], [1.97, 'EUR', 2.65]]),
+      JSON.stringify(pos.lignes.map(l => [l.cloture, l.dev, l.pru])));
+    const lv = pos.lignes[2].levier;
+    verifier('v11 positions : paramètres du turbo lus en fin de ligne',
+      !!lv && lv.barriere === 87.06 && lv.strike === 89.6477 && lv.parite === 5 && lv.levier === 8.03 && lv.sens === 'short',
+      JSON.stringify(lv));
+    const code = app('Fn_NombresDe', ['ZED Orbis Turbo illimités Put 1234T | € 1,97']);
+    verifier('un nombre COLLÉ à une lettre est un code, pas un montant (« 1234T »)',
+      code.length === 1 && code[0].v === 1.97, JSON.stringify(code));
+    verifier('la ligne de total reste écartée, un nom en « Total… » non',
+      ev('Cst_LignesIgnorees.some(re => re.test("Total € 1 234,00"))') === true
+      && ev('Cst_LignesIgnorees.some(re => re.test("Totalis Énergies SE Totalis Énergies SE TTS | € 55,40"))') === false);
+    verifier('v11 positions : la marge reste lue',
+      !!pos.marge && pos.marge.titres === 10584.18 && pos.marge.cash === -4000 && pos.marge.libre === 1584.18,
+      JSON.stringify(pos.marge));
+
+    const ord = app('Fn_ParserCapture', ['ordres', doc.ordres]);
+    const champs = o => [o.qte, o.limite, o.montantDev, o.dev, o.montantEur == null ? '' : o.montantEur, o.stop == null ? '' : o.stop].join('/');
+    verifier('v11 ordres : 3 lignes en cellules, aucune rejetée',
+      ord.lignes.length === 3 && ord.inconnues.length === 0,
+      ord.lignes.length + ' reconnue(s) · rejetées : ' + ord.inconnues.join(' | '));
+    verifier('v11 ordres : quantité, limite, montant dans SA devise, stop',
+      ord.lignes.map(champs).join(' · ') === '15/42/630/EUR/630/ · 10/120/1200/USD// · 1500/3.1/4650/EUR/4650/1.8',
+      ord.lignes.map(champs).join(' · '));
+    verifier('v11 ordres : sens, identifiant, place, date de création, ouvert / exécuté',
+      ord.lignes.map(o => [o.sens, o.ticker, o.isin, o.place, o.dateCreation, o.ouvert, o.execute].join('/')).join(' · ')
+      === 'achat/ORB/XX0004965148/MIL/2026-10-14/15/0 · achat/NVX/XX0382221051/NDQ/2026-10-13/10/0 · vente/1234T/XX000ZE1ABC4/SCG/2026-10-12/1500/0',
+      ord.lignes.map(o => [o.sens, o.ticker, o.isin, o.place, o.dateCreation, o.ouvert, o.execute].join('/')).join(' · '));
+
+    const tra = app('Fn_ParserCapture', ['executes', doc.executes]);
+    verifier('v11 transactions : 3 exécutions réelles, aucune rejetée',
+      tra.lignes.length === 3 && tra.inconnues.length === 0,
+      tra.lignes.length + ' reconnue(s) · rejetées : ' + tra.inconnues.join(' | '));
+    const t1 = tra.lignes[0] || {}, t2 = tra.lignes[1] || {}, t3 = tra.lignes[2] || {};
+    verifier('v11 transactions : paramètres du turbo RETIRÉS du nom, et lus à part',
+      t1.nom === 'ZED Orbis Turbo illimités Put' && t1.ticker === '1234T' && !!t1.levier && t1.levier.levier === 8.12,
+      t1.nom + ' · ' + JSON.stringify(t1.levier));
+    verifier('v11 transactions : date, heure, quantité, cours, frais et net en euros',
+      t1.date === '2026-10-08' && t1.heure === '10:30:02' && t1.qte === 1500 && t1.cours === 2.65
+      && t1.frais === -0.5 && t1.netEur === -3975.5 && t1.montantEur === -3975,
+      JSON.stringify([t1.date, t1.heure, t1.qte, t1.cours, t1.frais, t1.netEur, t1.montantEur]));
+    verifier('v11 transactions : devise étrangère — montant local, montant en euros, taux, frais AutoFX compris',
+      t2.dev === 'DKK' && t2.cours === 250 && t2.montantDev === -18750 && t2.montantEur === -2508.14
+      && t2.taux === 7.4757 && Math.abs(t2.frais - (-11.17)) < 1e-9 && t2.netEur === -2519.31 && t2.ticker === 'DANI B',
+      JSON.stringify([t2.dev, t2.cours, t2.montantDev, t2.montantEur, t2.taux, t2.frais, t2.netEur, t2.ticker]));
+    verifier('v11 transactions : une vente se lit en valeur absolue, sans ticker si l’écran n’en donne pas',
+      t3.sens === 'vente' && t3.qte === 200 && t3.ticker === null && t3.isin === 'XX000KA54321' && t3.netEur === 5527.5,
+      JSON.stringify([t3.sens, t3.qte, t3.ticker, t3.isin, t3.netEur]));
+    // Une ligne dont le net ne se boucle pas au centime n'entre PAS : elle serait fausse.
+    const faux = app('Fn_ParserCapture', ['executes', doc.executes.split('\n')[1].replace(/€ -2 519,31/g, '€ -2 529,31')]);
+    verifier('v11 transactions : net ≠ montant + frais → ligne refusée, jamais intégrée',
+      faux.lignes.length === 0 && faux.inconnues.length === 1,
+      faux.lignes.length + ' reconnue(s), ' + faux.inconnues.length + ' rejetée(s)');
+    // Liste sur deux pages : DEGIRO affiche « 1 · 2 » sous le tableau, et ces cellules
+    // suivent la dernière ligne. Elle doit rester lue — l'en-tête signale la pagination.
+    const paginee = app('Fn_ParserCapture', ['executes', doc.executes.split('\n')[2] + ' ¦ 1 ¦ 2']);
+    verifier('v11 transactions : numéros de page accolés à la dernière ligne ignorés',
+      paginee.lignes.length === 1 && paginee.lignes[0].netEur === 5527.5,
+      paginee.lignes.length + ' reconnue(s), ' + paginee.inconnues.length + ' rejetée(s)');
+
+    const histo = app('Fn_ParserCapture', ['executes', HISTORIQUE_V10]);
+    verifier('v10 historique : création et suppression d’ordre sont des ÉVÉNEMENTS, pas des exécutions',
+      histo.lignes.length === 0 && histo.evenements.length === 2
+      && histo.evenements.map(e => [e.statut, e.qte, e.limite].join('/')).join(' · ') === 'Création/15/42 · Suppression/15/41',
+      histo.lignes.length + ' exécution(s) · ' + JSON.stringify(histo.evenements.map(e => [e.statut, e.qte, e.limite])));
+    verifier('quantité : « Qté 25 0,00 » donne 25, et « 15 Qté » aussi',
+      app('Fn_QteDe', ['Continu Qté 25 0,00 (0,00%)']).qte === 25 && app('Fn_QteDe', ['Continu 15 Qté Création']).qte === 15,
+      JSON.stringify([app('Fn_QteDe', ['Continu Qté 25 0,00 (0,00%)']), app('Fn_QteDe', ['Continu 15 Qté Création'])]));
+  } catch (e) { ko('document v11', e.message); }
 
   /* --- La chaîne entière : capture → analyse → intégration → validation ---
      Les parseurs peuvent tous être justes et la chaîne rester cassée : c'est le
@@ -1249,6 +1406,84 @@ setTimeout(async () => {
     const fausses = analyser('6 000,00');
     verifier('un écart RÉEL de valeur des titres est toujours signalé',
       fausses.indexOf('ecart_valeur_titres') >= 0, fausses.join(',') || 'aucun écart');
+
+    /* ORDRE EN DOLLARS : son montant n'entre dans les achats en attente qu'une fois
+       converti au taux de l'export — jamais 1 200 « euros » pour 1 200 $. */
+    const tauxUsd = reg.taux.USD;
+    R2('Var_State.positions = []; Var_State.controles = []; Var_State.fx = null;'
+      + 'Var_State._runtime.collages = { positions: { texte: ' + JSON.stringify(capture) + ', ts: Date.now() },'
+      + ' ordres: { texte: ' + JSON.stringify('Autre Inc ¦ Autre Inc ¦ 13/10/2026 18:02:11 ¦ 13/10/2026 18:02:11 ¦ AUT | XX0000000027 ¦ NDQ ¦ Achat ¦ 10 ¦ 10 ¦ $ 120,00 ¦ $ 120,00 ¦ $ — ¦ 1 200,00 ¦ 1 200,00 ¦ 10 ¦ 10 ¦ 0 ¦ 0') + ', ts: Date.now() } };'
+      + 'Var_State._runtime.xlsx = __essaiReg;');
+    const oUsd = JSON.parse(JSON.stringify(R2('Fn_AnalyserEntrees().capOrd.lignes[0]')));
+    verifier('ordre en dollars : montant converti au taux de l’export avant tout calcul en euros',
+      oUsd.dev === 'USD' && oUsd.montantDev === 1200 && oUsd.montantEur === Math.round(1200 * tauxUsd * 100) / 100,
+      JSON.stringify([oUsd.dev, oUsd.montantDev, oUsd.montantEur, tauxUsd]));
+
+    /* POSITION SOLDÉE : ni l'export ni l'écran ne portent plus la ligne, et la vente
+       se lit dans les transactions. Accepter la carte la retire et classe ses
+       événements encore ouverts ; ceux des autres lignes ne bougent pas. */
+    R2('Var_State.controles = []; Var_State.executes = [];'
+      + 'Var_State.positions = [{ id: "XX000KA54321", ticker: null, isin: "XX000KA54321",'
+      + '  detention: { nom: "KAP Veridian Turbo Mini-Future Short", qte: 200, dev: "EUR", cloture: 27, clotureVeille: 27,'
+      + '    valEurExport: 5400, facteurs: [], poche: "COUVERTURE", ts: Date.now() },'
+      + '  produit: { type: "derive", emetteur: "KAP", sousJacent: "Veridian", sens: "short", barriere: 51.3, strike: 58.4,'
+      + '    parite: 10, levier: 1.42, histBarriere: [] }, desk: {}, marche: {}, valo: {}, consensus: {} }];'
+      + 'Var_State.calendrier = [{ id: "essai-soldee", isin: "XX000KA54321", date: "2026-10-20", statut: "prevu", type: "revue", titre: "Revue du turbo" },'
+      + '  { id: "essai-autre", isin: "XX0000000019", date: "2026-10-20", statut: "prevu", type: "revue", titre: "Revue d’Untel" }];'
+      + 'Var_State._runtime.collages = { positions: { texte: ' + JSON.stringify(capture) + ', ts: Date.now() },'
+      + ' executes: { texte: ' + JSON.stringify(CAPTURE_V11.split('\n').filter(l => /^KAP Veridian/.test(l))[0]) + ', ts: Date.now() } };'
+      + 'Var_State._runtime.aucuneTransac = false; Var_State._runtime.xlsx = __essaiReg;');
+    const soldee = JSON.parse(JSON.stringify(R2('Fn_AnalyserEntrees().controles.filter(c => c.kind === "position_soldee")')));
+    verifier('position soldée : signalée quand l’export ET l’écran l’ignorent, avec la vente lue',
+      soldee.length === 1 && soldee[0].id === 'XX000KA54321' && /vente de 200 titres/.test(soldee[0].preuve),
+      soldee.length ? soldee[0].preuve : 'aucune carte');
+    const apres = JSON.parse(JSON.stringify(R2('(() => { const c = Fn_AnalyserEntrees().controles.find(x => x.kind === "position_soldee");'
+      + ' Fn_AppliquerControle(c, true); return { pos: Var_State.positions.map(p => p.id),'
+      + ' cal: Var_State.calendrier.filter(e => /^essai-/.test(e.id)).map(e => e.id + "=" + e.statut).sort() }; })()')));
+    verifier('position soldée acceptée : la ligne sort, ses événements ouverts sont classés',
+      apres.pos.indexOf('XX000KA54321') < 0 && apres.cal.join(',') === 'essai-autre=prevu,essai-soldee=classe',
+      JSON.stringify(apres));
+
+    /* L'EN-TÊTE v11 CONTRÔLE la lecture : lignes livrées contre lignes lues, pages. */
+    const kindsDe = texte => {
+      R2('Var_State.positions = []; Var_State.controles = []; Var_State.ordres = []; Var_State.executes = []; Var_State.fx = null;'
+        + 'Var_State._runtime.collages = {}; Var_State._runtime.xlsx = null;');
+      R2('Fn_PoserCapture(' + JSON.stringify(texte) + ')');
+      return JSON.parse(JSON.stringify(R2('Fn_AnalyserEntrees().controles.map(c => c.kind)')));
+    };
+    const v11ok = kindsDe(CAPTURE_V11);
+    verifier('v11 complet : aucune carte de lecture (lignes, pages, ordres, état de capture)',
+      ['ecart_lecture', 'capture_paginee', 'ecart_ordres', 'capture_degradee', 'ecart_executes'].every(k => v11ok.indexOf(k) < 0),
+      v11ok.join(',') || 'aucune carte');
+    const manque = kindsDe(CAPTURE_V11.replace('lignes_transactions=3', 'lignes_transactions=4'));
+    verifier('v11 : une transaction livrée mais non lue lève « ecart_lecture »',
+      manque.indexOf('ecart_lecture') >= 0, manque.join(',') || 'aucune carte');
+    const pagine = kindsDe(CAPTURE_V11.replace('pages_ordres=1', 'pages_ordres=2'));
+    verifier('v11 : une liste sur plusieurs pages lève « capture_paginee »',
+      pagine.indexOf('capture_paginee') >= 0, pagine.join(',') || 'aucune carte');
+    const v10exe = kindsDe(CAPTURE.replace('historique=aucune transaction sur la periode', 'historique=renseigne')
+      .replace('===VIGIE:EXECUTES===\n', '===VIGIE:EXECUTES===\n' + EXECUTE));
+    verifier('v10 : des « exécutions » alors que l’écran annonçait « 0 Exécuté » lèvent « ecart_executes »',
+      v10exe.indexOf('ecart_executes') >= 0, v10exe.join(',') || 'aucune carte');
+
+    /* INTÉGRATION v11 : les transactions entrent avec devise, frais, net et taux, une
+       seule fois même si la capture est intégrée deux fois ; les ordres avec leur
+       date de création et leur montant dans leur devise. */
+    kindsDe(CAPTURE_V11);
+    R2('Fn_IntegrerEntrees(Fn_AnalyserEntrees()); Fn_IntegrerEntrees(Fn_AnalyserEntrees());');
+    const integ = JSON.parse(JSON.stringify(R2('({ exe: Var_State.executes, ord: Var_State.ordres })')));
+    const dkk = integ.exe.find(x => x.dev === 'DKK') || {};
+    verifier('v11 intégré : 3 transactions, sans doublon après une seconde intégration',
+      integ.exe.length === 3, integ.exe.length + ' transaction(s)');
+    verifier('v11 intégré : la transaction en devise garde montant local, taux, frais et net',
+      dkk.montantDev === -18750 && dkk.taux === 7.4757 && Math.abs(dkk.frais + 11.17) < 1e-9 && dkk.netEur === -2519.31 && dkk.heure === '09:18:12',
+      JSON.stringify(dkk));
+    const oDol = integ.ord.find(o => o.dev === 'USD') || {};
+    verifier('v11 intégré : l’ordre en dollars garde son montant en dollars, sans taux il n’a pas de valeur en euros',
+      integ.ord.length === 3 && oDol.montantDev === 1200 && oDol.montantEur == null && oDol.dateCreation === '2026-10-13',
+      JSON.stringify(integ.ord.map(o => [o.nom, o.dev, o.montantDev, o.montantEur, o.dateCreation])));
+    R2('Var_State.positions = []; Var_State.controles = []; Var_State.ordres = []; Var_State.executes = []; Var_State.calendrier = [];'
+      + 'Var_State._runtime.collages = {}; Var_State._runtime.capture = null; Var_State._runtime.xlsx = null;');
     // Un fichier qui n'est pas une archive doit le dire, sans casser la page.
     ctx.__essaiPdf = { name: 'faux.pdf', size: 5,
       arrayBuffer: () => Promise.resolve(new Uint8Array([37, 80, 68, 70, 45]).buffer) };
@@ -1703,13 +1938,19 @@ setTimeout(async () => {
     R('Fn_ModeAcces = function () { return { mode: "aucun", libelle: "aucun" }; }; Fn_RenderMajPanel();');
     const sansCle = texte('v-maj');
     verifier('sans accès, l’absence de bouton s’explique et rappelle que la clé est par appareil',
-      /masqués/.test(sansCle) && /CET appareil/.test(sansCle) && /jamais synchronis/i.test(sansCle),
+      /masqué/.test(sansCle) && /CET appareil/.test(sansCle) && /jamais synchronis/i.test(sansCle),
       sansCle.slice(-110));
     R('Fn_ModeAcces = function () { return { mode: "cle", libelle: "Clé personnelle" }; }; Fn_RenderVigie();');
 
-    verifier('mais il garde le lancement du desk, et ce qui le justifie',
-      /data-action="maj-lancer"/.test(String(els['v-maj'].innerHTML))
-      && /découverte\(s\) visée\(s\)/.test(maj), maj.slice(0, 80));
+    /* UN SEUL BOUTON : documenter puis analyser. Les deux anciens lancements ne
+       doivent plus apparaître, sinon l'ordre redevient un choix — et le mauvais
+       ordre fait juger le desk sur des données périmées. */
+    const htmlMaj = String(els['v-maj'].innerHTML);
+    verifier('un seul bouton « Documenter et analyser », et ce que fera chaque étape',
+      (htmlMaj.match(/data-action="maj-chaine"/g) || []).length === 1
+      && !/data-action="maj-lancer"/.test(htmlMaj) && !/data-action="maj-enrichir"/.test(htmlMaj)
+      && /Documenter et analyser/.test(maj) && /1\. Documentation/.test(maj) && /2\. Analyse/.test(maj)
+      && /découverte\(s\) visée\(s\)/.test(maj), maj.slice(0, 160));
     R('Var_State.majJournaux = [{ debutTs: Date.now(), passe: "desk", statut: "terminee", coutUsd: 1.5, phases: [] }]; Fn_RenderMajPanel();');
     verifier('et le sort du dernier appel, avec son coût, en UNE ligne',
       /Dernier appel/.test(texte('v-maj')) && /US/.test(texte('v-maj')),
@@ -1907,6 +2148,88 @@ setTimeout(async () => {
       carte.slice(-90));
     R('Var_State.actions = [];');
   } catch (e) { ko('la répartition Vigie / Paramètres', String((e && e.stack) || e)); }
+
+  /* --- DOCUMENTER ET ANALYSER : l'enchaînement, et le modèle qui juge --- */
+  console.log('\nJ bis. Documenter et analyser — enchaînement et modèle du desk');
+  try {
+    const R = q => vm.runInContext(q, ctx);
+    const J = q => JSON.parse(JSON.stringify(R(q)));
+
+    /* Catalogue : tarifs relevés dans la documentation de l'API le 16/10/2026. */
+    const cat = J('Cst_Modeles.map(m => [m.id, m.entreeParM, m.sortieParM, m.cacheLecture])');
+    const de = id => cat.find(m => m[0] === id) || [];
+    verifier('catalogue : Opus 5.5 par défaut, à 4 / 20 $ et relecture du cache à 0,05×',
+      J('Cst_ModeleMAJ') === 'claude-opus-5-5' && de('claude-opus-5-5').join('/') === 'claude-opus-5-5/4/20/0.05',
+      JSON.stringify(de('claude-opus-5-5')));
+    verifier('catalogue : Sonnet 5 et 5.5 à 2 / 10 $ (Sonnet 5 était affiché à 3 / 15 $), Fable 5.1 à 10 / 50 $',
+      de('claude-sonnet-5').slice(1, 3).join('/') === '2/10' && de('claude-sonnet-5-5').slice(1, 3).join('/') === '2/10'
+      && de('claude-fable-5-1').slice(1, 4).join('/') === '10/50/0.025', JSON.stringify(cat));
+    verifier('catalogue : chaque modèle porte son coefficient de relecture du cache',
+      cat.every(m => typeof m[3] === 'number' && m[3] > 0 && m[3] <= 0.1), JSON.stringify(cat.map(m => m[3])));
+
+    /* Coût : la relecture du cache suit le modèle du journal, pas une constante. */
+    R('Var_State.tarifs = Object.assign({}, Var_State.tarifs, { entreeParM: 4, sortieParM: 20 });');
+    const c55 = J('Fn_CoutJournal({ jetonsCacheLecture: 1000000, modele: "claude-opus-5-5" }).cacheLecture');
+    const c5 = J('Fn_CoutJournal({ jetonsCacheLecture: 1000000, modele: "claude-opus-5" }).cacheLecture');
+    verifier('coût : un million de jetons relus coûte 0,20 $ sur Opus 5.5 (0,05×), pas 0,40 $',
+      Math.abs(c55 - 0.2) < 1e-9 && Math.abs(c5 - 0.4) < 1e-9, c55 + ' / ' + c5);
+
+    /* Remise à niveau, une fois : un état réglé sur une génération précédente passe
+       sur Opus 5.5 avec ses tarifs ; un choix postérieur n'est jamais réécrit. */
+    R('Var_State.modeleMAJ = "claude-sonnet-5"; Var_State.modeleRevu = null; Var_State.tarifs.entreeParM = 3; Var_State.tarifs.sortieParM = 15;'
+      + 'Fn_RemettreModeleANiveau({});');
+    const remis = J('({ m: Var_State.modeleMAJ, e: Var_State.tarifs.entreeParM, s: Var_State.tarifs.sortieParM, r: Var_State.modeleRevu })');
+    verifier('un état resté sur Sonnet 5 passe UNE fois sur Opus 5.5, tarifs compris',
+      remis.m === 'claude-opus-5-5' && remis.e === 4 && remis.s === 20 && !!remis.r, JSON.stringify(remis));
+    R('Var_State.modeleMAJ = "claude-opus-5"; Fn_RemettreModeleANiveau({ modeleRevu: "2026-10-16" });');
+    verifier('un choix fait après la remise à niveau n’est jamais réécrit',
+      J('Var_State.modeleMAJ') === 'claude-opus-5', J('Var_State.modeleMAJ'));
+    R('Var_State.modeleMAJ = "claude-sonnet-5"; Var_State.modeleRevu = "2026-10-16"; Fn_RemettreModeleANiveau({ modeleMAJ: "claude-sonnet-5" });');
+    verifier('un état tiré d’un appareil resté sur l’ancien code est remis à niveau à son tour',
+      J('Var_State.modeleMAJ') === 'claude-opus-5-5', J('Var_State.modeleMAJ'));
+
+    /* Effort par passe : le desk juge (high), la documentation collecte (medium). */
+    R('Var_State.effortMAJ = "high"; Var_State.effortEnrichissement = "medium";');
+    verifier('effort par passe : analyse et documentation ont chacune le leur',
+      J('Fn_EffortPasse("desk")') === 'high' && J('Fn_EffortPasse("enrichissement")') === 'medium',
+      J('[Fn_EffortPasse("desk"), Fn_EffortPasse("enrichissement")]').join(' / '));
+    R('Var_State.panneaux.etageDesk = true; Fn_RenderParametres();');
+    const pDesk = String((els['p-contenu'] && els['p-contenu'].innerHTML) || '');
+    verifier('Paramètres : un réglage d’effort pour l’analyse, un pour la documentation',
+      /data-action="effort"/.test(pDesk) && /data-action="effort-enrichissement"/.test(pDesk) && /Claude Opus 5\.5/.test(pDesk),
+      'effort desk ' + /data-action="effort"/.test(pDesk) + ' · effort documentation ' + /data-action="effort-enrichissement"/.test(pDesk));
+
+    /* L'ENCHAÎNEMENT, appel simulé : chaque passe dépose un journal au statut voulu. */
+    const sauve = { appel: R('Fn_LancerAppel'), lignes: R('Fn_LignesAEnrichir'), agendas: R('Fn_AgendasAEnrichir'), acces: R('Fn_ModeAcces') };
+    const chaine = (aDocumenter, statutDoc, annuler) => {
+      R('__appels = []; Var_State.majJournaux = []; Var_State._runtime.chaine = null; Var_State._runtime.enCours = false;'
+        + 'Fn_ModeAcces = function () { return { mode: "byok", libelle: "clé" }; };'
+        + 'Fn_LignesAEnrichir = function () { return ' + (aDocumenter ? '[{ id: "L1" }]' : '[]') + '; };'
+        + 'Fn_AgendasAEnrichir = function () { return []; };'
+        + 'Fn_LancerAppel = async function (passe) { __appels.push(passe);'
+        + (annuler ? ' if (passe === "enrichissement") Var_State._runtime.chaine.annulee = true;' : '')
+        + ' Var_State.majJournaux.unshift({ passe: passe, statut: passe === "enrichissement" ? ' + JSON.stringify(statutDoc) + ' : "terminee", phases: [] }); };');
+      return R('Fn_LancerChaine()').then(() => J('({ a: __appels, c: Var_State._runtime.chaine })'));
+    };
+    const ok1 = await chaine(true, 'terminee');
+    verifier('documentation PUIS analyse, dans cet ordre, et la chaîne se referme',
+      ok1.a.join(',') === 'enrichissement,desk' && ok1.c === null, ok1.a.join(','));
+    const ok2 = await chaine(false, 'terminee');
+    verifier('rien à documenter : l’étape est sautée, l’analyse part seule',
+      ok2.a.join(',') === 'desk', ok2.a.join(','));
+    const ok3 = await chaine(true, 'echec');
+    verifier('documentation en échec : l’analyse ne part PAS sur des données qu’on sait périmées',
+      ok3.a.join(',') === 'enrichissement', ok3.a.join(','));
+    const ok4 = await chaine(true, 'partielle');
+    verifier('documentation tronquée : ce qu’elle a rapporté est intégré, l’analyse suit',
+      ok4.a.join(',') === 'enrichissement,desk', ok4.a.join(','));
+    const ok5 = await chaine(true, 'interrompue', true);
+    verifier('annulation pendant la documentation : rien ne part ensuite',
+      ok5.a.join(',') === 'enrichissement', ok5.a.join(','));
+    ctx.__sauve = sauve;
+    R('Fn_LancerAppel = __sauve.appel; Fn_LignesAEnrichir = __sauve.lignes; Fn_AgendasAEnrichir = __sauve.agendas; Fn_ModeAcces = __sauve.acces;'
+      + 'Var_State.majJournaux = []; Var_State._runtime.chaine = null;');
+  } catch (e) { ko('documenter et analyser', String((e && e.stack) || e)); }
 
   console.log('\nI. Aide des commandes et codes d’erreur');
   try {

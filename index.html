@@ -441,31 +441,46 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202608271939';
+const Cst_Version = 'vigie-202610160640';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
-const Cst_ModeleMAJ   = 'claude-opus-5'; // défaut ; le modèle réellement appelé est Fn_ModeleMAJ()
-const Cst_EffortMAJ   = 'high';          // défaut ; l'effort réellement demandé est Fn_EffortMAJ()
+const Cst_ModeleMAJ   = 'claude-opus-5-5'; // défaut ; le modèle réellement appelé est Fn_ModeleMAJ()
+const Cst_EffortMAJ   = 'high';          // défaut du DESK ; l'effort réellement demandé est Fn_EffortPasse()
+const Cst_EffortEnrichissement = 'medium'; // défaut de la DOCUMENTATION : de la collecte, pas du jugement
 // CATALOGUE DES MODÈLES. Les tarifs voyagent AVEC le modèle : sans cela, changer
 // de modèle rendait l'estimation de coût fausse sans prévenir. Haiku est
 // volontairement absent : son plafond de sortie (64 000 jetons) est inférieur au
-// JSON produit ici.
+// JSON produit ici. Tarifs relevés le 16/10/2026 dans la documentation de l'API.
+// « cacheLecture » est le coefficient de RELECTURE du cache, propre à chaque
+// modèle : 0,05× sur Opus 5.5, 0,025× sur Fable 5.1. Un coefficient unique de
+// 0,1× surestimait le coût de chaque reprise dès qu'on quittait Opus 5.
 const Cst_Modeles = [
-  { id: 'claude-opus-5', nom: 'Claude Opus 5', entreeParM: 5, sortieParM: 25,
-    note: 'Le plus capable de sa gamme. Référence de qualité pour le jugement de desk, qui est désormais l’essentiel de ce que le modèle produit.' },
-  { id: 'claude-sonnet-5', nom: 'Claude Sonnet 5', entreeParM: 3, sortieParM: 15,
-    note: 'Environ 40 % moins cher qu’Opus 5. L’écart de qualité se voit surtout sur les raisonnements longs — donc sur les textes d’arbitrage et les débriefs.' },
-  { id: 'claude-opus-4-8', nom: 'Claude Opus 4.8', entreeParM: 5, sortieParM: 25,
-    note: 'Génération précédente d’Opus, même tarif. Utile seulement comme repli si Opus 5 pose problème.' }
+  { id: 'claude-opus-5-5', nom: 'Claude Opus 5.5', entreeParM: 4, sortieParM: 20, cacheLecture: 0.05,
+    note: 'Recommandé pour le desk. Analyste plus fiable qu’Opus 5 — il avance nettement moins de chiffres que ses sources ne portent — et 20 % moins cher (4 / 20 $ contre 5 / 25 $).' },
+  { id: 'claude-fable-5-1', nom: 'Claude Fable 5.1', entreeParM: 10, sortieParM: 50, cacheLecture: 0.025,
+    note: 'Le plus capable, deux fois et demie le prix d’Opus 5.5. Pour une journée d’arbitrage lourd ; l’éditeur exige une conservation des données de 30 jours.' },
+  { id: 'claude-sonnet-5-5', nom: 'Claude Sonnet 5.5', entreeParM: 2, sortieParM: 10, cacheLecture: 0.1,
+    note: 'Moitié prix d’Opus 5.5. Suffisant pour documenter ; plus faible sur les raisonnements longs — textes d’arbitrage et débriefs.' },
+  { id: 'claude-opus-5', nom: 'Claude Opus 5', entreeParM: 5, sortieParM: 25, cacheLecture: 0.1,
+    note: 'Opus précédent, plus cher qu’Opus 5.5 et moins précis. Repli seulement.' },
+  { id: 'claude-sonnet-5', nom: 'Claude Sonnet 5', entreeParM: 2, sortieParM: 10, cacheLecture: 0.1,
+    note: 'Sonnet précédent, même tarif que Sonnet 5.5. Repli seulement.' },
+  { id: 'claude-opus-4-8', nom: 'Claude Opus 4.8', entreeParM: 5, sortieParM: 25, cacheLecture: 0.1,
+    note: 'Ancienne génération d’Opus. Repli seulement.' }
 ];
+// Coefficient de relecture du cache pour un modèle donné (celui du journal, sinon celui choisi).
+function Fn_CoefCacheLecture(id) {
+  const m = Cst_Modeles.find(x => x.id === id) || Cst_Modeles.find(x => x.id === Var_State.modeleMAJ);
+  return m && m.cacheLecture != null ? m.cacheLecture : Cst_CoefCacheLecture;
+}
 // EFFORT : profondeur de réflexion ET nombre d'appels d'outils. Levier de coût le
 // plus rentable après le cache, parce qu'il agit sur la SORTIE (5× plus chère que
 // l'entrée) et sur le nombre d'aller-retours.
 const Cst_Efforts = [
-  { id: 'high', nom: 'high — équilibré', note: 'Défaut de l’API et réglage recommandé ici : le desk ne collecte plus, il juge — la profondeur sert le texte, pas la fouille.' },
+  { id: 'high', nom: 'high — approfondi', note: 'Réglage recommandé pour le desk : il ne collecte plus, il juge — la profondeur sert le texte, pas la fouille. Sur Opus 5.5, high réfléchit davantage qu’Opus 5 au même niveau.' },
   { id: 'xhigh', nom: 'xhigh — maximal utile', note: 'Pour les journées à arbitrage lourd (plusieurs événements échus à débriefer). Le plus coûteux en jetons de sortie.' },
-  { id: 'medium', nom: 'medium — économe', note: 'Réduit nettement la dépense ; le modèle cadre son travail au strict demandé.' },
+  { id: 'medium', nom: 'medium — équilibré', note: 'Défaut de l’API sur Opus 5.5, et réglage de la documentation : sur ce modèle, medium dépasse déjà Opus 5 en high sur le travail d’analyse.' },
   { id: 'low', nom: 'low — minimal', note: 'Pour une passe d’enrichissement seule, où le travail est de la collecte et non du jugement.' },
   { id: 'max', nom: 'max — sans retenue', note: 'Plafond de capacité, rendements décroissants et surcoût marqué. À réserver aux cas difficiles.' }
 ];
@@ -745,6 +760,8 @@ const Var_State = {
   tarifs: Object.assign({}, Cst_TarifsDefaut),
   modeleMAJ: Cst_ModeleMAJ,
   effortMAJ: Cst_EffortMAJ,
+  effortEnrichissement: Cst_EffortEnrichissement,
+  modeleRevu: null,   // date de la dernière remise à niveau automatique du modèle (Fn_RemettreModeleANiveau)
   sitesRecherche: [], // domaines autorisés pour la recherche web ; vide = recherche libre
   // Domaines que l'outil de recherche REFUSE (leur éditeur bloque les agents).
   // Appris des erreurs 400, jamais codés en dur : la liste de l'API change sans préavis.
@@ -812,7 +829,7 @@ function Fn_PersisterSansHorodatage() {
 const Cst_ClesEtat = ['onglet', 'captures', 'fx', 'marge', 'positions', 'ordres', 'executes',
   'calendrier', 'decouvertes', 'actions', 'controles', 'instruments', 'majJournaux',
   'filtreTag', 'filtreJour', 'filtreDecouvertes', 'derniereMaj', 'derniereEnrichissement',
-  'freqRappel', 'sitesRecherche', 'sitesBloques', 'modeleMAJ', 'effortMAJ', 'razTs'];
+  'freqRappel', 'sitesRecherche', 'sitesBloques', 'modeleMAJ', 'effortMAJ', 'effortEnrichissement', 'modeleRevu', 'razTs'];
 const Cst_ClesEtatObjet = ['theses', 'agenda'];
 const Cst_ClesEtatFusion = ['seuils', 'tarifs', 'cumulApi', 'panneaux'];
 
@@ -980,6 +997,26 @@ function Fn_AppliquerEtat(s) {
     const d = p && p.detention;
     if (d && d.valEurExport === undefined) d.valEurExport = (d.valEur === undefined ? null : d.valEur);
   });
+  Fn_RemettreModeleANiveau(s);
+}
+/* REMISE À NIVEAU DU MODÈLE, UNE FOIS. L'état synchronisé gardait le modèle choisi
+   le 29/09 (Sonnet 5, au tarif erroné de 3 / 15 $) : chaque desk partait donc sur
+   un modèle plus faible que celui recommandé, et rien ne le disait. Opus 5.5 est à
+   la fois plus fiable en analyse et moins cher qu'Opus 5 : un état réglé sur une
+   génération précédente y passe une fois, tarifs compris, et la date en est gardée
+   — un choix fait APRÈS dans Paramètres n'est jamais réécrit. La marque est lue sur
+   l'état APPLIQUÉ : un état tiré d'un appareil resté sur l'ancien code ne la porte
+   pas, et ramènerait sinon l'ancien modèle par-dessus la remise à niveau locale. */
+const Cst_ModelesAnterieurs = ['claude-opus-5', 'claude-sonnet-5', 'claude-opus-4-8'];
+function Fn_RemettreModeleANiveau(s) {
+  if (s && s.modeleRevu) return;
+  if (!Var_State.modeleMAJ || Cst_ModelesAnterieurs.indexOf(Var_State.modeleMAJ) >= 0) {
+    const m = Cst_Modeles.find(x => x.id === Cst_ModeleMAJ);
+    Var_State.modeleMAJ = m.id;
+    Var_State.tarifs = Object.assign({}, Var_State.tarifs, { entreeParM: m.entreeParM, sortieParM: m.sortieParM });
+  }
+  if (!Cst_Efforts.some(x => x.id === Var_State.effortEnrichissement)) Var_State.effortEnrichissement = Cst_EffortEnrichissement;
+  Var_State.modeleRevu = '2026-10-16';
 }
 async function Fn_Load() {
   // Une seule source d'état local : le stockage de CE navigateur. Le partage entre
@@ -1163,6 +1200,15 @@ function Fn_EffortMAJ() {
   const e = Cst_Efforts.find(x => x.id === Var_State.effortMAJ);
   return e ? e.id : Cst_EffortMAJ;
 }
+/* UN EFFORT PAR PASSE. Le même réglage servait aux deux : régler le desk en
+   « high » faisait payer la même profondeur à la documentation, qui collecte des
+   multiples et des dates sans rien juger ; le baisser pour elle appauvrissait le
+   jugement. Le desk garde l'effort choisi, la documentation a le sien. */
+function Fn_EffortEnrichissement() {
+  const e = Cst_Efforts.find(x => x.id === Var_State.effortEnrichissement);
+  return e ? e.id : Cst_EffortEnrichissement;
+}
+function Fn_EffortPasse(passe) { return passe === 'enrichissement' ? Fn_EffortEnrichissement() : Fn_EffortMAJ(); }
 /* BILAN FINANCIER D'UN APPEL — cinq postes, et non trois : l'entrée plein tarif,
    l'ÉCRITURE du cache (majorée), sa RELECTURE (à 0,1×), la sortie, les recherches.
    Ignorer les deux postes de cache rendait le coût affiché faux dès que le cache
@@ -1178,7 +1224,7 @@ function Fn_CoutJournal(journal) {
   return {
     entree: entree / 1e6 * pe,
     cacheEcriture: cw / 1e6 * pe * Cst_CoefCacheEcriture,
-    cacheLecture: cr / 1e6 * pe * Cst_CoefCacheLecture,
+    cacheLecture: cr / 1e6 * pe * Fn_CoefCacheLecture(journal.modele),
     sortie: sortie / 1e6 * ps,
     // Les LECTURES de page ne sont pas facturées à l'appel : leur coût est déjà
     // compté dans les jetons d'entrée. Seules les recherches le sont.
@@ -1526,7 +1572,7 @@ function Fn_TexteDiagnostic(journal) {
   ligne('Passe', journal && journal.passe);
   ligne('Modèle demandé', Fn_ModeleMAJ());
   ligne('Modèle ayant répondu', journal && journal.modele);
-  ligne('Effort', Fn_EffortMAJ());
+  ligne('Effort', journal ? Fn_EffortPasse(journal.passe) : Fn_EffortMAJ());
   ligne('Statut', journal && journal.statut);
   ligne('stop_reason', journal && journal.stopReason);
   ligne('Réponse tronquée', journal && journal.tronque ? 'oui' : 'non');
@@ -2181,6 +2227,7 @@ const Cst_AideActions = {
   'acq-integrer': { t: 'Analyser les entrées', d: 'Lit les collages et l’export, apparie les deux sources, recalcule toutes les grandeurs et produit une carte « à valider » par écart détecté. Ne coûte rien : aucun appel au modèle n’est émis. Rien n’est intégré sans votre validation.' },
   'acq-vider': { t: 'Vider les entrées du jour', d: 'Efface les collages et l’export de cet appareil — deux appuis pour confirmer. L’état du portefeuille déjà validé reste intact ; seules les sources du jour disparaissent.' },
   'maj-notrans': { t: 'Aucune transaction récente', d: 'Déclare qu’aucun ordre n’a été exécuté depuis le dernier relevé. La zone de collage correspondante disparaît et rien n’est transmis. À décocher dès que vous avez passé un ordre, sinon le contrôle de cohérence sera faussé.' },
+  'maj-chaine': { t: 'Documenter et analyser', d: 'Un seul geste, deux étapes enchaînées. 1. Documentation : collecte les multiples, le consensus et les agendas des seules lignes dont les données sont périmées — sautée si tout est frais. 2. Analyse : envoie au modèle le tableau déjà calculé et lui demande le jugement de desk — textes d’événements, débriefs, découvertes. Une documentation annulée ou en échec arrête la chaîne. Appels payants (jetons et recherches web) ; gardez l’onglet ouvert, une requête ne survit pas au rechargement.' },
   'maj-lancer': { t: 'Lancer la mise à jour', d: 'Envoie au modèle le tableau déjà calculé et lui demande le jugement : textes d’événements, débriefs des événements échus, découvertes. L’appel consomme des jetons facturés et des recherches web payantes. Gardez l’onglet ouvert : une requête ne survit pas au rechargement.' },
   'maj-enrichir': { t: 'Lancer la passe d’enrichissement', d: 'Collecte les multiples, le consensus et les agendas des seules lignes lourdes dont les données sont périmées. Appel payant, à lancer une fois par semaine : ces données ne bougent pas d’un jour à l’autre. Aucun texte d’expertise n’est produit.' },
   'maj-annuler': { t: 'Annuler l’appel en cours', d: 'Interrompt l’appel au modèle. Les jetons déjà consommés restent facturés et sont comptés dans le bilan — une annulation ne rembourse rien.' },
@@ -2220,7 +2267,8 @@ const Cst_AideActions = {
   'seuil': { t: 'Modifier ce seuil', d: 'Change la limite à partir de laquelle l’indicateur passe en ambre ou en rouge. L’effet est immédiat sur les couleurs et sur le score de discipline, et suit sur vos autres appareils.' },
   'seuils-reset': { t: 'Seuils par défaut', d: 'Rétablit tous les seuils d’origine — deux appuis pour confirmer. Vos réglages personnalisés sont perdus et le score de discipline peut changer aussitôt.' },
   'modele': { t: 'Modèle appelé', d: 'Change le modèle qui réalise le jugement, et réaligne aussitôt les tarifs d’estimation. Sans effet sur les données déjà intégrées ; le modèle réellement utilisé est enregistré dans chaque journal d’appel.' },
-  'effort': { t: 'Effort du modèle', d: 'Règle la profondeur de réflexion et le nombre d’appels d’outils que le modèle s’autorise. Agit surtout sur les jetons de sortie, cinq fois plus chers que ceux d’entrée : c’est le levier de coût le plus efficace après le cache.' },
+  'effort': { t: 'Effort du modèle — analyse', d: 'Règle la profondeur de réflexion et le nombre d’appels d’outils que le modèle s’autorise. Agit surtout sur les jetons de sortie, cinq fois plus chers que ceux d’entrée : c’est le levier de coût le plus efficace après le cache.' },
+  'effort-enrichissement': { t: 'Effort du modèle — documentation', d: 'Profondeur de réflexion de la PREMIÈRE étape du bouton « Documenter et analyser » : la collecte des multiples, du consensus et des agendas. De la recherche, pas du jugement — « medium » suffit le plus souvent, et laisse l’analyse garder son propre effort.' },
   'tarif': { t: 'Tarif d’estimation', d: 'Prix unitaire servant à estimer le coût des appels. N’influe que sur l’estimation affichée ici, jamais sur la facturation réelle, qui se lit sur console.anthropic.com.' },
   'cumul-raz': { t: 'Remettre le cumul à zéro', d: 'Efface le compteur local de consommation — deux appuis pour confirmer. N’efface rien côté fournisseur : la facturation réelle reste inchangée.' },
   'site-recherche': { t: 'Autoriser ce site', d: 'Attention : dès qu’un seul site est coché, les recherches se limitent aux sites cochés et tout le reste du web devient inatteignable — sites d’émetteurs et communiqués compris. Aucun site coché = recherche libre.' },
@@ -2817,14 +2865,17 @@ const Cst_AncresMarge = [
    table à compléter quand un écran du courtier change de libellé — et le seul
    endroit à toucher. */
 const Cst_LignesIgnorees = [
-  /derni[èe]re\s+mise\s+[àa]\s+jour/i, /^portefeuille$/i, /^positions?$/i, /^ordres?/i,
-  /^transactions?/i, /^total/i, /^produit\b/i, /^quantit[ée]/i, /^valeur\b/i, /^sous-?total/i,
-  /^actualis[ée]/i, /^solde/i, /^r[ée]sum[ée]/i, /^mon\s+portefeuille/i,
+  // Chaque intitulé est borné par une fin de mot : « ^total » sans borne écartait
+  // aussi toute ligne de position dont le NOM commence par « Total » : la ligne
+  // aurait disparu de la capture sans un mot.
+  /derni[èe]re\s+mise\s+[àa]\s+jour/i, /^portefeuille$/i, /^positions?$/i, /^ordres?\b/i,
+  /^transactions?\b/i, /^total\b/i, /^produit\b/i, /^quantit[ée](?![A-Za-zÀ-ÿ])/i, /^valeur\b/i, /^sous-?total\b/i,
+  /^actualis[ée]/i, /^solde\b/i, /^r[ée]sum[ée](?![A-Za-zÀ-ÿ])/i, /^mon\s+portefeuille/i,
   // Bornes et en-tête d'un document sectionné collé tel quel dans une seule
   // zone : elles ne portent aucune donnée de portefeuille et n'ont rien à faire
   // en « ligne non reconnue ». Le découpage les retire déjà — ceci n'est que le
   // filet pour un collage à l'ancienne.
-  /^===VIGIE:/, /^(version|capture|statut|maj_degiro|noeuds_|ordres_|historique|valeur_gage|facilite_credit|duree_s)\w*=/i
+  /^===VIGIE:/, /^(version|capture|statut|maj_degiro|noeuds_|ordres_|historique|valeur_gage|facilite_credit|duree_s|format_|lignes_|pages_|transactions_)\w*=/i
 ];
 // Heures et dates ne sont pas des montants : elles sont neutralisées AVANT la
 // lecture des nombres, en préservant les positions dans la ligne (remplacement
@@ -2897,11 +2948,16 @@ const Cst_ReSymboleDevise = /[€$£¥]/;
    « 27.988,25 » (vingt-sept mille) de « 653.3671 » (une barrière à quatre
    décimales) : sans lui, la seconde devenait 653 367, mille fois trop. */
 const Cst_ReNombre = /-?\d{1,3}(?:[   .]\d{3})+(?!\d)(?:[.,]\d+)?|-?\d+(?:[.,]\d+)?/g;
+/* Un nombre COLLÉ à une lettre n'est pas un montant : c'est un code. Le ticker
+   « 1234T » d'un turbo se lisait 1 234 et devenait son cours du jour — la ligne
+   valorisée mille fois trop. Relevé sur six captures réelles. */
+const Cst_ReLettre = /[A-Za-zÀ-ÿ]/;
 function Fn_NombresDe(ligne) {
   const res = [];
   Cst_ReNombre.lastIndex = 0;
   let m;
   while ((m = Cst_ReNombre.exec(ligne)) !== null) {
+    if (Cst_ReLettre.test(ligne.charAt(m.index - 1)) || Cst_ReLettre.test(ligne.charAt(m.index + m[0].length))) continue;
     const v = Fn_NombreFr(m[0]);
     if (v != null) res.push({ v, i: m.index, brut: m[0] });
   }
@@ -2966,9 +3022,23 @@ function Fn_NomEtTicker(segment) {
   const iPipe = s.lastIndexOf('|');
   if (iPipe >= 0) {
     const avant = s.slice(0, iPipe).trim();
-    const m = /(?:^|\s)([A-Z][A-Z0-9.\-]{0,6})$/.exec(avant);
-    if (m) { ticker = m[1]; s = avant.slice(0, avant.length - m[1].length).trim(); }
-    else s = avant;
+    /* Le ticker est ce qui SUIT le nom écrit deux fois. Le chercher comme « dernier
+       mot en majuscules » échouait sur deux formes réelles : un ticker à espace
+       (« ABCD B » donnait « B » et laissait « ABCD » dans le nom) et un ticker qui
+       commence par des chiffres (« 1234T » n'était pas reconnu du tout). */
+    const mots = avant.split(' ');
+    let lu = false;
+    for (let k = Math.floor(mots.length / 2); k >= 1; k--) {
+      if (mots.slice(0, k).join(' ').toUpperCase() !== mots.slice(k, 2 * k).join(' ').toUpperCase()) continue;
+      const reste = mots.slice(2 * k).join(' ');
+      if (reste && /^[A-Z0-9][A-Z0-9.\- ]{0,9}$/.test(reste)) { ticker = reste; s = mots.slice(0, 2 * k).join(' '); lu = true; }
+      break;
+    }
+    if (!lu) {
+      const m = /(?:^|\s)([A-Z0-9][A-Z0-9.\-]{0,6})$/.exec(avant);
+      if (m && /[A-Z]/.test(m[1])) { ticker = m[1]; s = avant.slice(0, avant.length - m[1].length).trim(); }
+      else s = avant;
+    }
   }
   s = s.replace(/[|·;,€$£¥\s]+$/, '').trim();
   return { nom: Fn_DedoublerNom(s), ticker: ticker || null };
@@ -3024,7 +3094,7 @@ function Fn_ExtraireParamsLevier(nom) {
    Renvoie toujours { type, ts, lignes, inconnues, marge, meta, brut } : jamais
    d'exception, jamais de rejet global. */
 function Fn_ParserCapture(type, texte) {
-  const res = { type, ts: Date.now(), lignes: [], inconnues: [], marge: null, meta: null, brut: String(texte || '') };
+  const res = { type, ts: Date.now(), lignes: [], inconnues: [], evenements: [], marge: null, meta: null, brut: String(texte || '') };
   if (type === 'meta') { res.meta = Fn_ParserMeta(texte); return res; }
   const lignes = Fn_LignesUtiles(texte);
   if (!lignes.length) return res;
@@ -3073,6 +3143,17 @@ function Fn_PruDeLigne(nb) {
   }
   return null;
 }
+const Cst_ReMarqueDevise = /([€$£¥]|\b(?:EUR|USD|GBP|CHF|JPY|SEK|NOK|DKK|CAD|AUD|HKD)\b)[\s  ]*(?=-?\d)/g;
+function Fn_IndexCours(ligne, apres, debut) {
+  Cst_ReMarqueDevise.lastIndex = debut || 0;
+  let m;
+  while ((m = Cst_ReMarqueDevise.exec(ligne)) !== null) {
+    const fin = m.index + m[0].length;
+    const k = apres.findIndex(n => n.i === fin);
+    if (k >= 0) return k;
+  }
+  return 0;
+}
 function Fn_ParserPositions(lignes, res) {
   const prisMarge = {};
   lignes.forEach((l, i) => {
@@ -3104,6 +3185,11 @@ function Fn_ParserPositions(lignes, res) {
     const finNom = apres[0].i;
     const nt = Fn_NomEtTicker(l.slice(0, finNom));
     if (!nt.nom || nt.nom.length < 3) { res.inconnues.push(l); return; }
+    // LE COURS EST LE NOMBRE QUI SUIT LA PREMIÈRE DEVISE de la ligne, symbole ou
+    // code. Le « premier nombre après le nom » ne vaut que si l'automate a remis le
+    // cours en tête ; une devise écrite en code (« DKK 255,95 ») lui échappait, et la
+    // QUANTITÉ prenait la place du cours. Repli sur le premier nombre sans devise.
+    const depuisCours = apres.slice(Fn_IndexCours(propre, apres, mNom.index));
     // Les paramètres du produit à levier se lisent sur la LIGNE ENTIÈRE : l'écran
     // les rejette en fin de ligne, loin du nom. Le nom, lui, reste le nom.
     const levier = Fn_ExtraireParamsLevier(l);
@@ -3118,8 +3204,8 @@ function Fn_ParserPositions(lignes, res) {
       // nombre après le nom — codes et paramètres masqués — est le cours du jour.
       // Les suivants sont conservés bruts : l'export fait foi sur la quantité et
       // le montant, on ne devine pas.
-      cloture: apres[0].v, levier: levier,
-      pru: Fn_PruDeLigne(apres.map(x => x.v)),
+      cloture: depuisCours[0].v, levier: levier,
+      pru: Fn_PruDeLigne(depuisCours.map(x => x.v)),
       nombres: apres.map(n => n.v), brut: l
     });
   });
@@ -3135,9 +3221,39 @@ function Fn_ParserPositions(lignes, res) {
      pas ramasser la variation du jour qui traîne en fin de ligne ;
    - le nom est ce qui PRÉCÈDE le mot d'ordre, jamais la ligne vidée de ses
      chiffres — le vidage laissait les parasites de colonne dans le libellé. */
-const Cst_ReQte = /\bQt[ée]s?\s*:?\s*(-?[\d   .,]+)/i;
-const Cst_ReAncreDevise = /([€$£¥]|\b(?:EUR|USD|GBP|CHF|JPY|SEK|NOK|DKK|CAD|AUD|HKD)\b)\s*(-?[\d   .,]+)/;
+/* LA QUANTITÉ, sous ses deux formes réelles : « Qté 25 » (ordres en cours) et
+   « 25 Qté » (historique). Elle s'arrête au PREMIER nombre : « Qté 25  0,00 » se
+   lisait 250, parce que la variation du jour qui suit n'a pas de signe quand elle
+   est nulle et se collait à la quantité (capture réelle du 15/09/26). Un groupe de
+   milliers fait exactement trois chiffres, sans décimale ni chiffre derrière. */
+const Cst_ReQte = /\bQt[ée]s?\s*:?\s*(-?\d{1,3}(?:[\s.]\d{3}(?![\d,.]))*)(?![\d,.])/i;
+const Cst_ReQteApres = /(-?\d{1,3}(?:[\s.]\d{3}(?![\d,.]))*)\s+Qt[ée]s?(?![A-Za-zÀ-ÿ])/i;
+function Fn_QteDe(s) {
+  const m = Cst_ReQte.exec(s) || Cst_ReQteApres.exec(s);
+  return m ? { qte: Number(m[1].replace(/[^\d-]/g, '')), index: m.index } : { qte: null, index: Infinity };
+}
+const Cst_ReAncreDevise = /([€$£¥]|\b(?:EUR|USD|GBP|CHF|JPY|SEK|NOK|DKK|CAD|AUD|HKD)\b)\s*(-?[\d\s.,]+)/;
 const Cst_ReValidite = /\b(continu|jour|gtc)\b/i;
+/* STATUT D'UNE LIGNE D'HISTORIQUE. L'onglet Ordres > Historique ne liste pas des
+   exécutions mais des ÉVÉNEMENTS d'ordre : création, modification, suppression.
+   Sur trois mois réels il n'en contenait aucune autre ; les lire comme des
+   exécutions inventait des achats (« Untel exécuté à 36 » : c'était la
+   création de l'ordre, modifié ensuite à 35) et une vente qui était une
+   suppression. Le mot de statut est lu, et seule une exécution en est une. */
+const Cst_ReStatutOrdre = /(?:^|[^A-Za-zÀ-ÿ])(Création|Modification|Suppression|Annulation|Annulé|Rejeté|Expiré|Exécution partielle|Exécutée?|Exécution)(?![A-Za-zÀ-ÿ])/i;
+const Cst_CodesDevise = 'EUR|USD|GBP|CHF|JPY|SEK|NOK|DKK|CAD|AUD|HKD';
+const Cst_ReMontantDevise = new RegExp('^(€|\\$|£|¥|' + Cst_CodesDevise + ')\\s*(-?[\\d\\s.,]*\\d|—)$');
+const Cst_ReDateHeure = /^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}:\d{2}(?::\d{2})?))?$/;
+function Fn_DevDe(marque) { return Cst_SymbolesDevise[marque] || marque || null; }
+function Fn_MontantDevise(x) {
+  const m = Cst_ReMontantDevise.exec(String(x || '').trim());
+  if (!m) return null;
+  return { dev: Fn_DevDe(m[1]), v: m[2] === '—' ? null : Fn_NombreFr(m[2]) };
+}
+function Fn_DateHeureDe(x) {
+  const m = Cst_ReDateHeure.exec(String(x || '').trim());
+  return m ? { date: m[3] + '-' + m[2] + '-' + m[1], heure: m[4] || null } : null;
+}
 function Fn_LireOrdre(l) {
   const s = Fn_MasquerCodes(Fn_SansHorodatage(l));
   const mA = Cst_MotsAchat.exec(l), mV = Cst_MotsVente.exec(l);
@@ -3157,64 +3273,166 @@ function Fn_LireOrdre(l) {
     nt = Fn_NomEtTicker(l.slice(finSens, apres.length ? apres[0].i : l.length));
   }
   if (!nt.nom || nt.nom.length < 3) return null;
-  const mQ = Cst_ReQte.exec(s);
+  const q = Fn_QteDe(s);
   const mVal = Cst_ReValidite.exec(s);
   const mL = Cst_ReAncreDevise.exec(s);
-  const borne = Math.min(mQ ? mQ.index : Infinity, mVal ? mVal.index : Infinity, s.length);
-  let limite = null, montantEur = null;
+  const borne = Math.min(q.index, mVal ? mVal.index : Infinity, s.length);
+  let limite = null, montant = null;
   if (mL) {
     limite = Fn_NombreFr(mL[2]);
     const suite = nbs.filter(n => n.i >= mL.index + mL[0].length && n.i < borne);
-    montantEur = suite.length ? suite[0].v : null;
+    montant = suite.length ? suite[0].v : null;
   } else {
     // Aucune ancre de devise : repli sur l'ORDRE RÉEL de l'écran (limite puis
     // montant), borné de la même façon. Jamais l'inverse.
     const avant = nbs.filter(n => n.i > iSens && n.i < borne);
     limite = avant.length ? avant[0].v : null;
-    montantEur = avant.length > 1 ? avant[1].v : null;
+    montant = avant.length > 1 ? avant[1].v : null;
   }
-  /* SUR LA LIGNE BRUTE, ET C'EST VOULU : Fn_SansHorodatage BLANCHIT les dates,
-     pour qu'aucun de leurs chiffres ne soit lu comme une quantité ou un cours.
-     La date de validité doit donc se relire sur l'original — seul champ dans ce
-     cas, et le neutraliser lui aussi le rendrait tout simplement introuvable. */
-  const mDate = /(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})/.exec(l);
+  /* SUR LA LIGNE BRUTE, ET C'EST VOULU : Fn_SansHorodatage BLANCHIT les dates.
+     Une date en FIN de ligne n'appartient pas à cette ligne : l'écran l'écrit en
+     EN-TÊTE de l'ordre suivant (date de création), et la découpe en lignes la colle
+     à la ligne d'avant. Lue comme une échéance, elle annonçait « Continu jusqu'au
+     07/08/2026 » sur un ordre créé le 24/08. Fn_ParserOrdres la reporte. */
+  const mDate = /(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})\s*$/.exec(l);
   const p2 = n => (String(n).length < 2 ? '0' : '') + n;
   const mIsin = Cst_ReIsin.exec(l);
+  const st = Cst_ReStatutOrdre.exec(l);
   return {
     sens: achat ? 'achat' : 'vente', nom: nt.nom, ticker: nt.ticker,
     isin: mIsin ? mIsin[1] : null,
-    qte: mQ ? Fn_NombreFr(mQ[1]) : null,
-    limite: limite, montantEur: montantEur,
+    qte: q.qte, limite: limite, dev: mL ? Fn_DevDe(mL[1]) : null, montant: montant,
     validite: mVal ? mVal[1] : null,
-    date: mDate ? ((mDate[3].length === 2 ? '20' + mDate[3] : mDate[3]) + '-' + p2(mDate[2]) + '-' + p2(mDate[1])) : null,
+    dateFin: mDate ? ((mDate[3].length === 2 ? '20' + mDate[3] : mDate[3]) + '-' + p2(mDate[2]) + '-' + p2(mDate[1])) : null,
+    statut: st ? st[1] : null,
     brut: l
   };
 }
+/* CELLULES « ¦ » — tableaux lus en PAYSAGE par l'automate (document v11). Chaque
+   valeur y occupe une ou deux cellules : l'écran expose le texte ET sa description
+   d'accessibilité pour certaines colonnes seulement. Chaque champ est donc lu par
+   son TYPE, dans l'ordre des colonnes, et une cellule identique qui le suit est
+   son double. Un type inattendu rend la ligne illisible plutôt que fausse : elle
+   part en « ligne non reconnue », jamais dans l'état. */
+function Fn_Cellules(l) { return String(l).split('¦').map(c => c.replace(/\s+/g, ' ').trim()).filter(c => c !== ''); }
+function Fn_LecteurCellules(cells) {
+  let i = 0;
+  return {
+    lire(test) { if (i >= cells.length || !test(cells[i])) return null; const v = cells[i]; i++; if (i < cells.length && cells[i] === v) i++; return v; },
+    reste() { return cells.slice(i); }
+  };
+}
+function Fn_Groupes(cells) { const g = []; for (let k = 0; k < cells.length;) { g.push(cells[k]); k += (cells[k + 1] === cells[k]) ? 2 : 1; } return g; }
+const Cst_ReEntier = /^-?\d{1,3}(?:[\s.]\d{3})*$|^-?\d+$/;
+const Cst_ReCodePlace = /^[A-Z0-9]{2,6}$/;
+function Fn_TickerIsin(x) {
+  const m = Cst_ReIsin.exec(x); if (!m) return null;
+  const av = String(x).slice(0, m.index).replace(/\|/g, '').trim();
+  return { ticker: av || null, isin: m[1] };
+}
+/* Le tableau ACCOLE les paramètres d'un produit à levier à son nom (« … Put BAR 87.06
+   STR 89.6477 P 5 LV 8.12 ») : laissés en place, le nom ne s'apparie plus à celui de
+   la position. Ils en sont retirés et lus à part. */
+function Fn_NomEtParams(nom) {
+  const s = Fn_DedoublerNom(nom);
+  const m = /\s+(?:SL|BAR)\s+[\d.,]+(?=\s|$)/.exec(s);
+  return { nom: m ? s.slice(0, m.index).trim() : s, levier: Fn_ExtraireParamsLevier(s) };
+}
+function Fn_LireOrdreCellules(l) {
+  const L = Fn_LecteurCellules(Fn_Cellules(l));
+  const nom = L.lire(x => Cst_ReLettre.test(x) && !Cst_ReDateHeure.test(x));
+  const dh = Fn_DateHeureDe(L.lire(x => Cst_ReDateHeure.test(x)));
+  const ti = Fn_TickerIsin(L.lire(x => Cst_ReIsin.test(x)) || '');
+  const place = L.lire(x => Cst_ReCodePlace.test(x));
+  const sens = L.lire(x => /^(Achat|Vente)$/i.test(x));
+  const qte = L.lire(x => Cst_ReEntier.test(x));
+  const lim = Fn_MontantDevise(L.lire(x => !!Fn_MontantDevise(x)));
+  const stop = Fn_MontantDevise(L.lire(x => !!Fn_MontantDevise(x)));
+  const val = L.lire(x => /^-?[\d\s.]+(?:,\d+)?$/.test(x));
+  const ouvert = L.lire(x => Cst_ReEntier.test(x));
+  const exe = L.lire(x => Cst_ReEntier.test(x));
+  if (!nom || !sens || qte == null || !lim || lim.v == null) return null;
+  const ent = x => x == null ? null : Number(String(x).replace(/[^\d-]/g, ''));
+  const np = Fn_NomEtParams(nom);
+  return { sens: sens.toLowerCase(), nom: np.nom, levier: np.levier, ticker: ti ? ti.ticker : null, isin: ti ? ti.isin : null,
+    place: place || null, qte: Math.abs(ent(qte)), limite: lim.v, dev: lim.dev, stop: stop ? stop.v : null,
+    montant: val != null ? Fn_NombreFr(val) : null, ouvert: ent(ouvert), execute: ent(exe),
+    dateCreation: dh ? dh.date : null, heureCreation: dh ? dh.heure : null, validite: null, dateFin: null, brut: l };
+}
+/* TRANSACTION (onglet Transactions, document v11) : les exécutions réelles, avec
+   cours, montants, taux de change et frais. Les colonnes de queue ne sont pas
+   toutes présentes selon la devise (le taux de change est vide en euros) : on lit
+   le COURS en tête, le NET en dernier, les FRAIS juste avant, et le montant en
+   euros au premier montant en euros ; puis on VÉRIFIE que net = montant + frais
+   au centime. Une ligne qui ne se boucle pas n'entre pas. */
+function Fn_LireTransactionCellules(l) {
+  const L = Fn_LecteurCellules(Fn_Cellules(l));
+  const nom = L.lire(x => Cst_ReLettre.test(x) && !Cst_ReDateHeure.test(x));
+  const dh = Fn_DateHeureDe(L.lire(x => Cst_ReDateHeure.test(x)));
+  const ti = Fn_TickerIsin(L.lire(x => Cst_ReIsin.test(x)) || '');
+  const place = L.lire(x => Cst_ReCodePlace.test(x));
+  const lieu = L.lire(x => Cst_ReCodePlace.test(x));
+  const sens = L.lire(x => /^(Achat|Vente)$/i.test(x));
+  const qte = L.lire(x => Cst_ReEntier.test(x));
+  if (!nom || !dh || !ti || !sens || qte == null) return null;
+  const g = Fn_Groupes(L.reste());
+  // Liste sur plusieurs pages : les numéros de page (« 1 ¦ 2 ») restent accolés à la
+  // dernière ligne. Un net est toujours un montant en devise, jamais un entier nu.
+  while (g.length && /^\d{1,2}$/.test(g[g.length - 1])) g.pop();
+  if (g.length < 4) return null;
+  const cours = Fn_MontantDevise(g[0]), locale = Fn_MontantDevise(g[1]);
+  const net = Fn_MontantDevise(g[g.length - 1]), frais = Fn_MontantDevise(g[g.length - 2]);
+  if (!cours || cours.v == null || !locale || !net || net.dev !== 'EUR' || net.v == null) return null;
+  let iEur = -1;
+  for (let k = 2; k < g.length - 2; k++) { const x = Fn_MontantDevise(g[k]); if (x && x.dev === 'EUR' && x.v != null) { iEur = k; break; } }
+  const montantEur = iEur >= 0 ? Fn_MontantDevise(g[iEur]).v : (locale.dev === 'EUR' ? locale.v : null);
+  const auto = (g.length - 3 > iEur && iEur >= 0) ? Fn_MontantDevise(g[g.length - 3]) : null;
+  const tx = g.slice(2, g.length - 2).find(x => /^\d+(?:,\d+)?$/.test(x));
+  const fraisTotal = (frais && frais.v != null ? frais.v : 0) + (auto && auto.dev === 'EUR' && auto.v != null ? auto.v : 0);
+  if (montantEur == null || Math.abs(montantEur + fraisTotal - net.v) > 0.02) return null;
+  const q = Number(String(qte).replace(/[^\d-]/g, ''));
+  const np = Fn_NomEtParams(nom);
+  return { sens: sens.toLowerCase(), nom: np.nom, levier: np.levier, ticker: ti.ticker, isin: ti.isin, place: place || null, lieu: lieu || null,
+    date: dh.date, heure: dh.heure, qte: Math.abs(q), cours: cours.v, dev: cours.dev, montantDev: locale.v,
+    montantEur: montantEur, taux: tx ? Fn_NombreFr(tx) : null, frais: fraisTotal, netEur: net.v, brut: l };
+}
 function Fn_ParserOrdres(lignes, res) {
+  let dateSuivante = null;   // date d'en-tête collée à la ligne précédente (disposition portrait)
   lignes.forEach(l => {
     if (Cst_LignesIgnorees.some(re => re.test(l))) return;
-    const o = Fn_LireOrdre(l);
-    if (!o) { if (l.length > 2) res.inconnues.push(l); return; }
-    res.lignes.push({ sens: o.sens, nom: o.nom, ticker: o.ticker, isin: o.isin,
-      qte: o.qte, limite: o.limite, montantEur: o.montantEur,
-      validite: o.validite ? o.validite + (o.date ? ' jusqu’au ' + o.date : '') : null,
-      brut: o.brut });
+    const cellules = l.indexOf('¦') >= 0;
+    const o = cellules ? Fn_LireOrdreCellules(l) : Fn_LireOrdre(l);
+    if (!o) { if (l.length > 2) res.inconnues.push(l); dateSuivante = null; return; }
+    res.lignes.push({ sens: o.sens, nom: o.nom, levier: o.levier || null, ticker: o.ticker, isin: o.isin, place: o.place || null,
+      qte: o.qte, limite: o.limite, dev: o.dev || null, stop: o.stop != null ? o.stop : null,
+      // Le MONTANT est dans la devise de l'ordre : 1 200 pour un achat en dollars.
+      // Il n'est converti en euros qu'avec le taux du jour (Fn_AnalyserEntrees).
+      montantDev: o.montant, montantEur: (!o.dev || o.dev === 'EUR') ? o.montant : null,
+      validite: o.validite || null,
+      dateCreation: o.dateCreation || (cellules ? null : dateSuivante),
+      ouvert: o.ouvert != null ? o.ouvert : null, execute: o.execute != null ? o.execute : null, brut: o.brut });
+    dateSuivante = cellules ? null : (o.dateFin || null);
   });
   return res;
 }
-/* ORDRES EXÉCUTÉS. Même écran que les ordres en attente, donc mêmes ancrages :
-   c'est le comportement attendu. Ce parseur n'a PAS pu être calibré sur des
-   lignes réelles — le jour du relevé, le courtier n'avait aucune transaction sur
-   la période et l'en-tête du document le déclarait explicitement. Le prix
-   unitaire y prend la place de la limite : c'est le nombre précédé du symbole de
-   devise. À reconfirmer sur un relevé qui porte des transactions. */
 function Fn_ParserExecutes(lignes, res) {
+  res.evenements = res.evenements || [];
   lignes.forEach(l => {
     if (Cst_LignesIgnorees.some(re => re.test(l))) return;
+    if (l.indexOf('¦') >= 0) {
+      const t = Fn_LireTransactionCellules(l);
+      if (!t) { res.inconnues.push(l); return; }
+      res.lignes.push(t); return;
+    }
     const o = Fn_LireOrdre(l);
     if (!o) { if (l.length > 2) res.inconnues.push(l); return; }
+    if (o.statut && !/ex[ée]cut/i.test(o.statut)) {
+      res.evenements.push({ statut: o.statut, sens: o.sens, nom: o.nom, qte: o.qte, limite: o.limite, dev: o.dev, brut: l });
+      return;
+    }
     res.lignes.push({ sens: o.sens, nom: o.nom, ticker: o.ticker, isin: o.isin,
-      date: o.date, qte: o.qte, cours: o.limite, montantEur: o.montantEur, brut: o.brut });
+      date: o.dateFin, qte: o.qte, cours: o.limite, dev: o.dev || null, montantDev: o.montant,
+      montantEur: (!o.dev || o.dev === 'EUR') ? o.montant : null, brut: o.brut });
   });
   return res;
 }
@@ -3284,6 +3502,34 @@ function Fn_AnalyserEntrees() {
         preuve: 'Compté par la capture (ordres_ouverts) contre lignes reconnues par la lecture de la section des ordres.',
         propo: 'Voir le texte brut de l’entrée « Ordres en cours » : une ligne n’a pas été comprise, ou l’écran n’était pas complètement déroulé.' });
     }
+    // 4. Document v11 : l'automate COMPTE les lignes qu'il livre par section. Un
+    //    parseur qui en reconnaît moins a décroché d'un format d'écran qui a changé :
+    //    une carte le dit, au lieu de laisser une ligne manquer en silence.
+    [['lignes_positions', capPos, 'Positions ouvertes'], ['lignes_ordres', capOrd, 'Ordres en cours'], ['lignes_transactions', capExe, 'Transactions']]
+      .forEach(([cle, cap, lib]) => {
+        const n = Fn_Num(meta[cle]);
+        if (n == null || !cap || cap.lignes.length >= n) return;
+        controles.push({ kind: 'ecart_lecture', id: cle,
+          resume: lib + ' : ' + n + ' ligne(s) livrée(s) par la capture, ' + cap.lignes.length + ' lue(s).',
+          preuve: 'Compte de l’automate (' + cle + ') contre lignes reconnues. Lignes non comprises : ' + (cap.inconnues.length ? cap.inconnues.map(x => x.slice(0, 50)).join(' | ') : 'aucune') + '.',
+          propo: 'Une ligne au moins n’est pas entrée : la relire dans le texte brut de l’entrée, et la saisir si besoin. Le format de l’écran a peut-être changé.' });
+      });
+    // 5. Une liste sur plusieurs pages n'a été lue que sur la page affichée.
+    const pages = [['positions', meta.pages_positions], ['ordres', meta.pages_ordres], ['transactions', meta.pages_transactions]]
+      .filter(([, v]) => v === 'plusieurs' || Fn_Num(v) > 1).map(([k]) => k);
+    if (pages.length) controles.push({ kind: 'capture_paginee',
+      resume: 'Liste sur plusieurs pages : ' + pages.join(', ') + '. Seule la page affichée a été lue.',
+      preuve: 'En-tête de la capture : pages_positions=' + (meta.pages_positions || '—') + ', pages_ordres=' + (meta.pages_ordres || '—') + ', pages_transactions=' + (meta.pages_transactions || '—') + '.',
+      propo: 'Afficher plus de résultats par page (ou une période plus courte pour les transactions), puis refaire la capture.' });
+    // 6. Document d'avant la v11 : l'écran annonçait « 0 Exécuté » et la section des
+    //    exécutés portait pourtant des lignes — signature des événements d'ordre lus
+    //    comme des exécutions. Le dire plutôt que de les intégrer.
+    if (Fn_Num(meta.version) != null && Fn_Num(meta.version) < 11 && meta.ordres_executes === '0' && capExe && capExe.lignes.length) {
+      controles.push({ kind: 'ecart_executes',
+        resume: capExe.lignes.length + ' ligne(s) d’exécution lue(s) alors que l’écran annonçait « 0 Exécuté ».',
+        preuve: 'Capture v' + meta.version + ' : la section venait de l’onglet Historique, qui liste des événements d’ordre.',
+        propo: 'Ne pas tenir ces lignes pour des exécutions : refaire la capture avec la macro v11, qui lit l’onglet Transactions.' });
+    }
   }
   if (reg) {
     reg.lignes.forEach(x => {
@@ -3342,6 +3588,37 @@ function Fn_AnalyserEntrees() {
         levier: c.levier, source: 'capture seule' });
     });
   }
+  /* POSITION SOLDÉE — une ligne de l'état que ni l'export ni l'écran ne portent
+     plus. Ce contrôle existait en v2 et s'était perdu dans la reconstruction : un
+     turbo vendu est resté onze jours dans le portefeuille suivi, pour une part
+     notable de la valeur nette, avec ses revues planifiées. Les DEUX sources doivent
+     l'ignorer : une seule ne suffit pas (export tronqué, capture paginée). */
+  if (reg && capPos && capPos.lignes.length) {
+    Var_State.positions.forEach(p => {
+      if (propositions.some(x => x.id === p.id)) return;
+      const vente = capExe ? capExe.lignes.find(t => t.sens === 'vente' && t.isin && t.isin === (p.isin || p.id)) : null;
+      controles.push({ kind: 'position_soldee', id: p.id, payload: { id: p.id },
+        resume: 'Position absente de l’export ET de la capture : ' + (p.detention.nom || p.id) + ' semble soldée.',
+        preuve: 'Ni l’export du jour ni l’écran des positions ne la portent'
+          + (vente ? ' ; vente de ' + Fn_FmtNb(vente.qte, 0) + ' titres le ' + Fn_FmtDateCourt(vente.date) + ' à ' + Fn_FmtNb(vente.cours, 2) + ' ' + (vente.dev || '') + ', lue dans les transactions' : '') + '.',
+        propo: 'La retirer du portefeuille suivi ; ses événements à venir sont classés. Rejeter si elle est encore détenue.' });
+    });
+  }
+  // Taux d'une devise : celui de l'export du jour, sinon le dernier connu.
+  const tauxDe = d => {
+    if (!d || d === 'EUR') return 1;
+    const t = reg && reg.taux ? Fn_Num(reg.taux[d]) : null;
+    return t != null ? t : Fn_Taux(d);
+  };
+  /* MONTANT D'UN ORDRE EN EUROS. Le montant lu est dans la devise de l'ordre :
+     1 200 pour 10 titres à 120 $. L'additionner tel quel à des euros faussait le
+     contrôle de liquidités de plusieurs centaines d'euros (« expliqué à 400 € près »
+     au lieu de 11). Sans taux connu, il reste inconnu — jamais compté en euros. */
+  (capOrd ? capOrd.lignes : []).forEach(o => {
+    if (o.montantEur != null || o.montantDev == null) return;
+    const t = tauxDe(o.dev);
+    o.montantEur = t != null ? Math.round(o.montantDev * t * 100) / 100 : null;
+  });
   // Contrôles de trésorerie et de valeur : arithmétiques, donc gratuits.
   const margeCap = capPos && capPos.marge;
   /* CE QUI EXPLIQUE L'ÉCART, quand l'application peut le calculer elle-même.
@@ -3386,11 +3663,6 @@ function Fn_AnalyserEntrees() {
      comptée à son montant d'export et le contrôle le dit, plutôt que de la
      compter zéro et d'inventer un écart. */
   if (margeCap && Fn_Num(margeCap.titres) != null && propositions.length) {
-    const tauxDe = d => {
-      if (!d || d === 'EUR') return 1;
-      const t = reg && reg.taux ? Fn_Num(reg.taux[d]) : null;
-      return t != null ? t : Fn_Taux(d);
-    };
     let somme = 0, approchees = 0;
     propositions.forEach(p => {
       const q = Fn_Num(p.qte), c = Fn_Num(p.cloture), t = tauxDe(p.dev);
@@ -3471,14 +3743,21 @@ function Fn_IntegrerEntrees(an) {
     Var_State.ordres = an.capOrd.lignes.map(o => ({
       id: Fn_Uid('ord'), ticker: o.ticker || null, nom: o.nom, isin: o.isin, sens: o.sens,
       type: o.limite != null ? 'limite' : null,
-      qte: o.qte, limite: o.limite, montantEur: o.montantEur, validite: o.validite || null, ts: an.capOrd.ts
+      qte: o.qte, limite: o.limite, dev: o.dev || null, montantDev: o.montantDev != null ? o.montantDev : null,
+      montantEur: o.montantEur, validite: o.validite || null, dateCreation: o.dateCreation || null,
+      place: o.place || null, stop: o.stop != null ? o.stop : null,
+      ouvert: o.ouvert != null ? o.ouvert : null, execute: o.execute != null ? o.execute : null, ts: an.capOrd.ts
     }));
   }
   if (an.capExe) {
     an.capExe.lignes.forEach(t => {
-      const cle = x => [x.nom, x.date, x.qte, x.cours].map(v => v == null ? '' : String(v)).join('|');
+      // Identité d'une exécution : titre, date ET heure, quantité, cours. Sans
+      // l'heure, deux exécutions identiques le même jour n'en faisaient qu'une.
+      const cle = x => [x.isin || x.nom, x.date, x.heure, x.qte, x.cours].map(v => v == null ? '' : String(v)).join('|');
       const n = { ticker: t.ticker || null, nom: t.nom, isin: t.isin, sens: t.sens, qte: t.qte, cours: t.cours,
-        montantEur: t.montantEur, date: t.date, ts: an.capExe.ts };
+        dev: t.dev || null, montantDev: t.montantDev != null ? t.montantDev : null,
+        montantEur: t.montantEur, frais: t.frais != null ? t.frais : null, netEur: t.netEur != null ? t.netEur : null,
+        taux: t.taux != null ? t.taux : null, place: t.place || null, date: t.date, heure: t.heure || null, ts: an.capExe.ts };
       if (!Var_State.executes.some(x => cle(x) === cle(n))) Var_State.executes.push(n);
     });
   }
@@ -3539,7 +3818,7 @@ function Fn_MajProduitLevier(pos, levier, ts) {
    portefeuille entier, pas sur une ligne. Leurs chiffres bougent d'une analyse à
    l'autre, donc leur résumé aussi — les distinguer par leur texte en empilerait
    un par lancement. */
-const Cst_ControlesUniques = ['capture_degradee', 'ecart_ordres', 'ecart_liquidites', 'ecart_valeur_titres'];
+const Cst_ControlesUniques = ['capture_degradee', 'ecart_ordres', 'ecart_liquidites', 'ecart_valeur_titres', 'capture_paginee', 'ecart_executes'];
 /* IDENTITÉ D'UN CONTRÔLE — ce qu'il dit, jamais où il est rangé.
    L'identifiant de stockage est engendré À L'ÉCRITURE : un contrôle entrant ne
    peut pas le porter. L'ancienne clé le comparait pourtant à lui, si bien que la
@@ -4086,8 +4365,16 @@ function Fn_GenererSquelette() {
     }
   });
   // RÈGLE 6 — ordre en attente : vigilance d'exécution, et échéance de validité.
+  // Montant d'un ordre tel qu'il se lit : en euros quand le taux est connu, et
+  // toujours dans sa devise d'origine — « 1 200 € » pour 1 200 $ était faux.
+  const montantOrdre = o => o.montantEur != null
+    ? Fn_FmtEur(o.montantEur, 0) + (o.dev && o.dev !== 'EUR' && o.montantDev != null ? ' (' + Fn_FmtNb(o.montantDev, 0) + ' ' + o.dev + ')' : '')
+    : (o.montantDev != null ? Fn_FmtNb(o.montantDev, 0) + ' ' + (o.dev || '') + ' — taux de change manquant pour l’euro' : null);
   Var_State.ordres.forEach(o => {
-    const jours = o.ts ? Math.floor((Date.now() - o.ts) / 86400000) : 0;
+    // L'ancienneté se compte depuis la CRÉATION de l'ordre quand l'écran la donne,
+    // à défaut depuis le collage qui l'a fait apparaître.
+    const depuis = o.dateCreation ? Fn_JoursDepuis(o.dateCreation) : null;
+    const jours = depuis != null ? -depuis : (o.ts ? Math.floor((Date.now() - o.ts) / 86400000) : 0);
     /* L'IDENTIFIANT NE PORTE PLUS LA DATE DU JOUR. Un ordre encore vivant est le
        MÊME événement d'un jour sur l'autre : le dater du jour en créait un nouveau
        à chaque analyse et faisait basculer le précédent en « échu », donc à
@@ -4103,8 +4390,8 @@ function Fn_GenererSquelette() {
       court: 'Ordre en attente', sev: jours > 5 ? 'Warn' : 'Info', conf: true,
       tags: ['ORDRES'],
       metriques: [
-        met('montant de l’ordre', o.montantEur != null ? Fn_FmtEur(o.montantEur, 0) : (o.qte != null && o.limite != null ? Fn_FmtEur(o.qte * o.limite, 0) + ' [calcul : quantité × limite]' : manquant('montant ou limite'))),
-        met('ancienneté', jours + ' jour(s) depuis le collage qui l’a fait apparaître'),
+        met('montant de l’ordre', montantOrdre(o) || (o.qte != null && o.limite != null ? Fn_FmtNb(o.qte * o.limite, 0) + ' ' + (o.dev || '€') + ' [calcul : quantité × limite]' : manquant('montant ou limite'))),
+        met('ancienneté', o.dateCreation ? jours + ' jour(s) — ordre créé le ' + Fn_FmtDateCourt(o.dateCreation) : jours + ' jour(s) depuis le collage qui l’a fait apparaître'),
         met('effet sur la marge si exécuté', Var_State.marge && Fn_Num(Var_State.marge.libre) != null && o.montantEur != null
           ? 'marge disponible ' + Fn_FmtEur(Var_State.marge.libre, 0) + ' → ' + Fn_FmtEur(Fn_Num(Var_State.marge.libre) - Fn_Num(o.montantEur), 0) + ' [calcul]'
           : manquant('marge disponible ou montant de l’ordre'))
@@ -4136,8 +4423,8 @@ function Fn_GenererSquelette() {
         tags: [String(o.nom).slice(0, 12), 'ORDRES', q[2]],
         metriques: [
           met('ordre concerné', (o.sens || '') + ' ' + (o.qte != null ? Fn_FmtNb(o.qte, 0) + ' × ' : '')
-            + (o.limite != null ? Fn_FmtNb(o.limite, 2) : '—')
-            + (o.montantEur != null ? ' soit ' + Fn_FmtEur(o.montantEur, 0) : '')),
+            + (o.limite != null ? Fn_FmtNb(o.limite, 2) + (o.dev && o.dev !== 'EUR' ? ' ' + o.dev : '') : '—')
+            + (montantOrdre(o) ? ' soit ' + montantOrdre(o) : '')),
           met('délai avant l’annonce', jours != null ? jours + ' jour(s)' : manquant('date lisible')),
           met('validité de l’ordre', Fn_ValiditeOrdre(o)),
           met('ce que cela change', q[0] === 'pubDate'
@@ -4656,7 +4943,9 @@ const Cst_KindLabels = {
   ligne_non_appariee: 'Ligne non appariée', ecart_quantite: 'Écart de quantité',
   ecart_liquidites: 'Écart de liquidités', ecart_valeur_titres: 'Écart de valeur des titres',
   parametres_levier: 'Paramètres de produit à levier', position_soldee: 'Position soldée',
-  reclassification: 'Reclassification', evenement_propose: 'Événement proposé'
+  reclassification: 'Reclassification', evenement_propose: 'Événement proposé',
+  ecart_lecture: 'Ligne livrée non lue', capture_paginee: 'Liste sur plusieurs pages',
+  ecart_executes: 'Exécutions douteuses', capture_degradee: 'Capture dégradée', ecart_ordres: 'Écart sur les ordres'
 };
 function Fn_RenderTout() {
   Fn_RenderVigie();
@@ -5088,8 +5377,9 @@ function Fn_HtmlAlerteAppel(journal) {
    dernier appel. Cinq mille caractères de mécanique et de coûts, placés AVANT
    tout ce qu'on vient réellement lire — les échus à débriefer, les arbitrages,
    le calendrier. Or rien de tout cela ne se décide ici : cela se RÈGLE, et un
-   réglage vit dans Paramètres. Ne restent donc que les deux boutons, ce qui
-   justifie chacun en un mot, le sort du dernier appel et son coût. */
+   réglage vit dans Paramètres. Ne reste donc que le bouton — documenter puis
+   analyser, enchaînés —, ce que fera chaque étape en une ligne, le sort du
+   dernier appel et son coût. */
 function Fn_RenderMajPanel() {
   const el = document.getElementById('v-maj');
   if (!el) return;
@@ -5116,32 +5406,36 @@ function Fn_RenderMajPanel() {
        ressemble à une panne. Le cas est d'autant plus déroutant que la clé est
        STOCKÉE PAR APPAREIL et jamais synchronisée : l'avoir enregistrée hier sur
        un autre appareil ne la met pas ici. */
-    h += '<div class="note note-warn"><b>Les deux lancements sont masqués : aucun accès n’est configuré sur CET appareil.</b>'
+    h += '<div class="note note-warn"><b>Le lancement est masqué : aucun accès n’est configuré sur CET appareil.</b>'
       + '<div class="tres-petit" style="margin-top:4px">La clé personnelle est enregistrée dans le navigateur de chaque appareil et n’est JAMAIS synchronisée — c’est voulu, un secret ne voyage pas par le dépôt. L’avoir saisie ailleurs ne la met pas ici. Paramètres → Accès API pour l’enregistrer sur cet appareil.</div></div>';
-  } else if (enCours) {
-    h += '<div class="rang-btn"><button class="btn btn-danger arme" data-action="maj-annuler">■ Annuler l’appel en cours</button></div>';
+  } else if (enCours || rt.chaine) {
+    /* Pendant la chaîne, l'étape en cours est dite : sans cela, la fin de la
+       documentation ressemblait à la fin de tout, et l'analyse qui suit à un
+       appel parti tout seul. */
+    const etape = rt.chaine && rt.chaine.etape;
+    if (etape) h += '<div class="tres-petit"><b>' + (etape === 'documenter' ? 'Étape 1/2 — documentation' : 'Étape 2/2 — analyse (jugement de desk)')
+      + '</b> · ' + Fn_Esc(Fn_ModeleMeta().nom) + ', effort ' + Fn_Esc(Fn_EffortPasse(etape === 'documenter' ? 'enrichissement' : 'desk')) + '</div>';
+    h += '<div class="rang-btn"><button class="btn btn-danger arme" data-action="maj-annuler">■ Annuler'
+      + (rt.chaine ? ' (arrête aussi l’étape suivante)' : ' l’appel en cours') + '</button></div>';
   } else {
     const relance = journal && (journal.statut === 'echec' || journal.statut === 'interrompue');
+    const aDocumenter = aEnrichir.length || agendas.length;
     h += '<div class="rang-btn">'
-      + '<button class="btn btn-accent btn-large" data-action="maj-lancer">'
-      + (relance ? 'Relancer le jugement de desk' : 'Lancer le jugement de desk') + '</button>'
-      + (aEnrichir.length || agendas.length
-        ? '<button class="btn btn-accent btn-large" data-action="maj-enrichir">Enrichir ' + aEnrichir.length + ' ligne(s)'
-          + (agendas.length ? ' et ' + agendas.length + ' agenda(s)' : '') + '</button>'
-        : '')
+      + '<button class="btn btn-accent btn-large" data-action="maj-chaine">'
+      + (relance ? 'Relancer : documenter et analyser' : 'Documenter et analyser') + '</button>'
       + '</div>';
-    /* CE QUI JUSTIFIE CHAQUE BOUTON, en une ligne chacun : de quoi décider s'il
-       vaut la peine de lancer, sans avoir à lire le détail des enveloppes. */
-    h += '<div class="tres-petit muted">Desk : ' + charge.sansTexte.length + ' texte(s) d’événement · '
-      + charge.aDebriefer.length + ' débrief(s) demandé(s) · ' + charge.sansProfil.length + ' profil(s) à attribuer · '
-      + Cst_DecouvertesVisees + ' découverte(s) visée(s).</div>';
-    h += '<div class="tres-petit muted">Enrichissement : '
-      + (aEnrichir.length || agendas.length
+    /* CE QUE FERA LE BOUTON, étape par étape : de quoi décider s'il vaut la peine
+       de lancer, sans avoir à lire le détail des enveloppes. */
+    h += '<div class="tres-petit muted">1. Documentation : '
+      + (aDocumenter
         ? aEnrichir.length + ' ligne(s) à valoriser'
           + (agendas.length ? ' et ' + agendas.length + ' agenda(s) à dater — instruments visés par un ordre, sous-jacents' : '')
           + '.'
-        : 'rien à rafraîchir, tout est frais.')
+        : 'rien à rafraîchir, tout est frais — étape sautée.')
       + '</div>';
+    h += '<div class="tres-petit muted">2. Analyse : ' + charge.sansTexte.length + ' texte(s) d’événement · '
+      + charge.aDebriefer.length + ' débrief(s) demandé(s) · ' + charge.sansProfil.length + ' profil(s) à attribuer · '
+      + Cst_DecouvertesVisees + ' découverte(s) visée(s) — ' + Fn_Esc(Fn_ModeleMeta().nom) + ', effort ' + Fn_Esc(Fn_EffortMAJ()) + '.</div>';
     h += '<div class="tres-petit muted">Budgets, projection de dépense et journal détaillé du dernier appel : <b>Paramètres → ⑤ Desk</b>.</div>';
   }
   el.innerHTML = h + '</div>';
@@ -5240,7 +5534,7 @@ function Fn_HtmlJournalMAJ(journal) {
     const aboutie = journal.statut === 'terminee' || journal.statut === 'partielle';
     const d = Fn_CoutJournal(journal);
     const cr = Fn_Num(journal.jetonsCacheLecture) || 0;
-    const economie = cr / 1e6 * (Fn_Num(t.entreeParM) || 0) * (1 - Cst_CoefCacheLecture);
+    const economie = cr / 1e6 * (Fn_Num(t.entreeParM) || 0) * (1 - Fn_CoefCacheLecture(journal.modele));
     h += '<div class="carte-titre" style="margin-top:8px">Bilan de l’appel' + (aboutie ? '' : ' (interrompu — dépense déjà engagée)') + '</div>'
       + '<div class="maj-compteurs">'
       + '<span class="met">modèle <b>' + Fn_Esc(journal.modele || '?') + '</b></span>'
@@ -6160,11 +6454,15 @@ function Fn_RenderParametres() {
       + '<div class="col2"><label class="champ">Modèle appelé</label><select data-action="modele">'
       + Cst_Modeles.map(x => '<option value="' + x.id + '"' + (x.id === Fn_ModeleMAJ() ? ' selected' : '') + '>' + Fn_Esc(x.nom) + ' — ' + x.entreeParM + ' / ' + x.sortieParM + ' $ par million</option>').join('')
       + '</select></div>'
-      + '<div class="col2"><label class="champ">Effort</label><select data-action="effort">'
+      + '<div class="col2"><label class="champ">Effort — analyse (desk)</label><select data-action="effort">'
       + Cst_Efforts.map(x => '<option value="' + x.id + '"' + (x.id === Fn_EffortMAJ() ? ' selected' : '') + '>' + Fn_Esc(x.nom) + '</option>').join('')
+      + '</select></div>'
+      + '<div class="col2"><label class="champ">Effort — documentation</label><select data-action="effort-enrichissement">'
+      + Cst_Efforts.map(x => '<option value="' + x.id + '"' + (x.id === Fn_EffortEnrichissement() ? ' selected' : '') + '>' + Fn_Esc(x.nom) + '</option>').join('')
       + '</select></div></div>'
       + '<div class="tres-petit muted">' + Fn_Esc(m.note) + '</div>'
-      + '<div class="tres-petit muted">' + Fn_Esc(e.note) + '</div>'
+      + '<div class="tres-petit muted">Analyse : ' + Fn_Esc(e.note) + '</div>'
+      + '<div class="tres-petit muted">Le même modèle sert aux deux étapes du bouton « Documenter et analyser » ; chacune a son effort.</div>'
       + '<div class="carte-titre" style="margin-top:8px">Budget de recherche</div>'
       + '<div class="budget-grille">'
       + [['par découverte', Cst_RecherchesParDecouverte + ' rech.', Cst_LecturesParDecouverte + ' pages'],
@@ -7149,6 +7447,35 @@ function Fn_IntegrerEnrichissement(data, journal) {
    ---------------------------------------------------------------- */
 function Fn_LancerDesk() { return Fn_LancerAppel('desk'); }
 function Fn_LancerEnrichissement() { return Fn_LancerAppel('enrichissement'); }
+/* DOCUMENTER ET ANALYSER — UN SEUL GESTE. Deux boutons laissaient le choix de
+   l'ordre, et l'ordre compte : un desk lancé avant la documentation jugeait sur
+   des multiples et des dates périmés, puis une seconde passe les rafraîchissait
+   sans que personne ne relance le jugement. L'enchaînement est donc fixé :
+   1. documentation, seulement si une ligne ou un agenda est à rafraîchir ;
+   2. analyse (jugement de desk), sur des données fraîches.
+   Une documentation ANNULÉE ou en ÉCHEC arrête la chaîne : juger sur ce qu'elle
+   devait rafraîchir serait payer une analyse sur des données qu'on sait périmées.
+   Tronquée, elle a intégré ce qu'elle avait : l'analyse suit. */
+async function Fn_LancerChaine() {
+  const rt = Var_State._runtime;
+  if (rt.enCours || rt.chaine) return;
+  if (Fn_ModeAcces().mode === 'aucun') { Fn_RenderMajPanel(); return; }
+  rt.chaine = { etape: null, annulee: false, documentation: null };
+  try {
+    if (Fn_LignesAEnrichir().length || Fn_AgendasAEnrichir().length) {
+      rt.chaine.etape = 'documenter';
+      await Fn_LancerAppel('enrichissement');
+      const j = Var_State.majJournaux[0];
+      rt.chaine.documentation = j && j.passe === 'enrichissement' ? j.statut : null;
+      if (rt.chaine.annulee || !j || j.passe !== 'enrichissement' || j.statut === 'echec' || j.statut === 'interrompue') return;
+    }
+    rt.chaine.etape = 'analyser';
+    await Fn_LancerAppel('desk');
+  } finally {
+    rt.chaine = null;
+    Fn_RenderMajPanel();
+  }
+}
 async function Fn_LancerAppel(passe) {
   const rt = Var_State._runtime;
   if (rt.enCours) return;
@@ -7255,14 +7582,14 @@ async function Fn_LancerAppel(passe) {
     };
     appliquerDomaines();
     const modele = Fn_ModeleMAJ();
-    Fn_Phase(journal, 'envoi', 'ok', 'Requête envoyée (' + modele + ', effort ' + Fn_EffortMAJ() + ', plafond ' + Fn_FmtNb(Cst_MaxTokens, 0)
+    Fn_Phase(journal, 'envoi', 'ok', 'Requête envoyée (' + modele + ', effort ' + Fn_EffortPasse(passe) + ', plafond ' + Fn_FmtNb(Cst_MaxTokens, 0)
       + ' jetons, cache de contexte actif' + (mode.mode === 'byok' ? ', flux' : ', pont sans flux')
       + ', budget ' + budget.recherches + ' recherches et ' + budget.lectures + ' pages'
       + (domaines.length ? ', limitées à ' + domaines.length + ' site(s)' : ', web libre') + ')');
     let texte = '', totalEntree = 0, totalSortie = 0, totalRech = 0, totalLect = 0, totalCw = 0, totalCr = 0;
     let stopReason = null, continuations = 0;
     // Replis automatiques et TRACÉS, jamais des abaissements choisis.
-    let plafond = Cst_MaxTokens, effort = Fn_EffortMAJ(), repliPlafond = false, repliEffort = false, repliDomaines = 0, repliOutils = false, repliCache = false;
+    let plafond = Cst_MaxTokens, effort = Fn_EffortPasse(passe), repliPlafond = false, repliEffort = false, repliDomaines = 0, repliOutils = false, repliCache = false;
     for (;;) {
       const corps = { model: modele, max_tokens: plafond,
         // Le résumé du raisonnement ne change pas la facturation, et sans lui la
@@ -7509,6 +7836,15 @@ function Fn_AppliquerControle(carte, accepte) {
     const pos = Fn_PositionParId(carte.id);
     const m = /→\s*([\d   ,.]+)\s*titres/.exec(String(carte.resume || ''));
     if (pos && m) pos.detention.qte = Fn_NombreFr(m[1]);
+  } else if (carte.kind === 'position_soldee' && carte.id && Fn_PositionParId(carte.id)) {
+    // La position sort du portefeuille suivi ; ses événements encore ouverts sont
+    // classés avec leur motif, pour ne pas demander de débrief sur une ligne vendue.
+    Var_State.positions = Var_State.positions.filter(p => p.id !== carte.id);
+    (Var_State.calendrier || []).forEach(e => {
+      if (e.isin !== carte.id || ['prevu', 'imminent', 'echu'].indexOf(e.statut) < 0) return;
+      e.statut = 'classe';
+      e.debrief = e.debrief || { note: 'Classé : position soldée (carte acceptée le ' + Fn_FmtDateCourt(Fn_AujISO()) + ').', ts: Date.now() };
+    });
   }
   // Les autres natures d'écart (liquidités, valeur des titres, ligne absente,
   // paramètres illisibles) n'ont pas de correctif automatique : la décision est
@@ -7600,9 +7936,12 @@ function Fn_OnAction(e) {
       Fn_DoubleTap('acq-vider', () => { Fn_CollagesVider(); rt.analyse = null; Fn_RenderAcquisition(); }, () => Fn_RenderAcquisition());
       break;
     }
+    case 'maj-chaine': Fn_LancerChaine(); break;
     case 'maj-lancer': Fn_LancerDesk(); break;
     case 'maj-enrichir': Fn_LancerEnrichissement(); break;
-    case 'maj-annuler': if (rt.abort) rt.abort.abort(); break;
+    // Annuler arrête l'appel en cours ET la suite de la chaîne : sinon l'analyse
+    // partirait d'elle-même aussitôt la documentation annulée.
+    case 'maj-annuler': if (rt.chaine) rt.chaine.annulee = true; if (rt.abort) rt.abort.abort(); break;
     case 'aller-avalider': {
       const ancre = document.getElementById('ancre-avalider') || document.getElementById('v-actions');
       if (ancre && ancre.scrollIntoView) ancre.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -7961,6 +8300,7 @@ function Fn_OnChange(e) {
       const m = Cst_Modeles.find(x => x.id === el.value);
       if (m) {
         Var_State.modeleMAJ = m.id;
+        Var_State.modeleRevu = Var_State.modeleRevu || Fn_AujISO(); // un choix explicite n'est jamais réécrit
         // Les tarifs suivent le modèle : les laisser en arrière rendrait toute
         // estimation fausse dès le changement, sans le dire.
         Var_State.tarifs.entreeParM = m.entreeParM;
@@ -7971,6 +8311,10 @@ function Fn_OnChange(e) {
     }
     case 'effort': {
       if (Cst_Efforts.some(x => x.id === el.value)) { Var_State.effortMAJ = el.value; Fn_Save(); Fn_RenderParametres(); Fn_RenderMajPanel(); }
+      break;
+    }
+    case 'effort-enrichissement': {
+      if (Cst_Efforts.some(x => x.id === el.value)) { Var_State.effortEnrichissement = el.value; Fn_Save(); Fn_RenderParametres(); Fn_RenderMajPanel(); }
       break;
     }
     case 'tarif': {
