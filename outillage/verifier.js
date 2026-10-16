@@ -2655,6 +2655,22 @@ setTimeout(async () => {
     const ec = J('Fn_ContratDesk().ecarts.find(e => e.kind === "ecart_valeur_titres")') || {};
     verifier('un écart part au desk avec son explication et son montant entier',
       /expliquée par les ordres en attente/.test(ec.propo || '') && /écart de 1 000 €/.test(ec.resume || ''), JSON.stringify(ec));
+    // Second cycle réel du 16/10/26 : douze textes « à réécrire » deux heures après, pour quelques euros.
+    const evE = '{ textes: { surv: "s", prat: "p", empreinte: "exposition en jeu=11 058 € (26,9 % VN)|ancienneté=2 jour(s) — ordre créé le 14/10/2026" }, metriques: [] }';
+    const aEcrire = m => J('(() => { const e = ' + evE + '; e.metriques = ' + JSON.stringify(m) + '; return Fn_TextesAEcrire(e); })()');
+    verifier('quelques euros ou un jour de plus ne renvoient pas les textes au desk',
+      aEcrire([{ l: 'exposition en jeu', v: '11 070 € (27,1 % VN)' }, { l: 'ancienneté', v: '3 jour(s) — ordre créé le 14/10/2026' }]) === false);
+    verifier('une exposition qui bouge de plus de 15 %, ou une métrique qui change de nature, les renvoie',
+      aEcrire([{ l: 'exposition en jeu', v: '13 500 € (33,0 % VN)' }, { l: 'ancienneté', v: '2 jour(s) — ordre créé le 14/10/2026' }]) === true
+      && aEcrire([{ l: 'exposition en jeu', v: '11 058 € (26,9 % VN)' }, { l: 'montant', v: '2 jour(s) — ordre créé le 14/10/2026' }]) === true);
+    // Le turbo de l'état d'essai a été soldé plus haut : une ligne encore détenue sert de produit à levier fictif.
+    const idZ = J('Var_State.positions.find(p => /Danica/.test(p.detention.nom)).id');
+    R('var __z = Var_State.positions.find(p => p.id === ' + JSON.stringify(idZ) + '); __z.produit.levier = 8.35;'
+      + 'Var_State.controles.push({ id: "ctl-k-lev", kind: "parametres_levier", cible: ' + JSON.stringify(idZ) + ', statut: "a_valider", resume: "Paramètres illisibles (fictif) : levier." });'
+      + 'Fn_MajProduitLevier(__z, { barriere: 87.06, strike: 89.6, parite: 5, levier: null, manquants: ["levier"] }, Date.now());');
+    verifier('un paramètre absent d’une lecture mais déjà connu ne lève pas de carte, et la carte en attente se referme',
+      !!idZ && J('Var_State.controles.find(c => c.id === "ctl-k-lev").statut') === 'remplacee'
+      && !J('Var_State.controles.some(c => c.statut === "a_valider" && c.kind === "parametres_levier" && c.cible === ' + JSON.stringify(idZ) + ')'));
     verifier('le texte envoyé au desk compte six intentions de découverte, partout',
       !/une des cinq exactement/.test(R('Fn_BuildPromptMAJ({ passe: "desk", contrat: Fn_ContratDesk(), budget: Fn_BudgetDesk(0), sitesAutorises: [] })')));
   } catch (e) { ko('nouvelle interface', String((e && e.stack) || e)); }

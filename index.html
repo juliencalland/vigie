@@ -519,7 +519,7 @@ body.v2 .v2-eteinte{opacity:.6}
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202610161455';
+const Cst_Version = 'vigie-202610161629';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -4211,9 +4211,20 @@ function Fn_MajProduitLevier(pos, levier, ts) {
     if (levier.barriere != null) pr.barriere = levier.barriere;
     if (levier.strike != null) pr.strike = levier.strike;
   }
-  if (levier.manquants && levier.manquants.length) {
+  /* Un paramètre absent de CETTE lecture mais déjà connu du produit n'est pas
+     illisible : la ligne de l'écran est parfois livrée tronquée (« … P 5 » sans
+     « LV 7,98 »). La carte ne se lève que pour ce que l'application ignore, et elle
+     se referme d'elle-même dès que tout est connu. */
+  const manquent = (levier.manquants || []).filter(k => pr[k] == null);
+  if (!manquent.length) {
+    Var_State.controles.forEach(c => {
+      if (c.statut !== 'a_valider' || c.kind !== 'parametres_levier' || Fn_CibleControle(c) !== pos.id) return;
+      c.statut = 'remplacee'; c.dateDecision = Fn_AujISO(); c.motif = 'Paramètres connus : lus lors d’une capture précédente ou relus depuis.';
+    });
+  }
+  if (manquent.length) {
     Fn_AjouterControle({ kind: 'parametres_levier', id: pos.id,
-      resume: 'Paramètres illisibles sur ' + pos.detention.nom + ' : ' + levier.manquants.join(', ') + '.',
+      resume: 'Paramètres illisibles sur ' + pos.detention.nom + ' : ' + manquent.join(', ') + '.',
       preuve: 'Le nom lu à l’écran ne porte pas ces paramètres sous une forme reconnue. Ils sont perdus dans l’export, tronqué à 32 caractères.',
       propo: 'Les saisir à la main, ou recoller la ligne complète depuis l’écran du courtier.' });
   }
@@ -4610,10 +4621,37 @@ function Fn_SevDepuisImpact(pctVN) {
 function Fn_EmpreinteEvenement(ev) {
   return (ev.metriques || []).map(m => String(m.l) + '=' + String(m.v)).join('|').slice(0, 400);
 }
+/* « MATÉRIELLEMENT BOUGÉ », et non « bougé d'un euro ». L'empreinte était comparée
+   au caractère près : une exposition passée de 11 058 € à 11 070 € renvoyait les
+   trois textes au desk, et les faisait repayer — le 16/10/26, douze textes écrits
+   à 16 h 34 étaient de nouveau « à écrire » à 18 h 26, sans rien de neuf. Le
+   libellé des métriques doit être identique ; chaque nombre peut varier de 15 %
+   (ou d'une unité, pour une ancienneté en jours) sans que les textes repartent. */
+const Cst_ToleranceEmpreinte = 0.15;
+function Fn_DecomposerEmpreinte(s) {
+  const t = String(s || '').replace(/(\d)[\s\u00a0\u202f](?=\d{3}(?!\d))/g, '$1');
+  return { nombres: (t.match(/-?\d+(?:[.,]\d+)?/g) || []).map(x => Number(x.replace(',', '.'))),
+    squelette: t.replace(/-?\d+(?:[.,]\d+)?/g, '#') };
+}
+function Fn_EmpreintesProches(a, b) {
+  if (a === b) return true;
+  let x = String(a || ''), y = String(b || '');
+  // Empreintes tronquées à 400 caractères : on compare jusqu'au dernier séparateur commun.
+  if (x.length >= 400 || y.length >= 400) {
+    const cut = s => s.slice(0, Math.max(0, s.lastIndexOf('|')));
+    x = cut(x.slice(0, 400)); y = cut(y.slice(0, 400));
+  }
+  const p = Fn_DecomposerEmpreinte(x), q = Fn_DecomposerEmpreinte(y);
+  if (p.squelette !== q.squelette || p.nombres.length !== q.nombres.length) return false;
+  return p.nombres.every((n, i) => {
+    const m = q.nombres[i];
+    return Math.abs(n - m) <= Math.max(Cst_ToleranceEmpreinte * Math.max(Math.abs(n), Math.abs(m)), 1);
+  });
+}
 function Fn_TextesAEcrire(ev) {
   if (!ev.textes || !ev.textes.surv || !ev.textes.prat) return true;
   if (!ev.textes.empreinte) return true;
-  return ev.textes.empreinte !== Fn_EmpreinteEvenement(ev);
+  return !Fn_EmpreintesProches(ev.textes.empreinte, Fn_EmpreinteEvenement(ev));
 }
 /* CYCLE DE VIE.
    prévu ──(J−n)──> imminent ──(date passée)──> ÉCHU ──> débriefé
@@ -5920,7 +5958,7 @@ function Fn_RecevoirTexte(txt, forcer) {
    exactement comme si elle venait d'arriver. Rien n'est décidé à la place de
    l'utilisateur — ce qui change la structure du portefeuille reste en carte.
    Cst_MoteurCapture s'incrémente quand la lecture d'une capture change. */
-const Cst_MoteurCapture = 2;
+const Cst_MoteurCapture = 3;   // 3 : paramètres de levier déjà connus (16/10/26)
 function Fn_RelireCaptureDuJour() {
   const rt = Var_State._runtime, cap = rt.capture;
   if (!cap || !rt.collages.positions || !Fn_MemeJour(cap.ts, Date.now())) return false;
