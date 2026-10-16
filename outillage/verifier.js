@@ -713,13 +713,21 @@ setTimeout(async () => {
       JSON.stringify([t1, t2]));
 
     // Recoller la même capture est le geste le plus fréquent : il ne doit rien
-    // dupliquer, ni recréer une carte déjà tranchée.
+    // dupliquer, ni recréer une carte déjà tranchée. (Le jeu fictif porte un bloc de
+    // marge qui ne somme pas ses lignes : depuis que les quantités sont lues sur la
+    // capture, le contrôle de valeur des titres le signale — à juste titre — d'une
+    // carte, qui ne doit pas se dédoubler au second collage.)
+    const avAvant = J('Var_State.controles.filter(c => c.statut === "a_valider").map(c => c.kind).sort()');
     R('Var_State._runtime.essai = Fn_AnalyserEntrees();');
     const bilan2 = J('Fn_IntegrerEntrees(Var_State._runtime.essai)');
-    const apres = J('({ n: Var_State.positions.length, o: Var_State.ordres.length, av: Var_State.controles.filter(c => c.statut === "a_valider").length })');
+    const apres = J('({ n: Var_State.positions.length, o: Var_State.ordres.length, av: Var_State.controles.filter(c => c.statut === "a_valider").map(c => c.kind).sort() })');
     verifier('recoller la même capture ne crée rien de neuf',
-      bilan2.nouvelles === 0 && apres.n === 9 && apres.o === 3 && apres.av === 0,
-      JSON.stringify(bilan2) + ' → ' + JSON.stringify(apres));
+      bilan2.nouvelles === 0 && apres.n === 9 && apres.o === 3 && apres.av.join(',') === avAvant.join(',')
+      && apres.av.every(k => k === 'ecart_valeur_titres'),
+      JSON.stringify(bilan2) + ' → ' + JSON.stringify(apres) + ' (avant : ' + avAvant.join(',') + ')');
+    verifier('les neuf positions créées portent la quantité lue sur la capture, sans export',
+      J('Var_State.positions.map(p => p.detention.qte)').join(',') === '60,15,90,1098,55,23000,30,200,100',
+      J('Var_State.positions.map(p => p.detention.qte)').join(','));
 
     /* --- Mémoire des revues : le desk réévalue, il ne redécouvre pas --- */
     R('Var_State.positions[0].desk = { niveau: "complet", profil: "croissance", tend: "hausse",'
@@ -2230,6 +2238,106 @@ setTimeout(async () => {
     R('Fn_LancerAppel = __sauve.appel; Fn_LignesAEnrichir = __sauve.lignes; Fn_AgendasAEnrichir = __sauve.agendas; Fn_ModeAcces = __sauve.acces;'
       + 'Var_State.majJournaux = []; Var_State._runtime.chaine = null;');
   } catch (e) { ko('documenter et analyser', String((e && e.stack) || e)); }
+
+  /* --- La macro ouvre Vigie : réception automatique, et la capture suffit --- */
+  console.log('\nJ ter. Réception automatique et capture autosuffisante');
+  try {
+    const R = q => vm.runInContext(q, ctx);
+    const J = q => JSON.parse(JSON.stringify(R(q)));
+    const p2 = n => String(n).padStart(2, '0');
+    const iso = d => d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()) + 'T' + p2(d.getHours()) + ':' + p2(d.getMinutes()) + ':' + p2(d.getSeconds());
+    const fraiche = CAPTURE_V11.replace('capture=2026-10-15T19:45:00', 'capture=' + iso(new Date()));
+    const vieille = CAPTURE_V11.replace('capture=2026-10-15T19:45:00', 'capture=' + iso(new Date(Date.now() - 40 * 60000)));
+    const socle = () => R('Var_State.positions = []; Var_State.controles = []; Var_State.ordres = []; Var_State.executes = []; Var_State.fx = null;'
+      + 'Var_State._runtime.collages = {}; Var_State._runtime.capture = null; Var_State._runtime.xlsx = null; Var_State._runtime.reception = null;');
+
+    /* La capture suffit : quantité confirmée par la ligne, clôture de la veille, taux. */
+    const doc = J('Fn_DecouperDocument(' + JSON.stringify(CAPTURE_V11) + ')');
+    const pos = J('Fn_ParserCapture("positions", ' + JSON.stringify(doc.positions) + ').lignes.map(l => [l.qte, l.clotureVeille, l.fx == null ? null : Math.round(l.fx * 1e5) / 1e5])');
+    verifier('capture : quantités lues sur les MOTS (« 1 500 1 500 »), confirmées par la ligne',
+      pos.map(x => x[0]).join(',') === '75,90,1500', JSON.stringify(pos));
+    verifier('capture : clôture de la veille déduite (plus-value du jour en euros, ou variation en %)',
+      Math.abs(pos[2][1] - 1.915) < 1e-9 && Math.abs(pos[1][1] - 54.25) < 0.01 && Math.abs(pos[0][1] - 255.95) < 0.02,
+      JSON.stringify(pos.map(x => x[1])));
+    verifier('capture : taux de change implicite (DKK) — valeur en euros ÷ quantité × cours',
+      Math.abs(pos[0][2] - 0.13377) < 1e-4 && pos[1][2] === 1, JSON.stringify(pos.map(x => x[2])));
+    const ambigu = J('Fn_QteDoublee(["100", "100"])'), mille = J('Fn_QteDoublee(["1", "500", "1", "500"])');
+    verifier('« 100 100 » se lit 100 et non cent mille cent ; « 1 500 1 500 » se lit 1 500',
+      ambigu === 100 && mille === 1500, ambigu + ' / ' + mille);
+    const dementie = J('Fn_DetailPosition("Untel SA Untel SA UNT | € 12,50 120 120 XX0000000019 € 12,50 EUR 1 600,00 1 600,00 10,00 10,00", [12.5, 120, 120, 12.5, 1600, 1600, 10, 10], "EUR").qte');
+    verifier('une quantité que la ligne DÉMENT (120 × 12,50 ≠ 1 600) n’est pas retenue',
+      dementie === null, String(dementie));
+
+    /* Sans export : les nouvelles lignes entrent avec leur quantité, les taux viennent de l'écran. */
+    socle();
+    R('Fn_PoserCapture(' + JSON.stringify(fraiche) + '); Fn_IntegrerEntrees(Fn_AnalyserEntrees());'
+      + 'Var_State.controles.filter(c => c.statut === "a_valider" && c.kind === "nouvelle_ligne").forEach(c => Fn_AppliquerControle(c, true));');
+    const integ = J('({ q: Var_State.positions.map(p => p.detention.qte), cv: Var_State.positions.map(p => p.detention.clotureVeille), fx: Var_State.fx })');
+    verifier('sans export : chaque nouvelle ligne entre avec la quantité lue sur l’écran',
+      integ.q.join(',') === '75,90,1500', integ.q.join(','));
+    verifier('sans export : les taux de change viennent de l’écran, et le disent',
+      !!integ.fx && Math.abs(integ.fx.taux.DKK - 0.13377) < 1e-4 && /écran/.test(integ.fx.origine), JSON.stringify(integ.fx));
+
+    /* Capture COMPLÈTE de son propre aveu : une position disparue est signalée sans export. */
+    R('Var_State.positions.push({ id: "XX000KA54321", ticker: null, isin: "XX000KA54321", detention: { nom: "KAP Veridian Turbo", qte: 200, dev: "EUR", cloture: 27, facteurs: [], ts: Date.now() },'
+      + ' produit: { type: "derive", sens: "short", histBarriere: [] }, desk: {}, marche: {}, valo: {}, consensus: {} });');
+    const soldee = J('Fn_AnalyserEntrees().controles.filter(c => c.kind === "position_soldee").map(c => c.preuve)');
+    verifier('sans export, une capture complète (1 page, lignes livrées = lues) signale la position soldée, vente comprise',
+      soldee.length === 1 && /lu en entier/.test(soldee[0]) && /vente de 200 titres/.test(soldee[0]), JSON.stringify(soldee));
+    const incomplete = J('(() => { Var_State._runtime.capture.meta.pages_positions = "plusieurs"; const k = Fn_AnalyserEntrees().controles.filter(c => c.kind === "position_soldee").length; Var_State._runtime.capture.meta.pages_positions = "1"; return k; })()');
+    verifier('mais pas si la capture est paginée : une ligne absente peut être sur l’autre page',
+      incomplete === 0, String(incomplete));
+
+    /* Avec un export : l'écran (en direct) l'emporte sur l'export (veille), et la carte le dit. */
+    socle();
+    R('Var_State._runtime.collages = { positions: { texte: ' + JSON.stringify([
+      ' Untel SA Untel SA UNT | € 12,50 130 130 XX0000000019 € 12,50 EUR 1 625,00 1 625,00 11,00 11,00 ',
+      ' Autre Inc Autre Inc AUT | $ 140,00 5 5 XX0000000027 $ 140,00 USD 592,95 592,95 120,00 120,00 ',
+      ' Tierce SA Tierce SA TIE | € 0,090 23 000 23 000 XX0000000035 € 0,090 EUR 2 070,00 2 070,00 0,08 0,08 ',
+      'Valeur des titres € 4 287,95', 'Liquidités € -1 000,00', 'Dernière mise à jour à 18:46:08'].join('\n')) + ', ts: Date.now() } };'
+      + 'Var_State._runtime.xlsx = __essaiReg;');
+    const ex = J('(() => { const a = Fn_AnalyserEntrees(); return { k: a.controles.filter(c => c.kind === "ecart_quantite_export").map(c => c.resume), q: a.propositions.map(p => p.qte) }; })()');
+    verifier('avec export : une quantité différente à l’écran (en direct) est retenue, et une carte le dit',
+      ex.k.length === 1 && /130 titres à l’écran, 120 dans l’export/.test(ex.k[0]) && ex.q.join(',') === '130,5,23000', JSON.stringify(ex));
+
+    /* RÉCEPTION AUTOMATIQUE : la macro ouvre …/vigie/?capture=… ; le document attend dans le presse-papier. */
+    ctx.location.search = '?capture=1792134700';
+    verifier('l’adresse ouverte par la macro est reconnue', J('Fn_ParamCapture()') === '1792134700');
+    const recevoir = async (texte, rejet) => {
+      socle();
+      ctx.__presse = texte;
+      ctx.navigator.clipboard.readText = rejet ? () => Promise.reject(new Error('refus')) : () => Promise.resolve(ctx.__presse);
+      ctx.location.search = '?capture=1792134700';
+      await R('Fn_ReceptionAuto()');
+      return J('({ r: Var_State._runtime.reception, n: Var_State.controles.filter(c => c.statut === "a_valider").length, capt: !!Var_State._runtime.capture })');
+    };
+    const ok1 = await recevoir(fraiche);
+    verifier('capture fraîche : reçue, posée et intégrée d’elle-même — 3 positions, 3 ordres, 3 transactions',
+      ok1.r && ok1.r.etat === 'ok' && ok1.r.positions === 3 && ok1.r.ordres === 3 && ok1.r.transactions === 3 && ok1.capt,
+      JSON.stringify(ok1.r));
+    R('Fn_ModeAcces = function () { return { mode: "byok", libelle: "clé" }; }; Fn_RenderMajPanel();');
+    const bandeau = String(els['v-maj'].innerHTML).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+    verifier('le bandeau dit ce qui est arrivé, juste au-dessus de « Documenter et analyser »',
+      /reçue et intégrée/.test(bandeau) && /3 position\(s\)/.test(bandeau) && /Documenter et analyser/.test(bandeau)
+      && bandeau.indexOf('reçue et intégrée') < bandeau.lastIndexOf('Documenter et analyser'), bandeau.slice(0, 200));
+    verifier('le desk n’est PAS lancé de lui-même (il est payant)',
+      J('Var_State.majJournaux.length') === 0 && !J('!!Var_State._runtime.enCours'));
+    const vieux = await recevoir(vieille);
+    verifier('capture de plus d’un quart d’heure : NON posée d’office, et proposée en un geste',
+      vieux.r.etat === 'ancienne' && !vieux.capt && /il y a 40 min/.test(vieux.r.message), JSON.stringify(vieux.r).slice(0, 160));
+    R('Fn_RecevoirTexte(Var_State._runtime.reception.texte, true);');
+    verifier('« la poser quand même » l’intègre', J('Var_State._runtime.reception.etat') === 'ok' && J('!!Var_State._runtime.capture'));
+    const degradee = await recevoir(fraiche.replace('statut=OK', 'statut=PARTIEL'));
+    verifier('capture qui se déclare dégradée : non posée d’office', degradee.r.etat === 'degradee' && !degradee.capt, JSON.stringify(degradee.r).slice(0, 120));
+    const autre = await recevoir('liste de courses : pain, lait');
+    verifier('presse-papier sans capture : refus expliqué, rien n’est touché', autre.r.etat === 'refus' && !autre.capt, autre.r.message);
+    const refus = await recevoir(fraiche, true);
+    R('Fn_RenderMajPanel();');
+    verifier('lecture refusée par le navigateur : un bouton « Recevoir la capture » fait le geste',
+      refus.r.etat === 'geste' && /data-action="reception-coller"/.test(String(els['v-maj'].innerHTML)), JSON.stringify(refus.r));
+    ctx.location.search = '';
+    socle();
+  } catch (e) { ko('réception automatique', String((e && e.stack) || e)); }
 
   console.log('\nI. Aide des commandes et codes d’erreur');
   try {

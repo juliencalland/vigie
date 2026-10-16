@@ -441,7 +441,7 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202610160640';
+const Cst_Version = 'vigie-202610160759';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -2080,7 +2080,7 @@ const Cst_Glossary = {
   'API': { long: 'Interface de programmation (API)', def: 'Accès programmatique à un service — ici l’API de Claude (api.anthropic.com), seul destinataire des données lors d’une mise à jour.' },
   'JSON': { long: 'JavaScript Object Notation', def: 'Format de données structuré. Le modèle renvoie un JSON unique que l’application répare si besoin, puis propose à la validation.' },
   'SSE': { long: 'Server-Sent Events (flux d’événements)', def: 'Flux envoyé par le serveur pendant l’appel : permet d’afficher en direct phases, recherches web et jetons reçus.' },
-  'XLSX': { long: 'Classeur Excel (XLSX)', def: 'Export du courtier, lu ici sans aucune bibliothèque. Il fait foi sur les quantités, les identifiants et les devises — jamais sur les cours, sa colonne « clôture » portant systématiquement la veille.' },
+  'XLSX': { long: 'Classeur Excel (XLSX)', def: 'Export du courtier, lu ici sans aucune bibliothèque. Facultatif depuis la capture v11, qui porte les mêmes quantités, identifiants et devises en direct : il sert de contrôle croisé. Jamais utilisé pour les cours, sa colonne « clôture » portant la veille.' },
   'ISIN': { long: 'International Securities Identification Number', def: 'Identifiant international unique d’un titre (ex. FR0000120271) ; plus fiable qu’un ticker pour identifier un instrument.' },
   'ETF': { long: 'Exchange Traded Fund (fonds indiciel coté)', def: 'Fonds coté répliquant un indice. Se juge sur ses frais courants et le PER moyen de son panier, pas sur un multiple propre.' },
   'risque du portefeuille': { long: 'Risque du portefeuille (au sens du courtier)', def: 'Montant de garantie exigé par le modèle de risque du courtier. Marge disponible = valeur liquidative − risque.' },
@@ -2227,6 +2227,9 @@ const Cst_AideActions = {
   'acq-integrer': { t: 'Analyser les entrées', d: 'Lit les collages et l’export, apparie les deux sources, recalcule toutes les grandeurs et produit une carte « à valider » par écart détecté. Ne coûte rien : aucun appel au modèle n’est émis. Rien n’est intégré sans votre validation.' },
   'acq-vider': { t: 'Vider les entrées du jour', d: 'Efface les collages et l’export de cet appareil — deux appuis pour confirmer. L’état du portefeuille déjà validé reste intact ; seules les sources du jour disparaissent.' },
   'maj-notrans': { t: 'Aucune transaction récente', d: 'Déclare qu’aucun ordre n’a été exécuté depuis le dernier relevé. La zone de collage correspondante disparaît et rien n’est transmis. À décocher dès que vous avez passé un ordre, sinon le contrôle de cohérence sera faussé.' },
+  'reception-coller': { t: 'Recevoir la capture', d: 'Lit le presse-papier, où la macro DEGIRO a déposé la capture, la contrôle (bornes, fraîcheur, statut), puis la pose et l’intègre — le même geste que coller puis « Intégrer ». À utiliser quand le navigateur a refusé de lire le presse-papier de lui-même.' },
+  'reception-forcer': { t: 'Poser cette capture quand même', d: 'Intègre la capture du presse-papier malgré l’avertissement (plus d’un quart d’heure, ou statut dégradé). À réserver au cas où l’on sait d’où elle vient : une capture ancienne remplacerait des cours plus frais.' },
+  'reception-fermer': { t: 'Fermer le bandeau', d: 'Masque le bandeau de réception. Rien n’est annulé : la capture déjà intégrée le reste.' },
   'maj-chaine': { t: 'Documenter et analyser', d: 'Un seul geste, deux étapes enchaînées. 1. Documentation : collecte les multiples, le consensus et les agendas des seules lignes dont les données sont périmées — sautée si tout est frais. 2. Analyse : envoie au modèle le tableau déjà calculé et lui demande le jugement de desk — textes d’événements, débriefs, découvertes. Une documentation annulée ou en échec arrête la chaîne. Appels payants (jetons et recherches web) ; gardez l’onglet ouvert, une requête ne survit pas au rechargement.' },
   'maj-lancer': { t: 'Lancer la mise à jour', d: 'Envoie au modèle le tableau déjà calculé et lui demande le jugement : textes d’événements, débriefs des événements échus, découvertes. L’appel consomme des jetons facturés et des recherches web payantes. Gardez l’onglet ouvert : une requête ne survit pas au rechargement.' },
   'maj-enrichir': { t: 'Lancer la passe d’enrichissement', d: 'Collecte les multiples, le consensus et les agendas des seules lignes lourdes dont les données sont périmées. Appel payant, à lancer une fois par semaine : ces données ne bougent pas d’un jour à l’autre. Aucun texte d’expertise n’est produit.' },
@@ -3126,6 +3129,72 @@ function Fn_ParserCapture(type, texte) {
    qu'absent, il fausserait toute plus-value affichée.
    Contrôlé sur six lignes réelles : PRU × quantité redonne exactement la
    plus-value latente affichée par le courtier, au centime. */
+/* LA CAPTURE SUFFIT : quantité, valeur, clôture de la veille, taux de change.
+   Mesuré le 15/10/2026 sur 14 lignes réelles contre l'export pris le même jour :
+   quantités identiques 14/14, devises 14/14, clôture de la veille retrouvée à
+   0,01 % près, taux de change plus frais que ceux de l'export. L'export n'est
+   donc plus qu'un contrôle croisé facultatif.
+   LA QUANTITÉ SE LIT SUR LES MOTS du texte, jamais sur des nombres déjà découpés :
+   « 100 100 » s'y lirait cent mille cent. Elle est le groupe de chiffres écrit
+   DEUX FOIS juste avant l'identifiant (après lui sur une ligne que l'automate n'a
+   pas réordonnée), et n'est retenue que si la ligne la confirme : valeur =
+   quantité × cours pour une ligne en euros ; pour une autre devise, le taux
+   qu'elle implique est confronté aux autres lignes de la même devise
+   (Fn_AnalyserEntrees). La CLÔTURE DE LA VEILLE se déduit de la plus-value du
+   jour en euros pour une ligne en euros (exacte, turbos compris), de la variation
+   en pourcentage pour une autre devise (la plus-value en euros y mêle le change). */
+function Fn_QteDoublee(mots) {
+  for (let s = 0; s < mots.length; s++) {
+    const t = mots.slice(s);
+    if (t.length < 2 || t.length % 2) continue;
+    const k = t.length / 2;
+    if (t.slice(0, k).join(' ') === t.slice(k).join(' ')) return Number(t.slice(0, k).join(''));
+  }
+  return null;
+}
+function Fn_MotsQuantite(l) {
+  const m = Cst_ReIsin.exec(l);
+  if (!m) return null;
+  const avant = l.slice(0, m.index).trim().split(/\s+/);
+  const fin = [];
+  for (let k = avant.length - 1; k >= 0 && /^\d+$/.test(avant[k]); k--) fin.unshift(avant[k]);
+  let q = Fn_QteDoublee(fin);
+  if (q == null) {
+    const deb = [];
+    for (const w of l.slice(m.index + m[0].length).trim().split(/\s+/)) { if (!/^\d+$/.test(w)) break; deb.push(w); }
+    q = Fn_QteDoublee(deb);
+  }
+  return q > 0 ? q : null;
+}
+function Fn_DetailPosition(l, nb, dev) {
+  const vide = { qte: null, valeur: null, plJour: null, clotureVeille: null, fx: null };
+  if (!nb || nb.length < 5) return vide;
+  const eq = (a, b) => a != null && b != null && Math.abs(a - b) < 1e-9;
+  const cours = nb[0];
+  let j = -1;
+  for (let k = 1; k + 4 < nb.length; k++) {
+    if (eq(nb[k], cours) && eq(nb[k + 1], nb[k + 2]) && eq(nb[k + 3], nb[k + 4])) { j = k; break; }
+  }
+  if (j < 0 || !(cours > 0)) return vide;
+  const valeur = nb[j + 1];
+  const plJour = eq(nb[j + 5], nb[j + 6]) ? nb[j + 5] : null;
+  const pct = eq(nb[j + 7], nb[j + 8]) ? nb[j + 7] : null;
+  let qte = Fn_MotsQuantite(l), fx = null;
+  if (qte != null && valeur > 0) {
+    if (dev === 'EUR') {
+      if (Math.abs(qte * cours - valeur) > Math.max(0.02, valeur * 0.0005)) qte = null;   // la ligne la dément
+      else fx = 1;
+    } else {
+      fx = valeur / (qte * cours);
+      if (!(fx > 0.0001 && fx < 100)) { qte = null; fx = null; }
+    }
+  } else qte = null;
+  let clotureVeille = null;
+  if (dev === 'EUR' && plJour != null && valeur > 0) clotureVeille = cours * (1 - plJour / valeur);
+  else if (pct != null && pct > -100) clotureVeille = cours / (1 + pct / 100);
+  if (clotureVeille != null) clotureVeille = Math.round(clotureVeille * 1e6) / 1e6;
+  return { qte, valeur: valeur > 0 ? valeur : null, plJour, clotureVeille, fx };
+}
 function Fn_PruDeLigne(nb) {
   if (!nb || nb.length < 5) return null;
   const eq = (a, b) => a != null && b != null && Math.abs(a - b) < 1e-9;
@@ -3196,16 +3265,19 @@ function Fn_ParserPositions(lignes, res) {
     const mIsin = Cst_ReIsin.exec(l);
     const mDev = Cst_ReDevise.exec(l.slice(finNom));
     const mSym = mDev ? null : Cst_ReSymboleDevise.exec(l.slice(mNom.index));
+    const dev = mDev ? mDev[1] : (mSym ? Cst_SymbolesDevise[mSym[0]] : null);
+    const det = Fn_DetailPosition(l, depuisCours.map(x => x.v), dev);
     res.lignes.push({
       nom: nt.nom, nomNorm: Fn_NormNom(nt.nom), ticker: nt.ticker,
       isin: mIsin ? mIsin[1] : null,
-      dev: mDev ? mDev[1] : (mSym ? Cst_SymbolesDevise[mSym[0]] : null),
+      dev: dev,
       // Convention assumée et AFFICHÉE : dans une ligne de position, le premier
       // nombre après le nom — codes et paramètres masqués — est le cours du jour.
-      // Les suivants sont conservés bruts : l'export fait foi sur la quantité et
-      // le montant, on ne devine pas.
       cloture: depuisCours[0].v, levier: levier,
       pru: Fn_PruDeLigne(depuisCours.map(x => x.v)),
+      // Quantité, valeur en euros, clôture de la veille et taux : lus sur la ligne
+      // et retenus SEULEMENT quand l'arithmétique de la ligne les confirme.
+      qte: det.qte, valeurEur: det.valeur, plJourEur: det.plJour, clotureVeille: det.clotureVeille, fx: det.fx,
       nombres: apres.map(n => n.v), brut: l
     });
   });
@@ -3479,6 +3551,18 @@ function Fn_AnalyserEntrees() {
   const controles = [], propositions = [];
   const capLignes = capPos ? capPos.lignes : [];
   const vus = [];
+  /* TAUX DE CHANGE LUS SUR LA CAPTURE : valeur en euros ÷ (quantité × cours), ligne
+     par ligne, puis la MÉDIANE par devise. Une ligne qui s'en écarte de plus de
+     1 % a une quantité mal lue : elle perd sa quantité, jamais devinée. */
+  const tauxCapture = {};
+  const parDev = {};
+  capLignes.forEach(c => { if (c.dev && c.dev !== 'EUR' && c.fx != null) (parDev[c.dev] = parDev[c.dev] || []).push(c); });
+  Object.keys(parDev).forEach(d => {
+    const v = parDev[d].map(c => c.fx).sort((a, b) => a - b);
+    const med = v.length % 2 ? v[(v.length - 1) / 2] : (v[v.length / 2 - 1] + v[v.length / 2]) / 2;
+    parDev[d].forEach(c => { if (Math.abs(c.fx / med - 1) > 0.01) { c.qte = null; c.fx = null; } });
+    tauxCapture[d] = Math.round(med * 1e6) / 1e6;
+  });
   // EN-TÊTE DE LA CAPTURE UNIQUE. Il ne porte aucun chiffre de portefeuille : il
   // DATE la lecture et permet de la CONTRÔLER. Trois usages, et rien de plus.
   const meta = (rt.capture && rt.capture.meta) ? rt.capture.meta : null;
@@ -3548,13 +3632,25 @@ function Fn_AnalyserEntrees() {
           preuve: 'Export : ' + Fn_FmtNb(x.qte, 0) + ' titres, ' + Fn_FmtEur(x.montantEur) + '. Capture : aucune ligne dont le nom commence par ce libellé.',
           propo: 'Capture partielle probable (défilement incomplet) : refaire la capture, ou intégrer la ligne sans cours du jour.' });
       }
-      if (c && existante && Fn_Num(existante.detention.qte) != null && Fn_Num(existante.detention.qte) !== x.qte) {
+      /* QUANTITÉ : l'écran est lu EN DIRECT, l'export date de la clôture précédente.
+         Quand la capture porte une quantité confirmée par sa ligne, c'est elle qui
+         est retenue ; si elle diffère de l'export, une carte dit les deux — un ordre
+         exécuté depuis l'export en est l'explication ordinaire. */
+      const qteEcran = c && c.qte != null ? c.qte : null;
+      const qte = qteEcran != null ? qteEcran : x.qte;
+      if (qteEcran != null && qteEcran !== x.qte) {
+        controles.push({ kind: 'ecart_quantite_export', id,
+          resume: nomComplet + ' : ' + Fn_FmtNb(qteEcran, 0) + ' titres à l’écran, ' + Fn_FmtNb(x.qte, 0) + ' dans l’export.',
+          preuve: 'L’écran est lu en direct, l’export date de la clôture précédente. Quantité retenue : celle de l’écran (' + Fn_FmtNb(qteEcran, 0) + '), confirmée par sa ligne (valeur = quantité × cours).',
+          propo: 'Ordre exécuté depuis l’export : accepter. Sinon, refaire la capture.' });
+      }
+      if (c && existante && Fn_Num(existante.detention.qte) != null && Fn_Num(existante.detention.qte) !== qte) {
         controles.push({ kind: 'ecart_quantite', id,
-          resume: 'Quantité modifiée sur ' + nomComplet + ' : ' + Fn_FmtNb(existante.detention.qte, 0) + ' → ' + Fn_FmtNb(x.qte, 0) + ' titres.',
-          preuve: 'Écart entre l’état de l’application et l’export du jour, qui fait foi sur les quantités.',
+          resume: 'Quantité modifiée sur ' + nomComplet + ' : ' + Fn_FmtNb(existante.detention.qte, 0) + ' → ' + Fn_FmtNb(qte, 0) + ' titres.',
+          preuve: 'Écart entre l’état de l’application et ' + (qteEcran != null ? 'l’écran du courtier (lu en direct, confirmé par sa ligne).' : 'l’export du jour.'),
           propo: 'Mettre la ligne à jour (ordre exécuté ou mouvement intermédiaire).' });
       }
-      propositions.push({ id, isin: x.isin || (c && c.isin) || null, nom: nomComplet, qte: x.qte,
+      propositions.push({ id, isin: x.isin || (c && c.isin) || null, nom: nomComplet, qte: qte,
         ticker: (c && c.ticker) || null, // l'écran est la SEULE source d'un ticker : l'export n'en porte pas
         dev: x.dev, cloture: c ? c.cloture : null, pru: c ? c.pru : null, clotureVeille: x.clotureVeille,
         montantDev: x.montantDev, montantEur: x.montantEur, levier, source: 'export+capture' });
@@ -3566,49 +3662,65 @@ function Fn_AnalyserEntrees() {
       // est fréquent et légitime — l'export tronque à 32 caractères, et un
       // produit à levier acheté après l'export n'y figure pas encore.
       const id = Fn_IdPosition(c.isin, null, c.nom);
-      const payload = { id, isin: c.isin, nom: c.nom, ticker: c.ticker || null, qte: null,
-        dev: c.dev || 'EUR', cloture: c.cloture, pru: c.pru, clotureVeille: null, montantDev: null,
+      const payload = { id, isin: c.isin, nom: c.nom, ticker: c.ticker || null, qte: c.qte != null ? c.qte : null,
+        dev: c.dev || 'EUR', cloture: c.cloture, pru: c.pru, clotureVeille: c.clotureVeille != null ? c.clotureVeille : null, montantDev: null,
         montantEur: null, levier: c.levier, source: 'capture seule' };
       controles.push({ kind: 'ligne_non_appariee', id, payload,
         resume: 'Ligne lue à l’écran sans correspondance dans l’export : ' + String(c.nom).slice(0, 70) + '.',
         preuve: 'Collage du ' + Fn_FmtHeure(capPos.ts) + '. L’export ne porte aucun produit dont le nom commence de la même façon.',
-        propo: 'Intégrer la ligne avec son cours du jour — sa quantité restera à confirmer au prochain export. Ou refaire l’export s’il précède l’opération.' });
+        propo: c.qte != null
+          ? 'Intégrer la ligne avec son cours du jour et sa quantité lue à l’écran (' + Fn_FmtNb(c.qte, 0) + ' titres). Ou refaire l’export s’il précède l’opération.'
+          : 'Intégrer la ligne avec son cours du jour — sa quantité n’a pas pu être confirmée sur la ligne. Ou refaire l’export s’il précède l’opération.' });
     });
   } else {
-    // Sans export : on travaille sur la seule capture, et on le dit. Les
-    // quantités restent celles de l'état — jamais devinées depuis l'écran.
+    /* Sans export : la capture suffit. Quantité, clôture de la veille et taux sont
+       lus sur chaque ligne et retenus quand la ligne les confirme ; à défaut, la
+       quantité reste celle de l'état — jamais devinée. */
     capLignes.forEach(c => {
       const id = Fn_IdPosition(c.isin, null, c.nom);
       const existante = Var_State.positions.find(p => p.id === id
         || Fn_NormNom(p.detention.nom).indexOf(Fn_NormNom(c.nom).slice(0, 12)) === 0);
+      const qteEtat = existante ? Fn_Num(existante.detention.qte) : null;
+      if (c.qte != null && existante && qteEtat != null && qteEtat !== c.qte) {
+        controles.push({ kind: 'ecart_quantite', id: existante.id,
+          resume: 'Quantité modifiée sur ' + c.nom + ' : ' + Fn_FmtNb(qteEtat, 0) + ' → ' + Fn_FmtNb(c.qte, 0) + ' titres.',
+          preuve: 'Écart entre l’état de l’application et l’écran du courtier, lu en direct et confirmé par sa ligne (valeur = quantité × cours).',
+          propo: 'Mettre la ligne à jour (ordre exécuté ou mouvement intermédiaire).' });
+      }
       propositions.push({ id: existante ? existante.id : id, isin: c.isin, nom: c.nom,
         ticker: c.ticker || null,
-        qte: existante ? Fn_Num(existante.detention.qte) : null, dev: c.dev || 'EUR',
-        cloture: c.cloture, pru: c.pru, clotureVeille: null, montantDev: null, montantEur: null,
-        levier: c.levier, source: 'capture seule' });
+        qte: c.qte != null ? (existante && qteEtat != null && qteEtat !== c.qte ? qteEtat : c.qte) : qteEtat,
+        dev: c.dev || 'EUR',
+        cloture: c.cloture, pru: c.pru, clotureVeille: c.clotureVeille != null ? c.clotureVeille : null,
+        montantDev: null, montantEur: null, levier: c.levier, source: 'capture seule' });
     });
   }
   /* POSITION SOLDÉE — une ligne de l'état que ni l'export ni l'écran ne portent
      plus. Ce contrôle existait en v2 et s'était perdu dans la reconstruction : un
      turbo vendu est resté onze jours dans le portefeuille suivi, pour une part
      notable de la valeur nette, avec ses revues planifiées. Les DEUX sources doivent
-     l'ignorer : une seule ne suffit pas (export tronqué, capture paginée). */
-  if (reg && capPos && capPos.lignes.length) {
+     l'ignorer : une seule ne suffit pas (export tronqué, capture paginée).
+     Sans export, la capture suffit si elle est COMPLÈTE de son propre aveu : une
+     seule page de positions, et autant de lignes lues que l'automate en a livré. */
+  const captureComplete = !!(meta && capPos && meta.pages_positions === '1'
+    && Fn_Num(meta.lignes_positions) != null && Fn_Num(meta.lignes_positions) === capPos.lignes.length);
+  if ((reg || captureComplete) && capPos && capPos.lignes.length) {
     Var_State.positions.forEach(p => {
       if (propositions.some(x => x.id === p.id)) return;
       const vente = capExe ? capExe.lignes.find(t => t.sens === 'vente' && t.isin && t.isin === (p.isin || p.id)) : null;
       controles.push({ kind: 'position_soldee', id: p.id, payload: { id: p.id },
-        resume: 'Position absente de l’export ET de la capture : ' + (p.detention.nom || p.id) + ' semble soldée.',
-        preuve: 'Ni l’export du jour ni l’écran des positions ne la portent'
+        resume: 'Position absente ' + (reg ? 'de l’export ET de la capture' : 'de la capture complète') + ' : ' + (p.detention.nom || p.id) + ' semble soldée.',
+        preuve: (reg ? 'Ni l’export du jour ni l’écran des positions ne la portent' : 'L’écran des positions, lu en entier (une page, ' + capPos.lignes.length + ' lignes livrées et lues), ne la porte plus')
           + (vente ? ' ; vente de ' + Fn_FmtNb(vente.qte, 0) + ' titres le ' + Fn_FmtDateCourt(vente.date) + ' à ' + Fn_FmtNb(vente.cours, 2) + ' ' + (vente.dev || '') + ', lue dans les transactions' : '') + '.',
         propo: 'La retirer du portefeuille suivi ; ses événements à venir sont classés. Rejeter si elle est encore détenue.' });
     });
   }
-  // Taux d'une devise : celui de l'export du jour, sinon le dernier connu.
+  // Taux d'une devise : celui de l'export du jour, sinon celui de la capture, sinon le dernier connu.
   const tauxDe = d => {
     if (!d || d === 'EUR') return 1;
     const t = reg && reg.taux ? Fn_Num(reg.taux[d]) : null;
-    return t != null ? t : Fn_Taux(d);
+    if (t != null) return t;
+    return tauxCapture[d] != null ? tauxCapture[d] : Fn_Taux(d);
   };
   /* MONTANT D'UN ORDRE EN EUROS. Le montant lu est dans la devise de l'ordre :
      1 200 pour 10 titres à 120 $. L'additionner tel quel à des euros faussait le
@@ -3681,7 +3793,7 @@ function Fn_AnalyserEntrees() {
           : 'Ligne détenue absente de l’export, ligne de l’export qui n’est plus détenue, ou quantité périmée — vérifier avant d’intégrer.' });
     }
   }
-  return { capPos, capOrd, capExe, reg, meta, propositions, controles,
+  return { capPos, capOrd, capExe, reg, meta, propositions, controles, tauxCapture,
     lignesKo: (capPos ? capPos.inconnues.length : 0) + (capOrd ? capOrd.inconnues.length : 0) + (capExe ? capExe.inconnues.length : 0) };
 }
 /* Intégration des entrées dans l'état. AUCUNE INTÉGRATION SILENCIEUSE : les
@@ -3738,6 +3850,10 @@ function Fn_IntegrerEntrees(an) {
   // jamais d'une API de change. Il est daté de la même séance que le fichier.
   if (an.reg && Object.keys(an.reg.taux).length) {
     Var_State.fx = { taux: an.reg.taux, ts: an.reg.ts, origine: 'export du courtier (colonne EUR ÷ colonne devise)' };
+  } else if (an.tauxCapture && Object.keys(an.tauxCapture).length) {
+    // Sans export : taux lus sur l'écran, en direct (valeur en euros ÷ quantité × cours, médiane par devise).
+    Var_State.fx = { taux: Object.assign({}, (Var_State.fx && Var_State.fx.taux) || {}, an.tauxCapture), ts: an.capPos ? an.capPos.ts : Date.now(),
+      origine: 'écran du courtier (valeur en euros ÷ quantité × cours, médiane par devise)' };
   }
   if (an.capOrd) {
     Var_State.ordres = an.capOrd.lignes.map(o => ({
@@ -5162,9 +5278,9 @@ function Fn_RenderAcquisition() {
     + Fn_HtmlZoneCapture() + '</div>';
   const x = rt.xlsx;
   const armeX = rt.armes['xlsx-effacer'];
-  h += '<div class="etape etape-cle"><div class="etape-t">B · L’export du courtier</div>'
+  h += '<div class="etape etape-cle"><div class="etape-t">B · L’export du courtier — facultatif</div>'
     + '<div class="zone-tete"><div style="min-width:0">'
-    + '<div class="tres-petit muted">' + Fn_Gloss(Fn_Esc('Le classeur exporté depuis l’espace du courtier, au choix en .xlsx ou en .xls — les deux formats sont lus, et c’est la signature du fichier qui décide, pas son extension. Il fait foi sur les quantités, les identifiants ISIN et les devises, et le taux de change s’en déduit exactement (montant en euros ÷ montant en devise).')) + '</div>'
+    + '<div class="tres-petit muted">' + Fn_Gloss(Fn_Esc('FACULTATIF : la capture v11 porte déjà quantités, identifiants, devises, clôture de la veille et taux de change, lus en direct et confirmés ligne par ligne. L’export sert de contrôle croisé — une fois par mois suffit, ou quand une carte le demande. Classeur .xlsx ou .xls : c’est la signature du fichier qui décide, pas son extension.')) + '</div>'
     + '<div class="tres-petit muted">Sa colonne de clôture porte la VEILLE quelle que soit l’heure d’export : elle n’est jamais utilisée comme cours. Les noms y sont tronqués à 32 caractères — c’est la capture qui fait foi sur le nom.</div></div>'
     + '<div class="zone-etat" style="color:var(' + (x ? '--ok' : '--muted') + ')">'
     + (x ? '✓ ' + Fn_Esc(x.nom) : 'à fournir') + '</div></div>'
@@ -5380,6 +5496,87 @@ function Fn_HtmlAlerteAppel(journal) {
    réglage vit dans Paramètres. Ne reste donc que le bouton — documenter puis
    analyser, enchaînés —, ce que fera chaque étape en une ligne, le sort du
    dernier appel et son coût. */
+/* RÉCEPTION AUTOMATIQUE DE LA CAPTURE. La macro, sa capture réussie et le rapport
+   fermé, ouvre Vigie à l'adresse …/vigie/?capture=<horodatage>. L'adresse ne porte
+   AUCUNE donnée — rien du portefeuille dans l'historique ni dans la synchronisation
+   du navigateur : le document attend dans le presse-papier, où la macro l'a déposé.
+   Chrome demande une fois l'autorisation de le lire ; à défaut, un bouton fait le
+   même geste d'un appui. Une capture de plus d'un quart d'heure, ou qui se déclare
+   dégradée, n'est pas posée d'office : le presse-papier a pu servir entre-temps.
+   Le desk n'est JAMAIS lancé seul : il est payant, il reste un geste. */
+const Cst_AgeMaxCaptureMin = 15;
+function Fn_ParamCapture() {
+  const m = /[?&]capture=([^&#]*)/.exec(String((typeof location !== 'undefined' && location.search) || ''));
+  return m ? decodeURIComponent(m[1]) : null;
+}
+function Fn_AgeCaptureMin(meta) {
+  const m = /^(\d{4})-(\d\d)-(\d\d)T(\d\d?):(\d\d):(\d\d)$/.exec(String((meta && meta.capture) || ''));
+  if (!m) return null;
+  return (Date.now() - new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]).getTime()) / 60000;
+}
+function Fn_RecevoirTexte(txt, forcer) {
+  const rt = Var_State._runtime;
+  const doc = Fn_DecouperDocument(txt);
+  if (!doc) {
+    rt.reception = { etat: 'refus', message: 'Le presse-papier ne contient pas de capture Vigie (il a pu servir depuis). Relancez la capture, ou collez-la à la main dans ② Acquisition.' };
+    return false;
+  }
+  const meta = Fn_ParserMeta(doc.meta);
+  const age = Fn_AgeCaptureMin(meta);
+  const heure = String(meta.capture || '').slice(11, 16);
+  if (!forcer && age != null && age > Cst_AgeMaxCaptureMin) {
+    rt.reception = { etat: 'ancienne', texte: txt, message: 'La capture du presse-papier date de ' + heure + ', il y a ' + Math.round(age) + ' min : ce n’est pas celle qui vient d’être faite.' };
+    return false;
+  }
+  if (!forcer && meta.statut && !/^ok$/i.test(meta.statut)) {
+    rt.reception = { etat: 'degradee', texte: txt, message: 'La capture de ' + heure + ' se déclare « ' + meta.statut + ' » : elle peut être incomplète.' };
+    return false;
+  }
+  Fn_PoserCapture(txt);
+  const an = Fn_AnalyserEntrees();
+  const bilan = Fn_IntegrerEntrees(an);
+  Fn_GenererSquelette();
+  rt.analyse = bilan;
+  Fn_Save();
+  rt.reception = { etat: 'ok', heure: heure,
+    positions: an.capPos ? an.capPos.lignes.length : 0, ordres: an.capOrd ? an.capOrd.lignes.length : 0,
+    transactions: an.capExe ? an.capExe.lignes.length : 0, rejets: an.lignesKo || 0 };
+  return true;
+}
+async function Fn_ReceptionAuto() {
+  const rt = Var_State._runtime;
+  if (!Fn_ParamCapture()) return;
+  try { history.replaceState(null, '', location.pathname); } catch (e) { /* adresse laissée telle quelle */ }
+  rt.reception = { etat: 'attente' };
+  if (navigator.clipboard && navigator.clipboard.readText) {
+    try { Fn_RecevoirTexte(await navigator.clipboard.readText(), false); }
+    catch (e) { rt.reception = { etat: 'geste', message: 'Le navigateur veut un appui pour lire le presse-papier.' }; }
+  } else {
+    rt.reception = { etat: 'geste', message: 'Ce navigateur ne lit pas le presse-papier de lui-même.' };
+  }
+  Fn_RenderTout();
+  Fn_MontrerOnglet('vigie');
+}
+function Fn_HtmlReception() {
+  const r = Var_State._runtime.reception;
+  if (!r) return '';
+  if (r.etat === 'attente') return '<div class="note note-info" style="margin:0 0 8px">Réception de la capture…</div>';
+  if (r.etat === 'ok') {
+    const nb = Fn_NbAValider();
+    return '<div class="note note-ok" style="margin:0 0 8px"><b>Capture de ' + Fn_Esc(r.heure) + ' reçue et intégrée</b> — '
+      + r.positions + ' position(s) · ' + r.ordres + ' ordre(s) · ' + r.transactions + ' transaction(s)'
+      + (r.rejets ? ' · <b>' + r.rejets + ' ligne(s) non comprise(s)</b>' : '') + '.'
+      + '<div class="tres-petit" style="margin-top:4px">' + (nb ? nb + ' carte(s) à valider, puis « Documenter et analyser ».' : 'Rien à valider : « Documenter et analyser » est prêt.') + '</div>'
+      + '<div class="rang-btn" style="margin-top:6px">' + (nb ? '<button class="btn" data-action="aller-avalider">Voir les cartes</button>' : '')
+      + '<button class="btn" data-action="reception-fermer">Fermer</button></div></div>';
+  }
+  const forcer = (r.etat === 'ancienne' || r.etat === 'degradee')
+    ? '<button class="btn" data-action="reception-forcer">La poser quand même</button>' : '';
+  return '<div class="note note-warn" style="margin:0 0 8px"><b>Capture non reçue automatiquement</b>'
+    + '<div class="tres-petit" style="margin-top:4px">' + Fn_Esc(r.message || '') + '</div>'
+    + '<div class="rang-btn" style="margin-top:6px"><button class="btn btn-accent" data-action="reception-coller">Recevoir la capture</button>'
+    + forcer + '<button class="btn" data-action="reception-fermer">Fermer</button></div></div>';
+}
 function Fn_RenderMajPanel() {
   const el = document.getElementById('v-maj');
   if (!el) return;
@@ -5390,7 +5587,7 @@ function Fn_RenderMajPanel() {
   const charge = Fn_ChargeDesk();
   const aEnrichir = Fn_LignesAEnrichir();
   const agendas = (typeof Fn_AgendasAEnrichir === 'function') ? Fn_AgendasAEnrichir() : [];
-  let h = '<div class="carte"><div class="carte-titre">③ Mise à jour'
+  let h = Fn_HtmlReception() + '<div class="carte"><div class="carte-titre">③ Mise à jour'
     + (journal && journal.statut === 'en cours' ? ' <span class="spinner"></span>' : '') + '</div>';
   if (journal) {
     const stLib = { 'en cours': 'en cours…', terminee: 'terminée', partielle: 'terminée (partielle)', echec: 'échec', interrompue: 'interrompue' }[journal.statut] || journal.statut;
@@ -7936,6 +8133,23 @@ function Fn_OnAction(e) {
       Fn_DoubleTap('acq-vider', () => { Fn_CollagesVider(); rt.analyse = null; Fn_RenderAcquisition(); }, () => Fn_RenderAcquisition());
       break;
     }
+    case 'reception-coller': {
+      if (!navigator.clipboard || !navigator.clipboard.readText) {
+        rt.reception = { etat: 'refus', message: 'Ce navigateur ne donne pas accès au presse-papier ici. Collez la capture à la main dans ② Acquisition.' };
+        Fn_RenderMajPanel();
+        break;
+      }
+      navigator.clipboard.readText()
+        .then(txt => { Fn_RecevoirTexte(txt, false); Fn_RenderTout(); })
+        .catch(() => { rt.reception = { etat: 'refus', message: 'Lecture du presse-papier refusée. Collez la capture à la main dans ② Acquisition — le traitement est identique.' }; Fn_RenderMajPanel(); });
+      break;
+    }
+    case 'reception-forcer': {
+      const r = rt.reception;
+      if (r && r.texte) { Fn_RecevoirTexte(r.texte, true); Fn_RenderTout(); }
+      break;
+    }
+    case 'reception-fermer': rt.reception = null; Fn_RenderMajPanel(); break;
     case 'maj-chaine': Fn_LancerChaine(); break;
     case 'maj-lancer': Fn_LancerDesk(); break;
     case 'maj-enrichir': Fn_LancerEnrichissement(); break;
@@ -8458,6 +8672,9 @@ function Fn_TickCompteurs() {
   Var_State._runtime.timers.tick = setInterval(Fn_TickCompteurs, 60000);
   Fn_RenderTout();
   Fn_MontrerOnglet(Var_State.onglet || 'vigie');
+  // Ouverte par la macro après une capture : le document attend dans le presse-papier.
+  // APRÈS la synchronisation, pour intégrer sur l'état le plus récent.
+  await Fn_ReceptionAuto();
 })();
 </script>
 </body></html>
