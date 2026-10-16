@@ -420,8 +420,9 @@ body.v2 .v2-nav button{flex:1 0 auto;background:var(--panel2);border:1px solid v
 body.v2 .v2-nav button.actif{color:var(--txt);border-color:var(--accent);background:var(--panel)}
 body.v2 .v2-nav .n{display:inline-block;min-width:18px;margin-left:3px;padding:0 4px;border-radius:9px;background:var(--crit);color:#fff;font-size:11px;line-height:18px}
 body.v2 .v2-nav .n-info{background:var(--accent)}
-body.v2 .v2-cols{display:grid;grid-template-columns:1fr;gap:0 12px;align-items:start}
-@media (min-width:900px){body.v2 .v2-cols{grid-template-columns:1fr 1.25fr;grid-template-rows:auto 1fr;grid-template-areas:"a b" "c b"}
+body.v2 .v2-cols{display:grid;grid-template-columns:minmax(0,1fr);gap:0 12px;align-items:start}
+body.v2 .v2-cols>div{min-width:0}
+@media (min-width:900px){body.v2 .v2-cols{grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);grid-template-rows:auto 1fr;grid-template-areas:"a b" "c b"}
   body.v2 .v2-za{grid-area:a}body.v2 .v2-zb{grid-area:b}body.v2 .v2-zc{grid-area:c}}
 body.v2 .v2-chiffres{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 @media (min-width:600px){body.v2 .v2-chiffres{grid-template-columns:repeat(4,minmax(0,1fr))}}
@@ -518,7 +519,7 @@ body.v2 .v2-eteinte{opacity:.6}
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202610161153';
+const Cst_Version = 'vigie-202610161156';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -9046,7 +9047,7 @@ function Fn_V2CarteDesk() {
     + nb(charge.sansTexte.length, 'événement', 'événements') + ' à commenter'
     + (charge.aDebriefer.length ? ', ' + nb(charge.aDebriefer.length, 'échu', 'échus') + ' à débriefer' : '')
     + ', ' + nb(Cst_DecouvertesVisees, 'idée', 'idées') + ' à chercher. '
-    + Fn_Esc(Fn_ModeleMeta().nom) + (connu ? ' · ≈ ' + Fn_FmtUsd(cout, 2) : '') + '.</div>'
+    + Fn_Esc(Fn_ModeleMeta().nom) + (connu ? ' · ≈ ' + Fn_FmtUsd(Math.round(cout * 100) / 100, 2) : '') + '.</div>'
     + (dernier ? '<div class="tres-petit muted">Dernière analyse : ' + Fn_Esc(Fn_FmtHeure(dernier.debutTs)) + ' — '
       + Fn_Esc({ terminee: 'terminée', partielle: 'partielle', echec: 'échec', interrompue: 'interrompue' }[dernier.statut] || dernier.statut)
       + (dernier.coutUsd != null ? ' — ' + Fn_Esc(Fn_FmtUsd(dernier.coutUsd)) : '') + '.</div>' : '<div class="tres-petit muted">Jamais lancée sur cet état.</div>');
