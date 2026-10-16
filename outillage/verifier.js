@@ -2628,6 +2628,33 @@ setTimeout(async () => {
     const reid = J('Var_State.controles.filter(c => c.cible === "XX-HOMONYME").map(c => c.id)');
     verifier('les cartes déjà enregistrées sous l’identifiant du titre sont réidentifiées, le titre gardé en « cible »',
       reid.length === 2 && reid[0] !== reid[1] && reid.every(i => /^ctl-/.test(i)), reid.join(' · '));
+    // Premier cycle réel du 16/10/26 : ce qui l'a appauvri ne doit plus revenir.
+    R('var __p = Var_State.positions.find(p => /Danica/.test(p.detention.nom)); __p.desk.profil = "croissance"; __p.desk.niveau = "complet";'
+      + '__p.valo = { per: 20, perN: 18, bpa: 3, capi: 1000, margeOp: 12, refPairs: 22, croisCa: 5, croisBpa: 6, veCa: 2, freshTs: Date.now() - 50 * 86400000 };'
+      + '__p.consensus = { conso: "Achat", obj: 300, pubDate: "2026-01-02", freshTs: Date.now() - 50 * 86400000 };');
+    const mq = J('Fn_ContratEnrichissement([__p], []).lignes[0].manque');
+    verifier('une ligne aux chiffres complets mais vieux de 50 jours redemande ses ratios, son consensus et sa prochaine publication',
+      mq.indexOf('per') >= 0 && mq.indexOf('conso') >= 0 && mq.indexOf('pubDate') >= 0 && mq.indexOf('obj') >= 0, mq.join(','));
+    R('__p.valo.freshTs = Date.now(); __p.consensus.freshTs = Date.now(); __p.consensus.pubDate = "2099-01-01";');
+    const mqFrais = J('Fn_ContratEnrichissement([__p], []).lignes[0].manque');
+    R('__p.consensus.pubDate = "2020-01-01";');
+    const mqPassee = J('Fn_ContratEnrichissement([__p], []).lignes[0].manque');
+    verifier('une ligne fraîche ne redemande rien ; une date de publication passée est redemandée',
+      mqFrais.indexOf('per') < 0 && mqFrais.indexOf('conso') < 0 && mqFrais.indexOf('pubDate') < 0 && mqPassee.indexOf('pubDate') >= 0,
+      mqFrais.join(',') + ' | ' + mqPassee.join(','));
+    R('__p.consensus.objEcart = 99; Fn_Recalculer();');
+    const ecObj = J('__p.consensus.objEcart'), coursP = J('__p.detention.cloture');
+    verifier('l’écart à l’objectif est recalculé au cours du jour, jamais figé à la collecte',
+      Math.abs(ecObj - Math.round((300 / coursP - 1) * 1000) / 10) < 1e-9, ecObj + ' (cours ' + coursP + ')');
+    R('Var_State.executes.push({ nom: "Ordre lu à tort (fictif)", sens: "achat", qte: null, cours: 36, date: null });');
+    const nEx = J('Var_State.executes.length'), retir = J('Fn_NettoyerExecutesIllisibles()');
+    verifier('une « exécution » sans date ni quantité (lecteurs d’avant la v11) est retirée ; les vraies restent',
+      retir === 1 && J('Var_State.executes.length') === nEx - 1 && J('Var_State.executes.every(t => t.date && t.qte != null)'));
+    R('Var_State.controles.push({ id: "ctl-k-expl", kind: "ecart_valeur_titres", statut: "a_valider", resume: "Valeur des titres de l’écran (10 000 €) différente de la somme des lignes valorisées (9 000 €) : écart de 1 000 €. (fictif)",'
+      + ' propo: "Divergence expliquée par les ordres en attente, en miroir de l’écart de liquidités : accepter la carte sans rien changer à l’état." });');
+    const ec = J('Fn_ContratDesk().ecarts.find(e => e.kind === "ecart_valeur_titres")') || {};
+    verifier('un écart part au desk avec son explication et son montant entier',
+      /expliquée par les ordres en attente/.test(ec.propo || '') && /écart de 1 000 €/.test(ec.resume || ''), JSON.stringify(ec));
     verifier('le texte envoyé au desk compte six intentions de découverte, partout',
       !/une des cinq exactement/.test(R('Fn_BuildPromptMAJ({ passe: "desk", contrat: Fn_ContratDesk(), budget: Fn_BudgetDesk(0), sitesAutorises: [] })')));
   } catch (e) { ko('nouvelle interface', String((e && e.stack) || e)); }

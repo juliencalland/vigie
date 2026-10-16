@@ -519,7 +519,7 @@ body.v2 .v2-eteinte{opacity:.6}
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202610161427';
+const Cst_Version = 'vigie-202610161455';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -1248,6 +1248,7 @@ async function Fn_Load() {
   Fn_FusionnerControlesDoublons();
   Fn_ClasserOrdresDatesAnciennes();
   Fn_NettoyerInstrumentsDecouvertes();
+  Fn_NettoyerExecutesIllisibles();
   Fn_MajStatutsCalendrier();
   Fn_ElaguerEtat();
   Fn_Recalculer();
@@ -1278,6 +1279,7 @@ function Fn_AdopterEtat(s) {
   Fn_FusionnerControlesDoublons();
   Fn_ClasserOrdresDatesAnciennes();
   Fn_NettoyerInstrumentsDecouvertes();
+  Fn_NettoyerExecutesIllisibles();
   Fn_MajStatutsCalendrier();
   Fn_Recalculer();
   Fn_GenererSquelette();
@@ -1313,6 +1315,15 @@ function Fn_SuivreInstrumentDecouverte(d) {
   Var_State.instruments.push({ id: 'suivi-' + d.id, ticker: '', isin: '', place: '',
     libelle: String(d.instr || d.titre || '').slice(0, 60), origine: 'découverte gardée' });
   return true;
+}
+/* Les « exécutions » sans date ni quantité viennent des lecteurs d'avant la v11, qui
+   prenaient l'historique d'ordres pour des exécutions. Le desk les lisait comme de
+   vrais achats et en tirait des conclusions fausses (deux titres « achetés » qui
+   n'ont jamais été détenus). Elles ne portent rien d'exploitable : retirées. */
+function Fn_NettoyerExecutesIllisibles() {
+  const avant = (Var_State.executes || []).length;
+  Var_State.executes = (Var_State.executes || []).filter(t => t && t.date && Fn_Num(t.qte) != null);
+  return avant - Var_State.executes.length;
 }
 function Fn_NettoyerInstrumentsDecouvertes() {
   const avant = (Var_State.instruments || []).length;
@@ -4295,6 +4306,11 @@ function Fn_Recalculer() {
   Var_State.positions.forEach(p => {
     const d = p.detention, pr = p.produit || (p.produit = {});
     const taux = Fn_Taux(d.dev);
+    /* L'ÉCART À L'OBJECTIF se recalcule au cours du jour. Figé à la collecte, il
+       vieillissait avec elle : +13 % affichés pour un titre passé AU-DESSUS de son
+       objectif (−6 %), et le desk devait corriger lui-même le chiffre fourni. */
+    const cs = p.consensus;
+    if (cs && Fn_Num(cs.obj) != null && Fn_Num(d.cloture) > 0) cs.objEcart = Math.round((Fn_Num(cs.obj) / Fn_Num(d.cloture) - 1) * 1000) / 10;
     /* VALEUR EN EUROS — recalculée à CHAQUE fois, jamais reprise de l'export.
        L'export vaut la VEILLE : le prendre pour la valeur du jour gelait toute
        l'exposition à la séance précédente, alors que le cours affiché juste à
@@ -7617,7 +7633,10 @@ function Fn_ContratDesk() {
     pos,
     ordres: Var_State.ordres.map(o => ({ nom: String(o.nom || '').slice(0, 40), sens: o.sens, qte: o.qte, lim: o.limite, montEur: o.montantEur })),
     executes: Var_State.executes.slice(-8).map(t => ({ nom: String(t.nom || '').slice(0, 40), sens: t.sens, qte: t.qte, cours: t.cours, d: t.date })),
-    ecarts: Var_State.controles.filter(c => c.statut === 'a_valider').map(c => ({ kind: c.kind, resume: String(c.resume || '').slice(0, 160) })),
+    /* Avec leur EXPLICATION : sans elle, le desk inventait la sienne — un écart de
+       valeur des titres déjà expliqué par un ordre en attente devenait deux achats
+       imaginaires. Et le résumé entier : coupé à 160 caractères, il amputait le montant. */
+    ecarts: Var_State.controles.filter(c => c.statut === 'a_valider').map(c => ({ kind: c.kind, resume: String(c.resume || '').slice(0, 240), propo: String(c.propo || '').slice(0, 200) })),
     // Événements à traiter UNIQUEMENT : sans texte, ou dont les chiffres ont bougé.
     evSansTexte: charge.sansTexte.map(e => ({ id: e.id, d: e.date, isin: e.isin, sev: e.sev,
       lib: String(e.libelle || '').slice(0, 110), m: (e.metriques || []).map(x => ({ l: x.l, v: String(x.v).slice(0, 110) })) })),
@@ -7649,7 +7668,13 @@ function Fn_ContratEnrichissement(lignes, agendas) {
       const v = p.valo || {}, c = p.consensus || {};
       const manque = [];
       const prof = Cst_Profils.find(x => x.id === p.desk.profil);
-      (prof ? prof.ratios : ['per', 'bpa', 'capi', 'margeOp']).forEach(k => { if (Fn_Num(v[k]) == null) manque.push(k); });
+      /* UNE DONNÉE PÉRIMÉE EST UNE DONNÉE MANQUANTE. La ligne était choisie parce que
+         ses chiffres avaient cinquante jours, puis envoyée avec une liste « manque »
+         VIDE — tous ses champs existaient — alors que la consigne interdit de chercher
+         hors de cette liste. Le modèle obéissait : huit lignes sur treize revenaient
+         sans rien (vécu le 16/10/26), et repartaient à l'appel suivant, payées deux fois. */
+      const valoPerimee = Fn_DonneePerimee(v.freshTs), consoPerimee = Fn_DonneePerimee(c.freshTs);
+      (prof ? prof.ratios : ['per', 'bpa', 'capi', 'margeOp']).forEach(k => { if (valoPerimee || Fn_Num(v[k]) == null) manque.push(k); });
       /* Un champ CHERCHÉ ET NON TROUVÉ ne se redemande pas la semaine suivante :
          une médiane sectorielle absente le 26 ne sera pas publiée le 2. On le
          redemande après Cst_RelanceIntrouvableJours, pas avant — sans cela la
@@ -7658,9 +7683,11 @@ function Fn_ContratEnrichissement(lignes, agendas) {
       if (Fn_Num(v.refHist) == null && Fn_Num(v.refPairs) == null && !Fn_ChercheEnVain(p, 'ref')) manque.push('refPairs');
       /* Le multiple a sa propre mémoire : une ligne dont le référentiel est trouvé
          mais le multiple introuvable ne doit pas se taire au nom du référentiel. */
-      if (Fn_Num(v.per) == null && Fn_Num(v.perN) == null && !Fn_ChercheEnVain(p, 'mult')) manque.push('per');
-      if (!c.pubDate) manque.push('pubDate');
-      if (!c.conso) manque.push('conso');
+      if ((valoPerimee || (Fn_Num(v.per) == null && Fn_Num(v.perN) == null)) && !Fn_ChercheEnVain(p, 'mult') && manque.indexOf('per') < 0) manque.push('per');
+      // Une date de publication PASSÉE n'annonce plus rien : c'est la suivante qu'il faut.
+      if (!c.pubDate || c.pubDate < Fn_AujISO() || consoPerimee) manque.push('pubDate');
+      if (!c.conso || consoPerimee) manque.push('conso');
+      if (consoPerimee && Fn_Num(c.obj) != null) manque.push('obj');
       return { id: p.id, nom: String(p.detention.nom || '').slice(0, 60), isin: p.isin || null,
         dev: p.detention.dev, cours: p.detention.cloture, pctVN: Fn_Num(p.detention.pctVN),
         profil: p.desk.profil, niveau: p.desk.niveau,
