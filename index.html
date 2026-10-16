@@ -445,6 +445,7 @@ body.v2 .v2-ag-tbl th button{background:none;border:0;padding:0;color:inherit;fo
 body.v2 .v2-ag-tbl th button.actif{color:var(--accent)}
 body.v2 .v2-ag-tbl td{padding:8px 4px;border-bottom:1px solid var(--line);vertical-align:top;overflow:hidden;text-overflow:ellipsis}
 body.v2 .v2-ag-tbl .c-date{width:16%}
+body.v2 .v2-ag-tbl td.a-confirmer{color:var(--muted)}
 body.v2 .v2-ag-tbl .c-j{width:13%}
 body.v2 .v2-ag-tbl .c-titre{width:33%}
 body.v2 .v2-ag-tbl .c-ev{width:23%}
@@ -556,7 +557,7 @@ body.v2 .v2-eteinte{opacity:.6}
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202610161649';
+const Cst_Version = 'vigie-202610161651';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -9582,7 +9583,11 @@ function Fn_V2EvAgenda(e) {
   let poids = null, aff = '';
   if (ordre) {
     const o = ord;
-    if (o && Fn_Num(o.montantEur) != null) { poids = Fn_Num(o.montantEur) / Math.max(1, (Fn_ValeurNette() || {}).vn || 1) * 100; aff = Fn_FmtEur(o.montantEur, 0); }
+    if (o && Fn_Num(o.montantEur) != null) {
+      const m = Fn_Num(o.montantEur);
+      poids = m / Math.max(1, (Fn_ValeurNette() || {}).vn || 1) * 100;
+      aff = Math.abs(m) >= 1000 ? Fn_FmtNb(m / 1000, 1) + ' k€' : Fn_FmtEur(m, 0);   // tient dans la colonne
+    }
   } else if (Fn_Num(pos.detention.pctVN) != null) { poids = Fn_Num(pos.detention.pctVN); aff = Fn_FmtPct(poids, 1); }
   return { e: e, nom: nom, code: code, type: type, poids: poids, aff: aff, lien: ordre ? 'ordres' : 'positions' };
 }
@@ -9647,14 +9652,15 @@ function Fn_V2TableAgenda(items, jourChoisi) {
     const j = Fn_JoursDepuis(x.e.date);
     const ouvert = rt.v2AgendaLigne === x.e.id;
     h += '<tr class="s-' + Fn_Esc(String(x.e.sev || 'Info').toLowerCase()) + (ouvert ? ' ouvert' : '') + '" data-action="v2-agenda-ligne" data-id="' + Fn_Esc(x.e.id) + '">'
-      + '<td class="c-date mono">' + Fn_Esc(Fn_FmtDateCourt(x.e.date).slice(0, 5)) + '</td>'
+      + '<td class="c-date mono' + (x.e.conf === false ? ' a-confirmer' : '') + '">' + (x.e.conf === false ? '~' : '') + Fn_Esc(Fn_FmtDateCourt(x.e.date).slice(0, 5)) + '</td>'
       + '<td class="c-j mono">' + (j === 0 ? 'auj.' : (j != null ? 'J+' + j : '')) + '</td>'
       + '<td class="c-titre"><b>' + Fn_Esc(x.code) + '</b>' + (x.lien === 'ordres' ? ' <span class="v2-ag-ordre">ordre</span>' : '') + '<span class="nom">' + Fn_Esc(x.nom) + '</span></td>'
-      + '<td class="c-ev">' + Fn_Esc(x.type) + (x.e.conf === false ? ' <span class="muted">(à confirmer)</span>' : '') + '</td>'
+      + '<td class="c-ev">' + Fn_Esc(x.type) + '</td>'
       + '<td class="c-poids mono">' + Fn_Esc(x.aff) + '</td></tr>';
     if (ouvert) h += '<tr class="v2-ag-detail"><td colspan="5">' + Fn_HtmlEvCarte(x.e, { apercu: true }) + '</td></tr>';
   });
-  return h + '</tbody></table>';
+  return h + '</tbody></table>'
+    + (l.some(x => x.e.conf === false) ? '<div class="tres-petit muted" style="margin-top:6px">~ date annoncée, pas encore confirmée par la société.</div>' : '');
 }
 
 /* ================================================================
