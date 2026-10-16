@@ -2437,8 +2437,8 @@ setTimeout(async () => {
     const vue = () => String(els['v2-vue'].innerHTML || '');
     const texte = h => h.replace(/<[^>]+>/g, ' ').replace(/&[a-z#0-9]+;/g, ' ').replace(/\s+/g, ' ');
     const nav = texte(String(els['v2-nav'].innerHTML || ''));
-    verifier('cinq vues, et le nombre de décisions en attente sur « Aujourd’hui »',
-      ['Aujourd’hui', 'Positions', 'Risques', 'Idées', 'Réglages'].every(x => nav.indexOf(x) >= 0) && /Aujourd’hui 6/.test(nav), nav);
+    verifier('six vues (dont l’Agenda), et le nombre de décisions en attente sur « Aujourd’hui »',
+      ['Aujourd’hui', 'Positions', 'Agenda', 'Risques', 'Idées', 'Réglages'].every(x => nav.indexOf(x) >= 0) && /Aujourd’hui 6/.test(nav), nav);
     const file = J('Fn_V2File().map(i => i.type + ":" + i.rang)');
     verifier('« À trancher » : une seule file, la plus urgente en tête (contrôle critique, arbitrage P1, échus, puis ce qui peut attendre)',
       file.join(',') === 'Contrôle:0,Arbitrage P1:1,Échu:2,Échu:2,Contrôle:3,Point de décision:3', file.join(','));
@@ -2451,12 +2451,36 @@ setTimeout(async () => {
     R('Var_State._runtime.v2ToutVoir = false; Fn_V2Rendre();');
     verifier('le desk en UN bouton, avec ce qu’il fera',
       (vue().match(/data-action="maj-chaine"/g) || []).length === 1 && /Analyser (avec le desk|quand même)/.test(vue()) && /à commenter/.test(texte(vue())));
-    verifier('la semaine à venir est là, le calendrier complet à la demande',
-      /Détachement Danica/.test(vue()) && /data-action="v2-calendrier"/.test(vue()));
+    verifier('la semaine à venir est là, et l’agenda complet à un appui',
+      /Détachement Danica/.test(vue()) && /data-action="v2-vue" data-id="agenda"/.test(vue()));
 
     // Ce qui a disparu, dans TOUTES les vues.
     const vues = {};
-    ['jour', 'positions', 'risques', 'idees', 'reglages'].forEach(v => { R('Var_State._runtime.v2Vue = "' + v + '"; Fn_V2Rendre();'); vues[v] = vue(); });
+    ['jour', 'positions', 'agenda', 'risques', 'idees', 'reglages'].forEach(v => { R('Var_State._runtime.v2Vue = "' + v + '"; Fn_V2Rendre();'); vues[v] = vue(); });
+
+    // L'AGENDA : les titres détenus et ceux que visent les ordres, en grille et en tableau.
+    const hAg = vues.agenda;
+    const lignesAg = J('Fn_V2ItemsAgenda("tous").map(x => x.lien + ":" + x.type + ":" + x.code)');
+    verifier('Agenda : une grille de huit semaines, jour par jour, et un tableau date · J · titre · événement · poids',
+      (hAg.match(/class="v2-ag-j[ "]/g) || []).length === 56 && /class="v2-ag-tbl"/.test(hAg)
+      && /data-action="v2-agenda-tri" data-id="poids"/.test(hAg), (hAg.match(/class="v2-ag-j[ "]/g) || []).length + ' cases');
+    verifier('Agenda : les événements des titres détenus ET des ordres en cours, sans les constats internes',
+      lignesAg.some(x => /^positions:/.test(x)) && lignesAg.some(x => /^ordres:Ordre en attente/.test(x))
+      && J('Fn_V2ItemsAgenda("tous").every(x => ["regle:these", "regle:marge"].indexOf(x.e.source) < 0)'), lignesAg.join(' · '));
+    R('Var_State._runtime.v2Vue = "agenda"; Var_State._runtime.v2AgendaFiltre = "ordres"; Fn_V2Rendre();');
+    const hOrd = vue();
+    R('Var_State._runtime.v2AgendaFiltre = "tous"; Var_State._runtime.v2AgendaJour = ' + JSON.stringify(jour(3)) + '; Fn_V2Rendre();');
+    const hJourAg = vue();
+    verifier('Agenda : le filtre « Ordres » ne garde que les ordres ; un jour touché ne montre que ses événements',
+      /v2-ag-ordre/.test(hOrd) && !/Détachement Danica|Ex-dividende/.test(texte(hOrd.split('v2-ag-tbl')[1] || ''))
+      && /Le \d\d\/\d\d\/\d\d/.test(texte(hJourAg)) && /data-action="v2-agenda-jour" data-id=""/.test(hJourAg));
+    R('Var_State._runtime.v2AgendaJour = null; Var_State._runtime.v2AgendaTri = "poids"; Fn_V2Rendre();');
+    const poidsTries = J('(() => { const l = Fn_V2ItemsAgenda("tous").filter(x => x.poids != null).map(x => x.poids); return l; })()');
+    verifier('Agenda : le tri par poids met en tête ce qui pèse le plus en valeur nette',
+      /data-id="poids" class="actif"/.test(vue()) && poidsTries.length > 0, poidsTries.map(p => Math.round(p * 10) / 10).join(' · '));
+    R('Var_State._runtime.v2AgendaTri = "date";');
+    verifier('Agenda : un événement critique passe avant un autre le même jour (le rang 0 de « Crit » n’est plus lu comme faux)',
+      J('Fn_RangSev("Crit")') === 0 && J('Fn_RangSev("Info")') === 2 && J('Fn_RangSev("?")') === 3);
     const tout = Object.values(vues).join('');
     const retirees = ['capture-coller', 'capture-saisie', 'xlsx', 'xlsx-effacer', 'acq-integrer', 'acq-vider', 'maj-notrans', 'site-recherche', 'sites-tous', 'sites-aucun', 'maj-lancer', 'maj-enrichir', 'chip', 'cal-jour'];
     const encore = retirees.filter(a => tout.indexOf('data-action="' + a + '"') >= 0);
@@ -2636,11 +2660,13 @@ setTimeout(async () => {
     verifier('une ligne aux chiffres complets mais vieux de 50 jours redemande ses ratios, son consensus et sa prochaine publication',
       mq.indexOf('per') >= 0 && mq.indexOf('conso') >= 0 && mq.indexOf('pubDate') >= 0 && mq.indexOf('obj') >= 0, mq.join(','));
     R('__p.valo.freshTs = Date.now(); __p.consensus.freshTs = Date.now(); __p.consensus.pubDate = "2099-01-01";');
+    verifier('la date de détachement d’un titre détenu est demandée quand elle manque (l’agenda se complète seul)', mq.indexOf('exDiv') >= 0, mq.join(','));
+    R('__p.valo.exDiv = "2099-06-01";');
     const mqFrais = J('Fn_ContratEnrichissement([__p], []).lignes[0].manque');
     R('__p.consensus.pubDate = "2020-01-01";');
     const mqPassee = J('Fn_ContratEnrichissement([__p], []).lignes[0].manque');
     verifier('une ligne fraîche ne redemande rien ; une date de publication passée est redemandée',
-      mqFrais.indexOf('per') < 0 && mqFrais.indexOf('conso') < 0 && mqFrais.indexOf('pubDate') < 0 && mqPassee.indexOf('pubDate') >= 0,
+      mqFrais.indexOf('per') < 0 && mqFrais.indexOf('conso') < 0 && mqFrais.indexOf('pubDate') < 0 && mqFrais.indexOf('exDiv') < 0 && mqPassee.indexOf('pubDate') >= 0,
       mqFrais.join(',') + ' | ' + mqPassee.join(','));
     R('__p.consensus.objEcart = 99; Fn_Recalculer();');
     const ecObj = J('__p.consensus.objEcart'), coursP = J('__p.detention.cloture');

@@ -420,6 +420,43 @@ body.v2 .v2-nav button{flex:1 0 auto;background:var(--panel2);border:1px solid v
 body.v2 .v2-nav button.actif{color:var(--txt);border-color:var(--accent);background:var(--panel)}
 body.v2 .v2-nav .n{display:inline-block;min-width:18px;margin-left:3px;padding:0 4px;border-radius:9px;background:var(--crit);color:#fff;font-size:11px;line-height:18px}
 body.v2 .v2-nav .n-info{background:var(--accent)}
+body.v2 .v2-nav button.icone{flex:0 0 auto;min-width:42px;font-size:17px}
+body.v2 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+body.v2 .v2-ag-filtres{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 10px}
+body.v2 .v2-ag-filtres .btn.actif{border-color:var(--accent);color:var(--txt);background:var(--panel)}
+body.v2 .v2-ag-entete{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;margin-bottom:3px}
+body.v2 .v2-ag-entete div{text-align:center;font-size:10.5px;color:var(--muted);text-transform:uppercase}
+body.v2 .v2-ag-grille{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+body.v2 .v2-ag-j{min-width:0;min-height:54px;padding:3px 4px 4px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--muted);font:inherit;text-align:left;display:flex;flex-direction:column;gap:1px;overflow:hidden;cursor:pointer}
+body.v2 .v2-ag-j:disabled{cursor:default}
+body.v2 .v2-ag-j .n{font-size:11px;font-weight:700;color:var(--txt);font-family:var(--mono);white-space:nowrap;overflow:hidden}
+body.v2 .v2-ag-j .c{font-size:10px;font-weight:700;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body.v2 .v2-ag-j .plus{font-size:9.5px;color:var(--muted)}
+body.v2 .v2-ag-j.passe{opacity:.4}
+body.v2 .v2-ag-j.auj{border-color:var(--warn);border-width:2px}
+body.v2 .v2-ag-j.s-crit{border-color:var(--crit);background:var(--crit-dim)}
+body.v2 .v2-ag-j.s-crit .c{color:var(--crit)}
+body.v2 .v2-ag-j.s-warn .c{color:var(--warn)}
+body.v2 .v2-ag-j.s-info .c{color:var(--accent)}
+body.v2 .v2-ag-j.sel{outline:2px solid var(--accent);outline-offset:1px}
+body.v2 .v2-ag-tbl{width:100%;border-collapse:collapse;table-layout:fixed;font-size:13px}
+body.v2 .v2-ag-tbl th{font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);text-align:left;padding:6px 4px;border-bottom:1px solid var(--line)}
+body.v2 .v2-ag-tbl th button{background:none;border:0;padding:0;color:inherit;font:inherit;text-transform:inherit;letter-spacing:inherit;cursor:pointer}
+body.v2 .v2-ag-tbl th button.actif{color:var(--accent)}
+body.v2 .v2-ag-tbl td{padding:8px 4px;border-bottom:1px solid var(--line);vertical-align:top;overflow:hidden;text-overflow:ellipsis}
+body.v2 .v2-ag-tbl .c-date{width:16%}
+body.v2 .v2-ag-tbl .c-j{width:13%}
+body.v2 .v2-ag-tbl .c-titre{width:33%}
+body.v2 .v2-ag-tbl .c-ev{width:23%}
+body.v2 .v2-ag-tbl .c-poids{width:15%;text-align:right}
+body.v2 .v2-ag-tbl td.c-titre .nom{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body.v2 .v2-ag-tbl tr[data-action]{cursor:pointer}
+body.v2 .v2-ag-tbl tr.s-crit td.c-date{box-shadow:inset 3px 0 0 var(--crit)}
+body.v2 .v2-ag-tbl tr.s-warn td.c-date{box-shadow:inset 3px 0 0 var(--warn)}
+body.v2 .v2-ag-tbl tr.s-info td.c-date{box-shadow:inset 3px 0 0 var(--accent)}
+body.v2 .v2-ag-tbl tr.ouvert td{border-bottom:0;background:var(--panel2)}
+body.v2 .v2-ag-tbl .v2-ag-detail td{padding:0 0 8px;background:var(--panel2)}
+body.v2 .v2-ag-ordre{display:inline-block;font-size:9.5px;font-weight:700;text-transform:uppercase;color:var(--accent);border:1px solid var(--accent);border-radius:6px;padding:0 4px;margin-left:3px}
 body.v2 .v2-cols{display:grid;grid-template-columns:minmax(0,1fr);gap:0 12px;align-items:start}
 body.v2 .v2-cols>div{min-width:0}
 @media (min-width:900px){body.v2 .v2-cols{grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);grid-template-rows:auto 1fr;grid-template-areas:"a b" "c b"}
@@ -519,7 +556,7 @@ body.v2 .v2-eteinte{opacity:.6}
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202610161635';
+const Cst_Version = 'vigie-202610161649';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -2519,9 +2556,14 @@ const Cst_AideActions = {
   'reception-coller': { t: 'Recevoir la capture', d: 'Lit le presse-papier, où la macro DEGIRO a déposé la capture, la contrôle (bornes, fraîcheur, statut), puis la pose et l’intègre — le même geste que coller puis « Intégrer ». À utiliser quand le navigateur a refusé de lire le presse-papier de lui-même.' },
   'reception-forcer': { t: 'Poser cette capture quand même', d: 'Intègre la capture du presse-papier malgré l’avertissement (plus d’un quart d’heure, ou statut dégradé). À réserver au cas où l’on sait d’où elle vient : une capture ancienne remplacerait des cours plus frais.' },
   'reception-fermer': { t: 'Fermer le bandeau', d: 'Masque le bandeau de réception. Rien n’est annulé : la capture déjà intégrée le reste.' },
-  'v2-vue': { t: 'Changer de vue', d: 'Aujourd’hui : le portefeuille, le desk, ce qui est à trancher et la semaine. Positions : une ligne par position, sa fiche à la demande. Risques : le score de discipline et ses indicateurs. Idées : les pistes du desk. Réglages : accès, desk, synchronisation, seuils, capture.' },
+  'v2-vue': { t: 'Changer de vue', d: 'Aujourd’hui : le portefeuille, le desk, ce qui est à trancher et la semaine. Positions : une ligne par position, sa fiche à la demande. Agenda : les événements à venir des titres détenus et des ordres en cours, en grille et en tableau. Risques : le score de discipline et ses indicateurs. Idées : les pistes du desk. Réglages : accès, desk, synchronisation, seuils, capture.' },
   'v2-fiche': { t: 'Ouvrir la fiche', d: 'Déplie la fiche de la position : cours, variation, plus-value, lecture du desk, valorisation, événements, vos déclarations. Un second appui la replie. Rien n’est modifié.' },
   'v2-tout-voir': { t: 'Tout voir', d: 'Affiche toute la file « À trancher », au-delà des cinq décisions les plus urgentes. Rien n’est modifié.' },
+  'v2-agenda-filtre': { t: 'Filtrer l’agenda', d: 'Tous : les titres détenus et ceux que visent vos ordres en cours. Positions : les seuls titres détenus. Ordres : les seuls titres visés par un ordre. Rien n’est modifié.' },
+  'v2-agenda-jour': { t: 'Voir un jour', d: 'Ne montre dans le tableau que les événements de ce jour. Un second appui, ou « Tout afficher », rend la liste entière. Rien n’est modifié.' },
+  'v2-agenda-tri': { t: 'Trier le tableau', d: 'Date : du plus proche au plus lointain. Poids : de la ligne la plus lourde en valeur nette à la plus légère — ce qui peut le plus vous coûter vient en tête. Rien n’est modifié.' },
+  'v2-agenda-ligne': { t: 'Détail de l’événement', d: 'Déplie la carte de l’événement : ses chiffres, et les textes du desk s’ils sont écrits. Un second appui la replie. Rien n’est modifié.' },
+  'v2-agenda-ajout': { t: 'Ajouter un événement', d: 'Ouvre le formulaire d’ajout d’un événement à vous : une date et un libellé suffisent. Il compte dans l’agenda et les indicateurs comme les autres.' },
   'v2-calendrier': { t: 'Calendrier complet', d: 'Affiche tous les événements à venir, semaine par semaine, et le formulaire d’ajout d’un événement. Rien n’est modifié.' },
   'v2-idees-toutes': { t: 'Idées écartées', d: 'Montre aussi les idées que vous avez écartées. Elles restent en mémoire pour que le desk ne les repropose pas sans fait nouveau.' },
   'v2-ui': { t: 'Changer d’interface', d: 'Bascule CET appareil entre l’ancienne et la nouvelle interface. Les données sont les mêmes : seul l’affichage change. Les autres appareils gardent leur choix.' },
@@ -4757,7 +4799,7 @@ function Fn_EvenementsFiltres() {
   let evs = Fn_CalendrierVif();
   if (Var_State.filtreJour) evs = evs.filter(e => e.date === Var_State.filtreJour);
   if (Var_State.filtreTag) evs = evs.filter(e => (e.tags || []).indexOf(Var_State.filtreTag) >= 0);
-  evs.sort((a, b) => (String(a.date) < String(b.date) ? -1 : String(a.date) > String(b.date) ? 1 : (Cst_SevOrdre[a.sev] || 3) - (Cst_SevOrdre[b.sev] || 3)));
+  evs.sort((a, b) => (String(a.date) < String(b.date) ? -1 : String(a.date) > String(b.date) ? 1 : (Cst_SevOrdre[a.sev] != null ? Cst_SevOrdre[a.sev] : 3) - (Cst_SevOrdre[b.sev] != null ? Cst_SevOrdre[b.sev] : 3)));
   return evs;
 }
 function Fn_ProchaineEcheance() {
@@ -7774,6 +7816,9 @@ function Fn_ContratEnrichissement(lignes, agendas) {
       if (!c.pubDate || c.pubDate < Fn_AujISO() || consoPerimee) manque.push('pubDate');
       if (!c.conso || consoPerimee) manque.push('conso');
       if (consoPerimee && Fn_Num(c.obj) != null) manque.push('obj');
+      /* LA DATE DE DÉTACHEMENT d'un titre détenu n'était jamais demandée — seulement celle
+         des titres visés par un ordre : l'agenda des titres restait sans ex-dividende. */
+      if (p.desk.profil !== 'derive' && p.desk.niveau !== 'derive' && (!v.exDiv || v.exDiv < Fn_AujISO() || valoPerimee) && manque.indexOf('exDiv') < 0) manque.push('exDiv');
       return { id: p.id, nom: String(p.detention.nom || '').slice(0, 60), isin: p.isin || null,
         dev: p.detention.dev, cours: p.detention.cloture, pctVN: Fn_Num(p.detention.pctVN),
         profil: p.desk.profil, niveau: p.desk.niveau,
@@ -8658,7 +8703,12 @@ function Fn_OnAction(e) {
     case 'v2-vue': rt.v2Vue = id; rt.v2Fiche = null; Fn_V2Rendre(); if (window.scrollTo) window.scrollTo(0, 0); break;
     case 'v2-fiche': rt.v2Fiche = rt.v2Fiche === id ? null : id; Fn_V2Rendre(); break;
     case 'v2-tout-voir': rt.v2ToutVoir = !rt.v2ToutVoir; Fn_V2Rendre(); break;
-    case 'v2-calendrier': rt.v2Calendrier = !rt.v2Calendrier; Fn_V2Rendre(); break;
+    case 'v2-calendrier': rt.v2Vue = 'agenda'; Fn_V2Rendre(); break;
+    case 'v2-agenda-filtre': rt.v2AgendaFiltre = id || 'tous'; rt.v2AgendaJour = null; Fn_V2Rendre(); break;
+    case 'v2-agenda-jour': rt.v2AgendaJour = (id && rt.v2AgendaJour !== id) ? id : null; Fn_V2Rendre(); break;
+    case 'v2-agenda-tri': rt.v2AgendaTri = id === 'poids' ? 'poids' : 'date'; Fn_V2Rendre(); break;
+    case 'v2-agenda-ligne': rt.v2AgendaLigne = rt.v2AgendaLigne === id ? null : id; Fn_V2Rendre(); break;
+    case 'v2-agenda-ajout': if (e.preventDefault) e.preventDefault(); rt.v2AgendaAjout = !rt.v2AgendaAjout; Fn_V2Rendre(); break;
     case 'v2-idees-toutes': rt.v2IdeesToutes = !rt.v2IdeesToutes; Fn_V2Rendre(); break;
     case 'v2-ui': Fn_ChoisirUi(id === '2' ? '2' : '1'); if (location.reload) location.reload(); break;
     case 'v2-coller': {
@@ -9181,7 +9231,7 @@ function Fn_UiDepuisAdresse() {
   const m = /[?&]ui=([12])/.exec(String((typeof location !== 'undefined' && location.search) || ''));
   if (m) Fn_ChoisirUi(m[1]);
 }
-const Cst_V2Vues = [['jour', 'Aujourd’hui'], ['positions', 'Positions'], ['risques', 'Risques'], ['idees', 'Idées'], ['reglages', 'Réglages']];
+const Cst_V2Vues = [['jour', 'Aujourd’hui'], ['positions', 'Positions'], ['agenda', 'Agenda'], ['risques', 'Risques'], ['idees', 'Idées'], ['reglages', 'Réglages']];
 const Cst_V2DepuisV1 = { vigie: 'jour', cours: 'positions', discipline: 'risques', decouvertes: 'idees', parametres: 'reglages' };
 const Cst_V2Visibles = 5;          // décisions affichées avant « tout voir »
 const Cst_V2JoursSemaine = 7;
@@ -9209,6 +9259,10 @@ function Fn_V2Installer() {
     'Fn_RenderParametres', 'Fn_RenderMajPanel', 'Fn_RenderAcquisition', 'Fn_RenderZonesEvenements', 'Fn_RenderDebrief',
     'Fn_RenderActions', 'Fn_RenderAValider', 'Fn_RenderCalendrier', 'Fn_RenderChips', 'Fn_RenderTimeline', 'Fn_RenderHero',
     'Fn_RenderFormAjout', 'Fn_RenderRegles', 'Fn_RenderEntete'].forEach(n => { globalThis[n] = Fn_V2Planifier; });
+  Var_State._runtime.timers.v2Jour = setInterval(() => {
+    const rt = Var_State._runtime;
+    if (rt.v2JourRendu && rt.v2JourRendu !== Fn_AujISO()) { Fn_MajStatutsCalendrier(); Fn_V2Planifier(); }
+  }, 60000);
   globalThis.Fn_MontrerOnglet = nom => {
     Var_State._runtime.v2Vue = Cst_V2DepuisV1[nom] || (Cst_V2Vues.some(v => v[0] === nom) ? nom : 'jour');
     Fn_FermerGloss();
@@ -9234,10 +9288,11 @@ function Fn_V2Rendre() {
   Fn_V2Nav(v);
   Fn_RenderBandeMAJ();
   vue.innerHTML = Fn_HtmlBanniereVersion()
-    + (v === 'positions' ? Fn_V2Positions() : v === 'risques' ? Fn_V2Risques() : v === 'idees' ? Fn_V2Idees()
+    + (v === 'positions' ? Fn_V2Positions() : v === 'agenda' ? Fn_V2Agenda() : v === 'risques' ? Fn_V2Risques() : v === 'idees' ? Fn_V2Idees()
       : v === 'reglages' ? Fn_V2Reglages() : Fn_V2Jour());
   // Les deux zones héritées gardent leur propre rendu : on les remplit en place.
-  if (v === 'jour' && rt.v2Calendrier && Var_V2Origine.Fn_RenderFormAjout) Var_V2Origine.Fn_RenderFormAjout();
+  if (v === 'agenda' && rt.v2AgendaAjout && Var_V2Origine.Fn_RenderFormAjout) Var_V2Origine.Fn_RenderFormAjout();
+  rt.v2JourRendu = Fn_AujISO();
   if (v === 'risques' && Var_V2Origine.Fn_RenderRegles) Var_V2Origine.Fn_RenderRegles();
 }
 /* ---- En-tête : la fraîcheur de la capture, l'état de synchronisation ---- */
@@ -9266,8 +9321,10 @@ function Fn_V2Nav(v) {
   if (!el) return;
   const nT = Fn_V2NbATrancher();
   const nI = (Var_State.decouvertes || []).filter(d => d.statut === 'proposee').length;
-  el.innerHTML = Cst_V2Vues.map(x => '<button type="button" class="' + (x[0] === v ? 'actif' : '') + '" data-action="v2-vue" data-id="' + x[0] + '">'
-    + Fn_Esc(x[1]) + (x[0] === 'jour' && nT ? '<span class="n">' + nT + '</span>' : '') + (x[0] === 'idees' && nI ? '<span class="n n-info">' + nI + '</span>' : '')
+  // Six vues sur la largeur d'un téléphone : les réglages passent en icône, leur nom reste lu par l'aide et les lecteurs d'écran.
+  el.innerHTML = Cst_V2Vues.map(x => '<button type="button" class="' + (x[0] === v ? 'actif' : '') + (x[0] === 'reglages' ? ' icone' : '') + '" data-action="v2-vue" data-id="' + x[0] + '" title="' + Fn_Esc(x[1]) + '">'
+    + (x[0] === 'reglages' ? '<span aria-hidden="true">⚙</span><span class="sr">' + Fn_Esc(x[1]) + '</span>' : Fn_Esc(x[1]))
+    + (x[0] === 'jour' && nT ? '<span class="n">' + nT + '</span>' : '') + (x[0] === 'idees' && nI ? '<span class="n n-info">' + nI + '</span>' : '')
     + '</button>').join('');
 }
 
@@ -9487,17 +9544,117 @@ function Fn_V2CarteSemaine() {
   const semaine = vifs.filter(e => { const j = Fn_JoursDepuis(e.date); return j != null && j >= 0 && j <= Cst_V2JoursSemaine; });
   let h = '<div class="carte"><div class="carte-titre">Cette semaine' + (semaine.length ? ' (' + semaine.length + ')' : '') + '</div>'
     + (semaine.length ? semaine.slice(0, rt.v2Calendrier ? 0 : Cst_V2SemaineVisibles).map(Fn_V2LigneEv).join('') : '<div class="vide">Aucun événement dans les sept jours.</div>')
-    + (!rt.v2Calendrier && semaine.length > Cst_V2SemaineVisibles ? '<div class="tres-petit muted" style="margin-top:6px">… et ' + (semaine.length - Cst_V2SemaineVisibles) + ' autre(s) cette semaine, dans le calendrier complet.</div>' : '');
-  h += '<div class="v2-btns"><button class="btn" data-action="v2-calendrier">' + (rt.v2Calendrier ? 'Masquer le calendrier' : 'Calendrier complet (' + vifs.length + ')') + '</button></div>';
-  if (rt.v2Calendrier) {
-    const parSem = {};
-    vifs.forEach(e => { const s = Fn_SemaineLundi(e.date) || 'sans date'; (parSem[s] = parSem[s] || []).push(e); });
-    Object.keys(parSem).sort().forEach(s => {
-      h += '<div class="v2-sem">Semaine du ' + Fn_Esc(Fn_FmtDateCourt(s)) + '</div>' + parSem[s].map(Fn_V2LigneEv).join('');
-    });
-    h += '<div id="v-form" style="margin-top:8px"></div>';
+    + (semaine.length > Cst_V2SemaineVisibles ? '<div class="tres-petit muted" style="margin-top:6px">… et ' + (semaine.length - Cst_V2SemaineVisibles) + ' autre(s) cette semaine, dans l’agenda.</div>' : '');
+  h += '<div class="v2-btns"><button class="btn" data-action="v2-vue" data-id="agenda">Agenda des titres (' + Fn_V2ItemsAgenda('tous').length + ')</button></div>';
+  return h + '</div>';
+}
+
+/* ================================================================
+   AGENDA — le calendrier des titres, en grille et en tableau
+   ================================================================
+   Ce qui arrive sur les titres DÉTENUS et sur ceux que visent les ORDRES EN COURS :
+   publications, détachements, barrières, revues, ordres et annonces attendues avant
+   leur exécution. Il se tient seul à jour : chaque capture (positions, ordres) et
+   chaque documentation (dates de publication et de détachement) régénèrent le
+   squelette dont il est la vue, et le changement de jour fait avancer les « J+n »
+   sans geste. Les constats internes (thèse à revoir, coussin de marge) n'y
+   figurent pas : ce ne sont pas des événements de marché, ils sont dans la file. */
+// Rang de gravité : Crit vaut 0 — « || 3 » le faisait passer en dernier.
+function Fn_RangSev(s) { return Cst_SevOrdre[s] != null ? Cst_SevOrdre[s] : 3; }
+const Cst_V2AgendaExclus = ['regle:these', 'regle:marge'];
+const Cst_V2AgendaTypes = { 'regle:publication': 'Résultats', 'regle:exdiv': 'Ex-dividende', 'regle:ordre': 'Ordre en attente',
+  'regle:ordre-annonce': 'Annonce avant l’ordre', 'regle:revue': 'Revue du levier' };
+function Fn_V2CodeCourt(nom) {
+  const m = String(nom || '').trim().split(/[\s,]+/).filter(Boolean)[0] || '?';
+  return m.length > 8 ? m.slice(0, 7) + '.' : m;
+}
+// Une ligne d'agenda : l'événement, le titre qu'il concerne, son code, sa nature, son poids — ou rien.
+function Fn_V2EvAgenda(e) {
+  if (!e || !e.date || Cst_V2AgendaExclus.indexOf(e.source) >= 0) return null;
+  const ordre = /^regle:ordre/.test(String(e.source || ''));
+  const pos = e.isin ? Fn_PositionParId(e.isin) : null;
+  if (!ordre && !pos) return null;
+  const suite = String(e.libelle || '').split(' — ').slice(1).join(' — ').replace(/^(achat|vente)\s+/i, '').trim();
+  const nom = pos && !ordre ? String(pos.detention.nom || pos.id) : (suite || (pos ? String(pos.detention.nom || '') : 'Ordre'));
+  const ord = ordre ? Var_State.ordres.find(x => Fn_NormNom(x.nom).indexOf(Fn_NormNom(nom).slice(0, 10)) === 0) : null;
+  const code = (pos && !ordre && pos.ticker) || (ord && ord.ticker) || (pos && pos.ticker) || Fn_V2CodeCourt(nom);
+  const type = Cst_V2AgendaTypes[e.source] || (/barri/i.test(String(e.libelle || '')) ? 'Barrière' : String(e.court || e.libelle || '').split(' — ')[0].slice(0, 32));
+  let poids = null, aff = '';
+  if (ordre) {
+    const o = ord;
+    if (o && Fn_Num(o.montantEur) != null) { poids = Fn_Num(o.montantEur) / Math.max(1, (Fn_ValeurNette() || {}).vn || 1) * 100; aff = Fn_FmtEur(o.montantEur, 0); }
+  } else if (Fn_Num(pos.detention.pctVN) != null) { poids = Fn_Num(pos.detention.pctVN); aff = Fn_FmtPct(poids, 1); }
+  return { e: e, nom: nom, code: code, type: type, poids: poids, aff: aff, lien: ordre ? 'ordres' : 'positions' };
+}
+function Fn_V2ItemsAgenda(filtre) {
+  return Fn_CalendrierVif().filter(e => e.statut !== 'echu').map(Fn_V2EvAgenda).filter(Boolean)
+    .filter(x => !filtre || filtre === 'tous' || x.lien === filtre);
+}
+function Fn_V2Agenda() {
+  const rt = Var_State._runtime;
+  const filtre = rt.v2AgendaFiltre || 'tous';
+  const tous = Fn_V2ItemsAgenda('tous');
+  const items = tous.filter(x => filtre === 'tous' || x.lien === filtre);
+  const n = k => tous.filter(x => k === 'tous' || x.lien === k).length;
+  let h = '<div class="carte"><div class="carte-titre">Agenda des titres — ' + Cst_HorizonSemaines + ' semaines</div>'
+    + '<div class="v2-ag-filtres">' + [['tous', 'Tous'], ['positions', 'Positions'], ['ordres', 'Ordres']].map(x =>
+      '<button type="button" class="btn btn-mini' + (filtre === x[0] ? ' actif' : '') + '" data-action="v2-agenda-filtre" data-id="' + x[0] + '">' + x[1] + ' (' + n(x[0]) + ')</button>').join('') + '</div>'
+    + Fn_V2GrilleAgenda(items, rt.v2AgendaJour)
+    + '<div class="tres-petit muted" style="margin-top:6px">Mis à jour seul : chaque capture DEGIRO et chaque documentation régénèrent l’agenda ; les « J+n » avancent chaque jour. Touchez un jour pour n’en voir que les événements.</div></div>';
+  h += '<div class="carte">' + Fn_V2TableAgenda(items, rt.v2AgendaJour) + '</div>';
+  h += '<details class="carte v2-section"' + (rt.v2AgendaAjout ? ' open' : '') + '><summary class="carte-titre" data-action="v2-agenda-ajout">Ajouter un événement</summary>'
+    + (rt.v2AgendaAjout ? '<div id="v-form"></div>' : '') + '</details>';
+  return h;
+}
+function Fn_V2GrilleAgenda(items, jourChoisi) {
+  const debut = Fn_ParseDate(Fn_SemaineLundi(Fn_AujISO()));
+  if (!debut) return '';
+  const auj = Fn_AujISO(), parJour = {};
+  items.forEach(x => { (parJour[x.e.date] = parJour[x.e.date] || []).push(x); });
+  let h = '<div class="v2-ag-entete">' + Cst_JoursSem.map(j => '<div>' + Fn_Esc(j.replace('.', '')) + '</div>').join('') + '</div><div class="v2-ag-grille">';
+  for (let i = 0; i < Cst_HorizonSemaines * 7; i++) {
+    const d = new Date(debut.getTime());
+    d.setDate(d.getDate() + i);
+    const iso = Fn_DateISO(d);
+    const l = (parJour[iso] || []).slice().sort((a, b) => Fn_RangSev(a.e.sev) - Fn_RangSev(b.e.sev));
+    const sev = l.some(x => x.e.sev === 'Crit') ? 'crit' : (l.some(x => x.e.sev === 'Warn') ? 'warn' : (l.length ? 'info' : ''));
+    const cls = ['v2-ag-j'];
+    if (iso < auj) cls.push('passe');
+    if (iso === auj) cls.push('auj');
+    if (sev) cls.push('s-' + sev);
+    if (jourChoisi === iso) cls.push('sel');
+    const mois = (d.getDate() === 1 || i === 0) ? ' ' + new Intl.DateTimeFormat('fr-FR', { month: 'short' }).format(d).replace('.', '') : '';
+    h += '<button type="button" class="' + cls.join(' ') + '"' + (l.length ? ' data-action="v2-agenda-jour" data-id="' + iso + '"' : ' disabled') + '>'
+      + '<span class="n">' + d.getDate() + Fn_Esc(mois) + '</span>'
+      + l.slice(0, 2).map(x => '<span class="c">' + Fn_Esc(x.code) + '</span>').join('')
+      + (l.length > 2 ? '<span class="plus">+' + (l.length - 2) + '</span>' : '') + '</button>';
   }
   return h + '</div>';
+}
+function Fn_V2TableAgenda(items, jourChoisi) {
+  const rt = Var_State._runtime;
+  const tri = rt.v2AgendaTri || 'date';
+  let l = items.filter(x => !jourChoisi || x.e.date === jourChoisi);
+  l = l.slice().sort((a, b) => tri === 'poids'
+    ? ((b.poids || 0) - (a.poids || 0)) || (a.e.date < b.e.date ? -1 : 1)
+    : (a.e.date < b.e.date ? -1 : (a.e.date > b.e.date ? 1 : Fn_RangSev(a.e.sev) - Fn_RangSev(b.e.sev))));
+  let h = '<div class="carte-titre">' + (jourChoisi ? 'Le ' + Fn_Esc(Fn_FmtDateCourt(jourChoisi)) : 'Prochains événements') + ' (' + l.length + ')'
+    + (jourChoisi ? ' <button type="button" class="btn btn-mini" data-action="v2-agenda-jour" data-id="">Tout afficher</button>' : '') + '</div>';
+  if (!l.length) return h + '<div class="vide">Aucun événement à venir sur ces titres. Les dates de publication et de détachement arrivent avec la documentation du desk.</div>';
+  const th = (k, lib) => '<th class="c-' + k + '"><button type="button" data-action="v2-agenda-tri" data-id="' + k + '"' + (tri === k ? ' class="actif"' : '') + '>' + lib + (tri === k ? ' ▾' : '') + '</button></th>';
+  h += '<table class="v2-ag-tbl"><thead><tr>' + th('date', 'Date') + '<th class="c-j">J</th><th class="c-titre">Titre</th><th class="c-ev">Événement</th>' + th('poids', 'Poids') + '</tr></thead><tbody>';
+  l.forEach(x => {
+    const j = Fn_JoursDepuis(x.e.date);
+    const ouvert = rt.v2AgendaLigne === x.e.id;
+    h += '<tr class="s-' + Fn_Esc(String(x.e.sev || 'Info').toLowerCase()) + (ouvert ? ' ouvert' : '') + '" data-action="v2-agenda-ligne" data-id="' + Fn_Esc(x.e.id) + '">'
+      + '<td class="c-date mono">' + Fn_Esc(Fn_FmtDateCourt(x.e.date).slice(0, 5)) + '</td>'
+      + '<td class="c-j mono">' + (j === 0 ? 'auj.' : (j != null ? 'J+' + j : '')) + '</td>'
+      + '<td class="c-titre"><b>' + Fn_Esc(x.code) + '</b>' + (x.lien === 'ordres' ? ' <span class="v2-ag-ordre">ordre</span>' : '') + '<span class="nom">' + Fn_Esc(x.nom) + '</span></td>'
+      + '<td class="c-ev">' + Fn_Esc(x.type) + (x.e.conf === false ? ' <span class="muted">(à confirmer)</span>' : '') + '</td>'
+      + '<td class="c-poids mono">' + Fn_Esc(x.aff) + '</td></tr>';
+    if (ouvert) h += '<tr class="v2-ag-detail"><td colspan="5">' + Fn_HtmlEvCarte(x.e, { apercu: true }) + '</td></tr>';
+  });
+  return h + '</tbody></table>';
 }
 
 /* ================================================================
