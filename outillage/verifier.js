@@ -2612,6 +2612,22 @@ setTimeout(async () => {
       + ' libelle: "Thèse périmée par une publication — Danica (fictif)", source: "regle:these" });');
     verifier('une « thèse à revoir » ne coûte pas trois textes d’événement : la revue est déjà dans la lecture de la position',
       !J('Fn_ChargeDesk().sansTexte.some(e => e.id === "these-k")'));
+    // Deux cartes sur le MÊME titre : chacune son identifiant, et accepter l'une n'accepte qu'elle.
+    const idTot = J('Var_State.positions.find(p => /Totalis/.test(p.detention.nom)).id');
+    R('Fn_AjouterControle({ kind: "parametres_levier", id: ' + JSON.stringify(idTot) + ', resume: "Paramètres illisibles (fictif)." });'
+      + 'Fn_AjouterControle({ kind: "position_soldee", id: ' + JSON.stringify(idTot) + ', payload: { id: ' + JSON.stringify(idTot) + ' }, resume: "Soldée (fictif)." });');
+    const deux = J('Var_State.controles.filter(c => c.statut === "a_valider" && (c.kind === "parametres_levier" || c.kind === "position_soldee") && c.cible === ' + JSON.stringify(idTot) + ').map(c => ({ id: c.id, k: c.kind }))');
+    const idSold = (deux.find(x => x.k === 'position_soldee') || {}).id;
+    R('Fn_OnAction({ target: { closest: s => s === "[data-action]" ? { getAttribute: k => k === "data-action" ? "av-accepter" : k === "data-id" ? ' + JSON.stringify(idSold) + ' : null } : null } });');
+    verifier('deux cartes sur le même titre ont chacune leur identifiant ; accepter « position soldée » solde la ligne et ferme l’autre carte',
+      deux.length === 2 && deux[0].id !== deux[1].id && !J('Var_State.positions.some(p => p.id === ' + JSON.stringify(idTot) + ')')
+      && J('Var_State.controles.find(c => c.id === ' + JSON.stringify(idSold) + ').statut') === 'acceptee'
+      && J('Var_State.controles.find(c => c.kind === "parametres_levier" && c.cible === ' + JSON.stringify(idTot) + ').statut') === 'remplacee', JSON.stringify(deux));
+    R('Var_State.controles.push({ id: "XX-HOMONYME", kind: "parametres_levier", statut: "a_valider", resume: "a" },'
+      + ' { id: "XX-HOMONYME", kind: "position_soldee", statut: "a_valider", payload: { id: "XX-HOMONYME" }, resume: "b" }); Fn_ReidentifierControles();');
+    const reid = J('Var_State.controles.filter(c => c.cible === "XX-HOMONYME").map(c => c.id)');
+    verifier('les cartes déjà enregistrées sous l’identifiant du titre sont réidentifiées, le titre gardé en « cible »',
+      reid.length === 2 && reid[0] !== reid[1] && reid.every(i => /^ctl-/.test(i)), reid.join(' · '));
     verifier('le texte envoyé au desk compte six intentions de découverte, partout',
       !/une des cinq exactement/.test(R('Fn_BuildPromptMAJ({ passe: "desk", contrat: Fn_ContratDesk(), budget: Fn_BudgetDesk(0), sitesAutorises: [] })')));
   } catch (e) { ko('nouvelle interface', String((e && e.stack) || e)); }

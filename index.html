@@ -519,7 +519,7 @@ body.v2 .v2-eteinte{opacity:.6}
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202610161218';
+const Cst_Version = 'vigie-202610161427';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -1244,6 +1244,7 @@ async function Fn_Load() {
     if (!Var_State.calendrier.some(e => e.id === ev.id)) Var_State.calendrier.push(JSON.parse(JSON.stringify(ev)));
   });
   Fn_ReparerJournauxOrphelins();
+  Fn_ReidentifierControles();
   Fn_FusionnerControlesDoublons();
   Fn_ClasserOrdresDatesAnciennes();
   Fn_NettoyerInstrumentsDecouvertes();
@@ -1273,6 +1274,7 @@ function Fn_AdopterEtat(s) {
   // d'une session morte : il serait affiché comme un appel vivant que rien ne
   // termine. Même règle qu'au chargement — seule une exécution locale fait foi.
   Fn_ReparerJournauxOrphelins();
+  Fn_ReidentifierControles();
   Fn_FusionnerControlesDoublons();
   Fn_ClasserOrdresDatesAnciennes();
   Fn_NettoyerInstrumentsDecouvertes();
@@ -1324,6 +1326,19 @@ function Fn_ClasserOrdresDatesAnciennes() {
     if (!/-\d{4}-\d{2}-\d{2}$/.test(String(e.id || ''))) return;
     e.statut = 'classe';
     e.debrief = e.debrief || { note: 'Classé automatiquement : exemplaire daté d’un ordre encore vivant, produit par une version antérieure.', ts: Date.now() };
+    n++;
+  });
+  return n;
+}
+function Fn_ReidentifierControles() {
+  let n = 0;
+  const vus = {};
+  (Var_State.controles || []).forEach(c => {
+    const id = String(c.id || '');
+    if (id.indexOf('ctl-') === 0 && !vus[id]) { vus[id] = true; return; }
+    c.cible = Fn_CibleControle(c);
+    c.id = Fn_Uid('ctl');
+    vus[c.id] = true;
     n++;
   });
   return n;
@@ -4029,7 +4044,7 @@ function Fn_AnalyserEntrees() {
     if (somme > 0 && Math.abs(ecart) > Math.max(5, somme * 0.005)) {
       controles.push({ kind: 'ecart_valeur_titres',
         resume: 'Valeur des titres de l’écran (' + Fn_FmtEur(margeCap.titres) + ') différente de la somme des lignes valorisées (' + Fn_FmtEur(somme) + ') : écart de ' + Fn_FmtEur(ecart) + '.',
-        preuve: 'Somme calculée sur ' + propositions.length + ' ligne(s), au cours du jour et au taux de change déduit de l’export — même base que l’écran.'
+        preuve: 'Somme calculée sur ' + propositions.length + ' ligne(s), au cours du jour et au taux de change retenu (export du jour, sinon lu sur l’écran) — même base que l’écran.'
           + (approchees ? ' ' + approchees + ' ligne(s) sans cours ou sans taux comptée(s) à leur montant d’export, daté de la veille.' : ''),
         propo: expliquePar(ecart)
           ? 'Divergence expliquée par les ordres en attente, en miroir de l’écart de liquidités : accepter la carte sans rien changer à l’état.'
@@ -4205,9 +4220,19 @@ const Cst_ControlesUniques = ['capture_degradee', 'ecart_ordres', 'ecart_liquidi
    les entrées » empilait alors un jeu COMPLET de doublons à chaque lancement,
    invisible à l'écran (qui n'en montre qu'un) mais bien présent dans l'état
    synchronisé, et laissé derrière par un « tout accepter ». */
+/* LE TITRE QU'UNE CARTE VISE n'est pas son identifiant. Les deux se confondaient :
+   une carte « paramètres illisibles » et une carte « position soldée » sur le même
+   turbo portaient le même identifiant — celui du titre. Accepter la seconde
+   acceptait la première, et la seconde ne pouvait PLUS être acceptée du tout (vécu
+   le 16/10/26). L'identifiant de stockage est désormais toujours unique ; le titre
+   visé est rangé dans « cible ». */
+function Fn_CibleControle(c) {
+  if (!c) return null;
+  return c.cible || (c.payload && c.payload.id) || (c.id && String(c.id).indexOf('ctl-') !== 0 ? c.id : null);
+}
 function Fn_CleControle(c) {
   if (Cst_ControlesUniques.indexOf(c.kind) >= 0) return c.kind;
-  const metier = (c.payload && c.payload.id)
+  const metier = (c.payload && c.payload.id) || c.cible
     || (c.id && String(c.id).indexOf('ctl-') !== 0 ? c.id : '');
   return (c.kind || '') + '|' + (metier || String(c.resume || '').slice(0, 80));
 }
@@ -4220,10 +4245,11 @@ function Fn_AjouterControle(c) {
      ne bouge pas — un double appui commencé sur cette carte reste valide. */
   if (dejaLa) {
     Object.keys(c).forEach(k => { if (k !== 'id' && k !== 'statut') dejaLa[k] = c[k]; });
+    dejaLa.cible = Fn_CibleControle(c) || dejaLa.cible || null;
     dejaLa.cle = cle;
     return false;
   }
-  Var_State.controles.push(Object.assign({ id: Fn_Uid('ctl'), statut: 'a_valider' }, c, { cle: cle }));
+  Var_State.controles.push(Object.assign({ statut: 'a_valider' }, c, { id: Fn_Uid('ctl'), cible: Fn_CibleControle(c), cle: cle }));
   return true;
 }
 
@@ -8383,27 +8409,28 @@ function Fn_AppliquerControle(carte, accepte) {
             parite: null, levier: null, deltaEur: null, distBarriere: null, portageMensuel: null, histBarriere: [] },
       marche: {}, valo: {}, consensus: {}, desk: {}
     });
-  } else if (carte.kind === 'ecart_quantite' && carte.id) {
-    const pos = Fn_PositionParId(carte.id);
+  } else if (carte.kind === 'ecart_quantite' && Fn_CibleControle(carte)) {
+    const pos = Fn_PositionParId(Fn_CibleControle(carte));
     const m = /→\s*([\d   ,.]+)\s*titres/.exec(String(carte.resume || ''));
     if (pos && m) pos.detention.qte = Fn_NombreFr(m[1]);
-  } else if (carte.kind === 'position_soldee' && carte.id && Fn_PositionParId(carte.id)) {
+  } else if (carte.kind === 'position_soldee' && Fn_CibleControle(carte) && Fn_PositionParId(Fn_CibleControle(carte))) {
+    const cible = Fn_CibleControle(carte);
     // La position sort du portefeuille suivi ; ses événements encore ouverts sont
     // classés avec leur motif, pour ne pas demander de débrief sur une ligne vendue.
-    Var_State.positions = Var_State.positions.filter(p => p.id !== carte.id);
+    Var_State.positions = Var_State.positions.filter(p => p.id !== cible);
     (Var_State.calendrier || []).forEach(e => {
-      if (e.isin !== carte.id || ['prevu', 'imminent', 'echu'].indexOf(e.statut) < 0) return;
+      if (e.isin !== cible || ['prevu', 'imminent', 'echu'].indexOf(e.statut) < 0) return;
       e.statut = 'classe';
       e.debrief = e.debrief || { note: 'Classé : position soldée (carte acceptée le ' + Fn_FmtDateCourt(Fn_AujISO()) + ').', ts: Date.now() };
     });
     // Ses cartes et arbitrages encore en attente n'ont plus d'objet : une ligne vendue
     // ne se paramètre plus et ne s'allège plus.
     Var_State.controles.forEach(c => {
-      if (c === carte || c.statut !== 'a_valider' || (c.id !== carte.id && !(c.payload && c.payload.id === carte.id))) return;
+      if (c === carte || c.statut !== 'a_valider' || Fn_CibleControle(c) !== cible) return;
       c.statut = 'remplacee'; c.dateDecision = Fn_AujISO(); c.motif = 'Sans objet : position soldée.';
     });
     (Var_State.actions || []).forEach(a => {
-      if (a.statut !== 'a_valider' || a.isin !== carte.id) return;
+      if (a.statut !== 'a_valider' || a.isin !== cible) return;
       a.statut = 'perimee'; a.dateDecision = Fn_AujISO(); a.motif = 'Sans objet : position soldée.';
     });
   }
@@ -8594,7 +8621,7 @@ function Fn_OnAction(e) {
       break;
     }
     case 'av-accepter': case 'av-rejeter': {
-      const carte = Var_State.controles.find(x => x.id === id);
+      const carte = Var_State.controles.find(x => x.id === id && x.statut === 'a_valider');
       if (carte && carte.statut === 'a_valider') {
         Fn_AppliquerControle(carte, action === 'av-accepter');
         Fn_Save(); Fn_RenderVigie(); Fn_RenderCours();
@@ -9182,7 +9209,11 @@ function Fn_V2CartePortefeuille() {
   const zLev = Fn_Num(m.levier) == null ? '' : (Fn_Num(m.levier) >= (Fn_Num(s.leverageMax) || 99) ? 'z-crit' : '');
   return '<div class="carte"><div class="carte-titre">Portefeuille</div><div class="v2-chiffres">'
     + Fn_V2Chiffre('valeur nette', vn ? Fn_FmtEur(vn.vn, 0) : '—', m.as ? 'courtier à ' + m.as : (vn && vn.approx ? 'approchée' : ''))
-    + Fn_V2Chiffre('jour', vj ? (vj.eur >= 0 ? '+' : '−') + Fn_FmtEur(Math.abs(vj.eur), 0) : '—', vj && vj.pct != null ? Fn_FmtPct(vj.pct, 2, true) : '', vj ? (vj.eur >= 0 ? 'v-pos' : 'v-neg') : '')
+    /* En % de la valeur nette de la veille, comme le bandeau du courtier : sur un compte
+       à levier, rapporté aux titres seuls, le chiffre paraissait deux fois moindre. */
+    + Fn_V2Chiffre('jour', vj ? (vj.eur >= 0 ? '+' : '−') + Fn_FmtEur(Math.abs(vj.eur), 0) : '—',
+      vj ? (vn && vn.vn - vj.eur > 0 ? Fn_FmtPct(vj.eur / (vn.vn - vj.eur) * 100, 2, true) + ' de la VN' : (vj.pct != null ? Fn_FmtPct(vj.pct, 2, true) : '')) : '',
+      vj ? (vj.eur >= 0 ? 'v-pos' : 'v-neg') : '')
     + Fn_V2Chiffre('marge libre', Fn_Num(m.libre) != null ? Fn_FmtEur(m.libre, 0) : '—', Fn_Num(m.coussinPct) != null ? 'coussin ' + Fn_FmtPct(m.coussinPct, 0) : '')
     + Fn_V2Chiffre('levier', Fn_Num(m.levier) != null ? Fn_FmtNb(m.levier, 2) : '—', Fn_Num(m.cash) != null ? 'liquidités ' + Fn_FmtEur(m.cash, 0) : '', zLev)
     + '</div>' + Fn_V2AlerteRisques() + '</div>';
