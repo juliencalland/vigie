@@ -2400,6 +2400,101 @@ setTimeout(async () => {
     verifier('chaque code indique la conduite à tenir', creuses.length === 0, 'incomplets : ' + creuses.join(', '));
   } catch (e) { ko('couverture des codes d’erreur', e.message); }
 
+  /* --- K. LA NOUVELLE INTERFACE (Vigie 2) — en dernier : son installation redirige
+     toutes les fonctions de rendu de l'ancienne vers la sienne. --- */
+  console.log('\nK. Nouvelle interface — une file de décisions, le détail à la demande');
+  try {
+    const R = q => vm.runInContext(q, ctx);
+    const J = q => JSON.parse(JSON.stringify(R(q)));
+    const p2 = n => String(n).padStart(2, '0');
+    const iso = d => d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate());
+    const isoH = d => iso(d) + 'T' + p2(d.getHours()) + ':' + p2(d.getMinutes()) + ':' + p2(d.getSeconds());
+    const jour = n => iso(new Date(Date.now() + n * 86400000));
+    // Un état fictif complet : la capture v11 reçue, ses lignes acceptées, puis une décision de chaque nature.
+    R('Var_State.positions = []; Var_State.controles = []; Var_State.ordres = []; Var_State.executes = []; Var_State.calendrier = [];'
+      + 'Var_State.actions = []; Var_State.decouvertes = []; Var_State.majJournaux = []; Var_State.fx = null;'
+      + 'Var_State._runtime.collages = {}; Var_State._runtime.capture = null; Var_State._runtime.xlsx = null; Var_State._runtime.reception = null;'
+      + 'Fn_ModeAcces = function () { return { mode: "byok", libelle: "clé personnelle" }; };');
+    R('Fn_RecevoirTexte(' + JSON.stringify(CAPTURE_V11.replace('capture=2026-10-15T19:45:00', 'capture=' + isoH(new Date()))) + ', false);'
+      + 'Var_State.controles.filter(c => c.statut === "a_valider").forEach(c => Fn_AppliquerControle(c, true));');
+    R('Var_State.controles.push({ id: "k-sold", kind: "position_soldee", statut: "a_valider", resume: "Position absente de la capture complète : Exemple SA semble soldée.", propo: "La retirer." });'
+      + 'Var_State.controles.push({ id: "k-liq", kind: "ecart_liquidites", statut: "a_valider", resume: "Liquidités divergentes.", propo: "Divergence expliquée par les ordres en attente : accepter." });'
+      + 'Var_State.actions.push({ id: "k-arb", statut: "a_valider", prio: 1, propo: "Alléger Danica de moitié", isin: "XX0060000047", nature: "agir" });'
+      + 'Var_State.actions.push({ id: "k-pt", statut: "a_valider", prio: 3, propo: "Conserver Totalis, prochain point : résultats T3", nature: "suivre" });'
+      + 'Var_State.calendrier.push({ id: "k-rec", isin: "XX0060000047", date: ' + JSON.stringify(jour(-3)) + ', statut: "echu", sev: "Warn", libelle: "Résultats Danica (fictif)", source: "manuel" });'
+      + 'Var_State.calendrier.push({ id: "k-dem", isin: "XX0060000047", date: ' + JSON.stringify(jour(-30)) + ', statut: "echu", sev: "Info", libelle: "Débrief demandé (fictif)", debriefDemande: true, source: "manuel" });'
+      + 'Var_State.calendrier.push({ id: "k-vieux", isin: "XX0060000047", date: ' + JSON.stringify(jour(-20)) + ', statut: "echu", sev: "Info", libelle: "Vieil échu (fictif)", source: "manuel" });'
+      + 'Var_State.calendrier.push({ id: "k-sem", isin: "XX0060000047", date: ' + JSON.stringify(jour(3)) + ', statut: "prevu", sev: "Crit", libelle: "Détachement Danica (fictif)", source: "manuel" });'
+      + 'Var_State.decouvertes.push({ id: "k-d1", statut: "proposee", titre: "Idée vive (fictive)", intention: "renforcer une conviction", fait: "Fait daté fictif", ts: Date.now() });'
+      + 'Var_State.decouvertes.push({ id: "k-d2", statut: "ecartee", titre: "Idée écartée (fictive)", intention: "substituer une ligne", ts: Date.now() });'
+      + 'Fn_MajStatutsCalendrier(); Fn_Recalculer();');
+    verifier('un échu sans décision depuis 14 jours est classé seul, motif à l’appui ; un débrief demandé, jamais',
+      J('Var_State.calendrier.find(e => e.id === "k-vieux").statut') === 'classe' && /classé seul/.test(J('Var_State.calendrier.find(e => e.id === "k-vieux").motif'))
+      && J('Var_State.calendrier.find(e => e.id === "k-dem").statut') === 'echu' && J('Var_State.calendrier.find(e => e.id === "k-rec").statut') === 'echu',
+      J('Var_State.calendrier.filter(e => /^k-/.test(e.id)).map(e => e.id + "=" + e.statut)').join(' · '));
+
+    R('Fn_V2Installer(); Var_State._runtime.v2Vue = "jour"; Fn_V2Rendre();');
+    const vue = () => String(els['v2-vue'].innerHTML || '');
+    const texte = h => h.replace(/<[^>]+>/g, ' ').replace(/&[a-z#0-9]+;/g, ' ').replace(/\s+/g, ' ');
+    const nav = texte(String(els['v2-nav'].innerHTML || ''));
+    verifier('cinq vues, et le nombre de décisions en attente sur « Aujourd’hui »',
+      ['Aujourd’hui', 'Positions', 'Risques', 'Idées', 'Réglages'].every(x => nav.indexOf(x) >= 0) && /Aujourd’hui 6/.test(nav), nav);
+    const file = J('Fn_V2File().map(i => i.type + ":" + i.rang)');
+    verifier('« À trancher » : une seule file, la plus urgente en tête (contrôle critique, arbitrage P1, échus, puis ce qui peut attendre)',
+      file.join(',') === 'Contrôle:0,Arbitrage P1:1,Échu:2,Échu:2,Contrôle:3,Point de décision:3', file.join(','));
+    const hJour = vue();
+    verifier('cinq décisions visibles, le reste derrière « Tout voir »',
+      (hJour.match(/class="v2-item /g) || []).length === 5 && /data-action="v2-tout-voir"/.test(hJour) && /Tout voir \(6\)/.test(texte(hJour)));
+    verifier('un échu dont le débrief est demandé n’offre plus « Débriefer » ; un échu récent dit quand il sera classé',
+      !/data-action="ev-debriefer" data-id="k-dem"/.test(R('Var_State._runtime.v2ToutVoir = true; Fn_V2Rendre(); document.getElementById("v2-vue").innerHTML'))
+      && /data-action="ev-debriefer" data-id="k-rec"/.test(vue()) && /classé seul dans 11 j/.test(texte(vue())));
+    R('Var_State._runtime.v2ToutVoir = false; Fn_V2Rendre();');
+    verifier('le desk en UN bouton, avec ce qu’il fera',
+      (vue().match(/data-action="maj-chaine"/g) || []).length === 1 && /Analyser avec le desk/.test(vue()) && /texte\(s\) d’événement/.test(texte(vue())));
+    verifier('la semaine à venir est là, le calendrier complet à la demande',
+      /Détachement Danica/.test(vue()) && /data-action="v2-calendrier"/.test(vue()));
+
+    // Ce qui a disparu, dans TOUTES les vues.
+    const vues = {};
+    ['jour', 'positions', 'risques', 'idees', 'reglages'].forEach(v => { R('Var_State._runtime.v2Vue = "' + v + '"; Fn_V2Rendre();'); vues[v] = vue(); });
+    const tout = Object.values(vues).join('');
+    const retirees = ['capture-coller', 'capture-saisie', 'xlsx', 'xlsx-effacer', 'acq-integrer', 'acq-vider', 'maj-notrans', 'site-recherche', 'sites-tous', 'sites-aucun', 'maj-lancer', 'maj-enrichir', 'chip', 'cal-jour'];
+    const encore = retirees.filter(a => tout.indexOf('data-action="' + a + '"') >= 0);
+    verifier('plus de collage manuel en façade, d’export, d’« analyse gratuite », de sites, de filtres ni de double bouton',
+      encore.length === 0, 'encore présentes : ' + encore.join(', '));
+    const actions = [...new Set((tout.match(/data-action="([a-z0-9-]+)"(?: data-id="([^"]*)")?/g) || []))];
+    const sansAide = actions.filter(a => {
+      const m = /data-action="([a-z0-9-]+)"(?: data-id="([^"]*)")?/.exec(a);
+      return !R('!!Fn_TexteAide({ getAttribute: k => k === "data-action" ? ' + JSON.stringify(m[1]) + ' : k === "data-id" ? ' + JSON.stringify(m[2] || null) + ' : null })');
+    });
+    verifier('chaque commande de la nouvelle interface porte son aide', sansAide.length === 0, sansAide.join(' · '));
+
+    const hPos = vues.positions;
+    verifier('Positions : une ligne par position, classées par poids, sans la fiche tant qu’on ne la demande pas',
+      (hPos.match(/class="v2-pos[ "]/g) || []).length === 3 && !/plus-value latente/.test(hPos));
+    const premier = J('Fn_PositionsTriees()[0].id');
+    R('Var_State._runtime.v2Vue = "positions"; Var_State._runtime.v2Fiche = ' + JSON.stringify(premier) + '; Fn_V2Rendre();');
+    verifier('un appui ouvre la fiche : chiffres, lecture du desk, déclarations, profil',
+      /plus-value latente/.test(vue()) && /Lecture de desk/.test(vue()) && /data-action="these-check"/.test(vue()) && /data-action="pos-profil"/.test(vue()));
+    R('Var_State._runtime.v2Fiche = null;');
+    const hRis = vues.risques;
+    verifier('Risques : le score, puis chaque indicateur du plus grave au plus sain, le détail replié',
+      /v2-score/.test(hRis) && (hRis.match(/class="v2-ind"/g) || []).length === J('Fn_IndicateursDiscipline().length'));
+    verifier('Idées : les vives d’abord, les écartées à la demande',
+      /Idée vive/.test(vues.idees) && !/Idée écartée/.test(vues.idees)
+      && /Idée écartée/.test(R('Var_State._runtime.v2IdeesToutes = true; Var_State._runtime.v2Vue = "idees"; Fn_V2Rendre(); document.getElementById("v2-vue").innerHTML')));
+    R('Var_State._runtime.v2IdeesToutes = false;');
+    const hReg = vues.reglages;
+    verifier('Réglages : accès, desk, synchronisation, seuils, secours de collage et retour à l’ancienne interface',
+      ['cle-enregistrer', 'modele', 'effort', 'effort-enrichissement', 'ghtoken-enregistrer', 'seuil', 'v2-coller', 'v2-ui'].every(a => hReg.indexOf('data-action="' + a + '"') >= 0));
+    R('Fn_MontrerOnglet("decouvertes");');
+    verifier('les renvois de l’ancien code tombent sur la bonne vue (« Découvertes » → Idées)', J('Var_State._runtime.v2Vue') === 'idees');
+    R('Var_State.sitesRecherche = ["boursorama.com"];');
+    verifier('la recherche est toujours libre : une ancienne liste de sites est ignorée', J('Fn_SitesAutorises().length') === 0);
+    verifier('un export de plus de 18 heures n’est plus une source ; un export du jour, si',
+      J('Fn_ExportUtilisable({ ts: Date.now() - 48 * 3600000 })') === false && J('Fn_ExportUtilisable({ ts: Date.now() - 3600000 })') === true);
+  } catch (e) { ko('nouvelle interface', String((e && e.stack) || e)); }
+
   console.log('\n' + (echecs === 0
     ? 'TOUT EST VERT — publication possible (penser à incrémenter le CACHE de sw.js).'
     : echecs + ' CONTRÔLE(S) EN ÉCHEC — ne pas publier.'));

@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vigie — nouvelle interface</title>
+<style>body{background:#0B1220;color:#E7EEFB;font:15px/1.45 system-ui,sans-serif;padding:24px}</style>
+<script>
+/* Adresse d'essai de la nouvelle interface : l'active sur CET appareil (même données,
+   même page), puis ouvre Vigie. Retour à l'ancienne : Réglages → Interface et version. */
+try { localStorage.setItem('vigie-ui', '2'); } catch (e) { /* le paramètre d'adresse prend le relais */ }
+location.replace('../?ui=2');
+</script>
+</head>
+<body>Ouverture de la nouvelle Vigie…</body>
+</html>

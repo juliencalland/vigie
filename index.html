@@ -404,6 +404,75 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 .grille-cartes{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,32rem),1fr));gap:10px;align-items:start}
 .grille-cartes>.carte{margin-bottom:0}
 .grille-cartes>.hero,.grille-cartes>.bloc-titre,.grille-cartes>.tres-petit,.grille-cartes>.vide,.grille-cartes>.note,.grille-cartes>.pos-ligne{grid-column:1/-1}
+/* ---- VIGIE 2 — interface réécrite (16/10/2026). Tout est préfixé par body.v2 : l'ancienne interface n'en est pas touchée. ---- */
+body.v2{padding-bottom:24px}
+body.v2 #app{width:min(100% - 16px,1100px)}
+body.v2 .v2-tete{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 2px 4px}
+body.v2 .v2-marque{font-size:20px;font-weight:800;letter-spacing:.3px}
+body.v2 .v2-statut{font-size:12px;color:var(--muted);text-align:right;line-height:1.35}
+body.v2 .v2-statut .ok{color:var(--ok);font-weight:700}
+body.v2 .v2-statut .warn{color:var(--warn);font-weight:700}
+body.v2 .v2-statut .crit{color:var(--crit);font-weight:700}
+body.v2 .v2-bande:empty{display:none}
+body.v2 .v2-nav{position:sticky;top:0;z-index:5;display:flex;gap:4px;background:var(--bg);padding:6px 0 8px}
+body.v2 .v2-nav button{flex:1 1 0;min-width:0;background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:10px;padding:8px 2px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer;min-height:42px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body.v2 .v2-nav button.actif{color:var(--txt);border-color:var(--accent);background:var(--panel)}
+body.v2 .v2-nav .n{display:inline-block;min-width:18px;margin-left:4px;padding:0 5px;border-radius:9px;background:var(--crit);color:#fff;font-size:11px;line-height:18px}
+body.v2 .v2-nav .n-info{background:var(--accent)}
+body.v2 .v2-cols{display:grid;grid-template-columns:1fr;gap:0 12px;align-items:start}
+@media (min-width:900px){body.v2 .v2-cols{grid-template-columns:1fr 1.25fr}}
+body.v2 .v2-chiffres{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+@media (min-width:600px){body.v2 .v2-chiffres{grid-template-columns:repeat(4,minmax(0,1fr))}}
+body.v2 .v2-c{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-width:0}
+body.v2 .v2-c .l{display:block;font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+body.v2 .v2-c .v{display:block;font-size:18px;font-weight:800;margin-top:2px;font-variant-numeric:tabular-nums}
+body.v2 .v2-c .s{display:block;font-size:11.5px;color:var(--muted)}
+body.v2 .v2-c .z-crit{color:var(--crit)}
+body.v2 .v2-gros{width:100%;font-size:15px;min-height:48px}
+body.v2 .v2-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+body.v2 .v2-btns .btn{flex:1 1 auto}
+body.v2 .v2-item{border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:10px;padding:9px 10px;margin:0 0 8px;background:var(--panel2)}
+body.v2 .v2-item.r0{border-left-color:var(--crit)}
+body.v2 .v2-item.r1{border-left-color:var(--warn)}
+body.v2 .v2-item.r3{border-left-color:var(--line)}
+body.v2 .v2-tag{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+body.v2 .v2-item-titre{font-weight:700;margin:3px 0 2px;font-size:14px}
+body.v2 .v2-item-txt{font-size:13.5px;line-height:1.45}
+body.v2 details summary{cursor:pointer}
+body.v2 .v2-item details,body.v2 .v2-idee details{margin-top:6px;font-size:12.5px;color:var(--muted)}
+body.v2 .v2-item details summary,body.v2 .v2-idee details summary{color:var(--accent);font-weight:600}
+body.v2 .v2-ev{border-bottom:1px solid var(--line)}
+body.v2 .v2-ev>summary{display:flex;gap:8px;align-items:center;padding:7px 0;list-style:none}
+body.v2 .v2-ev>summary::-webkit-details-marker{display:none}
+body.v2 .v2-ev .d{font-family:var(--mono);font-size:12px;color:var(--muted);min-width:4.6em}
+body.v2 .v2-ev .t{flex:1;min-width:0;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body.v2 .v2-ev[open] .t{white-space:normal}
+body.v2 .v2-sev{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:0 0 8px}
+body.v2 .v2-sev.sev-Crit{background:var(--crit)}
+body.v2 .v2-sev.sev-Warn{background:var(--warn)}
+body.v2 .v2-sem{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:12px 0 2px}
+body.v2 .v2-pos{padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin:0 0 6px;background:var(--panel);cursor:pointer}
+body.v2 .v2-pos.ouverte{border-color:var(--accent)}
+body.v2 .v2-pos-l1{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+body.v2 .v2-pos-nom{font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body.v2 .v2-pos-poids{font-weight:800;font-family:var(--mono);flex:0 0 auto}
+body.v2 .v2-pos-l2{font-size:12.5px;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums}
+body.v2 .v2-pos-l3{font-size:12px;color:var(--muted);margin-top:3px}
+body.v2 .v2-fiche{margin:-2px 0 10px}
+body.v2 .v2-score{font-size:34px;font-weight:800}
+body.v2 .v2-ind{border-bottom:1px solid var(--line)}
+body.v2 .v2-ind>summary{display:flex;gap:8px;align-items:center;padding:8px 0;list-style:none}
+body.v2 .v2-ind>summary::-webkit-details-marker{display:none}
+body.v2 .v2-ind .t{flex:1;min-width:0;font-size:13.5px}
+body.v2 .v2-ind .v{font-weight:700;font-size:13px;text-align:right;max-width:45%}
+body.v2 .v2-ind[open]{padding-bottom:8px}
+body.v2 .v2-section>summary{list-style:none;margin:0}
+body.v2 .v2-section>summary::-webkit-details-marker{display:none}
+body.v2 .v2-section>summary::after{content:' ▸';color:var(--muted)}
+body.v2 .v2-section[open]>summary::after{content:' ▾'}
+body.v2 .v2-section[open]>summary{margin-bottom:8px}
+body.v2 .v2-brut{white-space:pre-wrap;word-break:break-word;font-size:11px;max-height:16rem;overflow:auto;background:var(--panel2);padding:6px;border-radius:6px}
+body.v2 .v2-eteinte{opacity:.6}
 </style>
 </head>
 <body>
@@ -441,7 +510,7 @@ button[data-action],label[data-action],[data-action="onglet"],[data-action="chip
 // Estampille posée par publier.js, IDENTIQUE à celle du cache de sw.js. Sert à
 // détecter qu'un onglet resté ouvert exécute encore l'ancien code : il ne navigue
 // pas, donc ne repasse jamais par le réseau, et rien ne l'en avertissait.
-const Cst_Version = 'vigie-202610160759';
+const Cst_Version = 'vigie-202610161135';
 const Cst_CleStockage = 'vigie-portefeuille';
 const Cst_CleApiKey   = 'vigie-portefeuille-apikey'; // localStorage UNIQUEMENT (jamais window.storage, jamais le fichier)
 const Cst_IsArtifact  = !!(window.storage && typeof window.storage.get === 'function');
@@ -2230,6 +2299,13 @@ const Cst_AideActions = {
   'reception-coller': { t: 'Recevoir la capture', d: 'Lit le presse-papier, où la macro DEGIRO a déposé la capture, la contrôle (bornes, fraîcheur, statut), puis la pose et l’intègre — le même geste que coller puis « Intégrer ». À utiliser quand le navigateur a refusé de lire le presse-papier de lui-même.' },
   'reception-forcer': { t: 'Poser cette capture quand même', d: 'Intègre la capture du presse-papier malgré l’avertissement (plus d’un quart d’heure, ou statut dégradé). À réserver au cas où l’on sait d’où elle vient : une capture ancienne remplacerait des cours plus frais.' },
   'reception-fermer': { t: 'Fermer le bandeau', d: 'Masque le bandeau de réception. Rien n’est annulé : la capture déjà intégrée le reste.' },
+  'v2-vue': { t: 'Changer de vue', d: 'Aujourd’hui : le portefeuille, le desk, ce qui est à trancher et la semaine. Positions : une ligne par position, sa fiche à la demande. Risques : le score de discipline et ses indicateurs. Idées : les pistes du desk. Réglages : accès, desk, synchronisation, seuils, capture.' },
+  'v2-fiche': { t: 'Ouvrir la fiche', d: 'Déplie la fiche de la position : cours, variation, plus-value, lecture du desk, valorisation, événements, vos déclarations. Un second appui la replie. Rien n’est modifié.' },
+  'v2-tout-voir': { t: 'Tout voir', d: 'Affiche toute la file « À trancher », au-delà des cinq décisions les plus urgentes. Rien n’est modifié.' },
+  'v2-calendrier': { t: 'Calendrier complet', d: 'Affiche tous les événements à venir, semaine par semaine, et le formulaire d’ajout d’un événement. Rien n’est modifié.' },
+  'v2-idees-toutes': { t: 'Idées écartées', d: 'Montre aussi les idées que vous avez écartées. Elles restent en mémoire pour que le desk ne les repropose pas sans fait nouveau.' },
+  'v2-ui': { t: 'Changer d’interface', d: 'Bascule CET appareil entre l’ancienne et la nouvelle interface. Les données sont les mêmes : seul l’affichage change. Les autres appareils gardent leur choix.' },
+  'v2-coller': { t: 'Intégrer ce texte', d: 'Secours quand le presse-papier ne s’ouvre pas : intègre le document de la macro collé à la main, exactement comme une réception automatique.' },
   'maj-chaine': { t: 'Documenter et analyser', d: 'Un seul geste, deux étapes enchaînées. 1. Documentation : collecte les multiples, le consensus et les agendas des seules lignes dont les données sont périmées — sautée si tout est frais. 2. Analyse : envoie au modèle le tableau déjà calculé et lui demande le jugement de desk — textes d’événements, débriefs, découvertes. Une documentation annulée ou en échec arrête la chaîne. Appels payants (jetons et recherches web) ; gardez l’onglet ouvert, une requête ne survit pas au rechargement.' },
   'maj-lancer': { t: 'Lancer la mise à jour', d: 'Envoie au modèle le tableau déjà calculé et lui demande le jugement : textes d’événements, débriefs des événements échus, découvertes. L’appel consomme des jetons facturés et des recherches web payantes. Gardez l’onglet ouvert : une requête ne survit pas au rechargement.' },
   'maj-enrichir': { t: 'Lancer la passe d’enrichissement', d: 'Collecte les multiples, le consensus et les agendas des seules lignes lourdes dont les données sont périmées. Appel payant, à lancer une fois par semaine : ces données ne bougent pas d’un jour à l’autre. Aucun texte d’expertise n’est produit.' },
@@ -3542,12 +3618,20 @@ function Fn_Apparier(nomExport, lignesCapture) {
   });
   return meilleur;
 }
+/* UN EXPORT ANCIEN N'EST PLUS UNE SOURCE. Le 16/10/2026, un export du 29/09 resté en
+   mémoire du téléphone servait encore de référence : sa clôture vieille de 17 jours
+   passait pour celle de la veille (−11,7 % « du jour » sur une ligne stable), et ses
+   taux de change aussi. Au-delà de 18 heures, l'export est ignoré — la capture suffit. */
+const Cst_AgeMaxExportH = 18;
+function Fn_ExportUtilisable(x) {
+  return !!(x && Fn_Num(x.ts) != null && Date.now() - Fn_Num(x.ts) <= Cst_AgeMaxExportH * 3600000);
+}
 function Fn_AnalyserEntrees() {
   const rt = Var_State._runtime;
   const capPos = rt.collages.positions ? Fn_ParserCapture('positions', rt.collages.positions.texte) : null;
   const capOrd = rt.collages.ordres ? Fn_ParserCapture('ordres', rt.collages.ordres.texte) : null;
   const capExe = (rt.collages.executes && !rt.aucuneTransac) ? Fn_ParserCapture('executes', rt.collages.executes.texte) : null;
-  const reg = rt.xlsx ? Fn_RegistreDepuisXlsx(rt.xlsx) : null;
+  const reg = Fn_ExportUtilisable(rt.xlsx) ? Fn_RegistreDepuisXlsx(rt.xlsx) : null;
   const controles = [], propositions = [];
   const capLignes = capPos ? capPos.lignes : [];
   const vus = [];
@@ -3652,7 +3736,10 @@ function Fn_AnalyserEntrees() {
       }
       propositions.push({ id, isin: x.isin || (c && c.isin) || null, nom: nomComplet, qte: qte,
         ticker: (c && c.ticker) || null, // l'écran est la SEULE source d'un ticker : l'export n'en porte pas
-        dev: x.dev, cloture: c ? c.cloture : null, pru: c ? c.pru : null, clotureVeille: x.clotureVeille,
+        // Clôture de la veille : celle que la CAPTURE implique (cohérente avec la variation du
+        // jour affichée à l'écran) ; celle de l'export seulement à défaut.
+        dev: x.dev, cloture: c ? c.cloture : null, pru: c ? c.pru : null,
+        clotureVeille: (c && c.clotureVeille != null) ? c.clotureVeille : x.clotureVeille,
         montantDev: x.montantDev, montantEur: x.montantEur, levier, source: 'export+capture' });
     });
     capLignes.forEach(c => {
@@ -4262,11 +4349,13 @@ function Fn_SitesBloques() {
   Cst_SitesRecherche.forEach(g => g.sites.forEach(s => { if (s.bloque && liste.indexOf(s.d) < 0) liste.push(s.d); }));
   return liste;
 }
+/* RECHERCHE TOUJOURS LIBRE (16/10/2026). Restreindre la recherche à une liste de
+   sites n'apporte rien : l'outil de recherche ne s'authentifie nulle part, les
+   sites à abonnement restent fermés, et limiter le périmètre rendait inatteignables
+   les communiqués des émetteurs. Le réglage a quitté l'interface ; la liste
+   enregistrée est ignorée. */
 function Fn_SitesAutorises() {
-  const connus = {};
-  Cst_SitesRecherche.forEach(g => g.sites.forEach(s => { connus[s.d] = 1; }));
-  const bloques = Fn_SitesBloques();
-  return (Var_State.sitesRecherche || []).filter(d => connus[d] && bloques.indexOf(d) < 0);
+  return [];
 }
 function Fn_DomainesRefuses(message) {
   const m = String(message || '');
@@ -4317,6 +4406,12 @@ function Fn_TextesAEcrire(ev) {
    un bandeau « à débriefer » et y reste tant que l'utilisateur n'a pas tranché,
    réapparaissant le lendemain. C'est ce cycle qui empêche les 132 événements de
    se reformer. */
+/* UN ÉCHU NE RESTE PAS INDÉFINIMENT À TRANCHER. 26 événements passés, jamais
+   débriefés ni classés, noyaient la file de décision le 16/10/2026 : ce qui n'a pas
+   été tranché en quatorze jours ne le sera plus. Il est CLASSÉ, motif à l'appui, et
+   reste consultable. Un débrief DEMANDÉ n'est jamais classé ainsi : il attend le
+   prochain appel au desk, qui le traitera. */
+const Cst_ClasserEchusApresJours = 14;
 function Fn_MajStatutsCalendrier() {
   const seuil = Fn_Num(Var_State.seuils.horizonImminentJours) || 5;
   let change = 0;
@@ -4328,6 +4423,11 @@ function Fn_MajStatutsCalendrier() {
     else if (j < 0) n = 'echu';
     else if (j <= seuil) n = 'imminent';
     else n = 'prevu';
+    if (n === 'echu' && j <= -Cst_ClasserEchusApresJours && !e.debriefDemande && !e.debrief) {
+      n = 'classe';
+      e.classeAuto = Fn_AujISO();
+      e.motif = 'classé seul : sans décision ' + Cst_ClasserEchusApresJours + ' jours après l’échéance';
+    }
     if (n !== e.statut) { e.statut = n; change++; }
   });
   return change;
@@ -6559,7 +6659,9 @@ function Fn_RenderParametres() {
   if (!el) return;
   const s = Var_State.seuils, t = Var_State.tarifs, c = Var_State.cumulApi;
   const mode = Fn_ModeAcces();
-  let h = '<div class="hero"><div class="hero-lib">Paramètres</div>'
+  let h = '<div class="note note-info"><b>Nouvelle Vigie</b> — une interface réécrite : une seule file de décisions, le desk en un bouton, le détail à la demande. Même données, essai sur cet appareil seulement.'
+    + '<div class="rang-btn"><button class="btn btn-accent" data-action="v2-ui" data-id="2">Essayer la nouvelle Vigie</button></div></div>'
+    + '<div class="hero"><div class="hero-lib">Paramètres</div>'
     + '<div class="hero-titre">Les cinq étages du pipeline</div>'
     + '<div class="petit muted">' + Fn_Gloss(Fn_Esc('Chaque étage écrit dans ses propres champs et jamais dans ceux d’un autre : c’est ce qui les rend rejouables séparément. Les deux premiers ne coûtent rien ; seuls l’enrichissement et le desk appellent le modèle.')) + '</div>';
   const etat = [
@@ -8150,6 +8252,19 @@ function Fn_OnAction(e) {
       break;
     }
     case 'reception-fermer': rt.reception = null; Fn_RenderMajPanel(); break;
+    case 'v2-vue': rt.v2Vue = id; rt.v2Fiche = null; Fn_V2Rendre(); if (window.scrollTo) window.scrollTo(0, 0); break;
+    case 'v2-fiche': rt.v2Fiche = rt.v2Fiche === id ? null : id; Fn_V2Rendre(); break;
+    case 'v2-tout-voir': rt.v2ToutVoir = !rt.v2ToutVoir; Fn_V2Rendre(); break;
+    case 'v2-calendrier': rt.v2Calendrier = !rt.v2Calendrier; Fn_V2Rendre(); break;
+    case 'v2-idees-toutes': rt.v2IdeesToutes = !rt.v2IdeesToutes; Fn_V2Rendre(); break;
+    case 'v2-ui': Fn_ChoisirUi(id === '2' ? '2' : '1'); if (location.reload) location.reload(); break;
+    case 'v2-coller': {
+      const t = String((document.getElementById('v2-saisie') || {}).value || '');
+      Fn_RecevoirTexte(t, true);
+      rt.v2Vue = 'jour';
+      Fn_RenderTout();
+      break;
+    }
     case 'maj-chaine': Fn_LancerChaine(); break;
     case 'maj-lancer': Fn_LancerDesk(); break;
     case 'maj-enrichir': Fn_LancerEnrichissement(); break;
@@ -8620,6 +8735,520 @@ function Fn_TickCompteurs() {
 }
 
 /* ================================================================
+   VIGIE 2 — L'INTERFACE RÉÉCRITE (16/10/2026)
+   ----------------------------------------------------------------
+   POURQUOI. L'ancienne page affichait 108 000 caractères et une centaine de
+   boutons rien que sur l'onglet du jour : zones de collage, export, « analyse
+   gratuite », 26 échus à trois boutons, 12 arbitrages, 8 cartes, 19 filtres. Or
+   la macro livre la capture et Vigie l'intègre seule (Fn_ReceptionAuto) : il ne
+   reste à l'utilisateur que des DÉCISIONS, et le lancement du desk.
+   CE QUI CHANGE. Cinq vues — Aujourd'hui, Positions, Risques, Idées, Réglages —
+   et UNE file « À trancher » qui réunit cartes de contrôle, arbitrages du desk et
+   échus, triée par urgence, deux boutons par décision. Le détail reste disponible
+   partout, mais replié : on l'ouvre quand on en a besoin.
+   CE QUI NE CHANGE PAS. Le moteur — lecture de la capture, calculs, calendrier,
+   desk, synchronisation — est celui que vérifient les contrôles : cette couche ne
+   fait que l'afficher et lui transmettre des gestes. Les anciennes fonctions de
+   rendu, appelées partout par le moteur, sont redirigées vers un rendu unique.
+   ESSAI. L'interface s'active par appareil (…/vigie/v2/ ou ?ui=2) et se quitte
+   dans Réglages ; l'état synchronisé est le même pour les deux.
+   ================================================================ */
+const Cst_CleUi = 'vigie-ui';
+function Fn_UiV2() { try { return localStorage.getItem(Cst_CleUi) === '2'; } catch (e) { return false; } }
+function Fn_ChoisirUi(v) { try { localStorage.setItem(Cst_CleUi, v); } catch (e) { /* stockage indisponible */ } }
+function Fn_UiDepuisAdresse() {
+  const m = /[?&]ui=([12])/.exec(String((typeof location !== 'undefined' && location.search) || ''));
+  if (m) Fn_ChoisirUi(m[1]);
+}
+const Cst_V2Vues = [['jour', 'Aujourd’hui'], ['positions', 'Positions'], ['risques', 'Risques'], ['idees', 'Idées'], ['reglages', 'Réglages']];
+const Cst_V2DepuisV1 = { vigie: 'jour', cours: 'positions', discipline: 'risques', decouvertes: 'idees', parametres: 'reglages' };
+const Cst_V2Visibles = 5;          // décisions affichées avant « tout voir »
+const Cst_V2JoursSemaine = 7;      // horizon de « Cette semaine »
+// Les rendus d'origine encore utiles DANS la nouvelle page (formulaire d'ajout,
+// plan de réduction) : gardés avant redirection des noms.
+const Var_V2Origine = {};
+let Var_V2Planifie = false;
+function Fn_V2Planifier() {
+  if (Var_V2Planifie) return;
+  Var_V2Planifie = true;
+  setTimeout(() => { Var_V2Planifie = false; Fn_V2Rendre(); }, 0);
+}
+function Fn_V2Installer() {
+  const app = document.getElementById('app');
+  if (!app) return;
+  app.innerHTML = '<header id="entete" class="v2-tete"><div class="v2-marque">Vigie</div><div id="v2-statut" class="v2-statut"></div></header>'
+    + '<div id="entete-maj" class="v2-bande"></div>'
+    + '<main id="principal"><nav id="v2-nav" class="v2-nav"></nav><section id="v2-vue"></section></main>';
+  if (document.body && document.body.classList) document.body.classList.add('v2');
+  ['Fn_RenderFormAjout', 'Fn_RenderRegles'].forEach(n => { Var_V2Origine[n] = (typeof globalThis[n] === 'function') ? globalThis[n] : null; });
+  // Le moteur appelle ces rendus après chaque geste : tous redessinent désormais la vue
+  // courante, une fois, au prochain tour.
+  ['Fn_RenderTout', 'Fn_RenderVigie', 'Fn_RenderCours', 'Fn_RenderDiscipline', 'Fn_RenderDecouvertes',
+    'Fn_RenderParametres', 'Fn_RenderMajPanel', 'Fn_RenderAcquisition', 'Fn_RenderZonesEvenements', 'Fn_RenderDebrief',
+    'Fn_RenderActions', 'Fn_RenderAValider', 'Fn_RenderCalendrier', 'Fn_RenderChips', 'Fn_RenderTimeline', 'Fn_RenderHero',
+    'Fn_RenderFormAjout', 'Fn_RenderRegles', 'Fn_RenderEntete'].forEach(n => { globalThis[n] = Fn_V2Planifier; });
+  globalThis.Fn_MontrerOnglet = nom => {
+    Var_State._runtime.v2Vue = Cst_V2DepuisV1[nom] || (Cst_V2Vues.some(v => v[0] === nom) ? nom : 'jour');
+    Fn_FermerGloss();
+    Fn_V2Rendre();
+  };
+}
+function Fn_V2Rendre() {
+  const vue = document.getElementById('v2-vue');
+  if (!vue) return;
+  const rt = Var_State._runtime;
+  // Jamais de rendu sous les doigts : un champ en cours de saisie garderait sinon son
+  // texte mais perdrait le curseur. Le rendu attend la sortie du champ.
+  const actif = document.activeElement;
+  if (actif && actif !== document.body && vue.contains && vue.contains(actif) && /^(INPUT|TEXTAREA|SELECT)$/.test(actif.tagName || '')) {
+    if (!rt.v2Differe) {
+      rt.v2Differe = true;
+      actif.addEventListener('blur', () => { rt.v2Differe = false; Fn_V2Planifier(); }, { once: true });
+    }
+    return;
+  }
+  const v = rt.v2Vue || 'jour';
+  Fn_V2Statut();
+  Fn_V2Nav(v);
+  Fn_RenderBandeMAJ();
+  vue.innerHTML = Fn_HtmlBanniereVersion()
+    + (v === 'positions' ? Fn_V2Positions() : v === 'risques' ? Fn_V2Risques() : v === 'idees' ? Fn_V2Idees()
+      : v === 'reglages' ? Fn_V2Reglages() : Fn_V2Jour());
+  // Les deux zones héritées gardent leur propre rendu : on les remplit en place.
+  if (v === 'jour' && rt.v2Calendrier && Var_V2Origine.Fn_RenderFormAjout) Var_V2Origine.Fn_RenderFormAjout();
+  if (v === 'risques' && Var_V2Origine.Fn_RenderRegles) Var_V2Origine.Fn_RenderRegles();
+}
+/* ---- En-tête : la fraîcheur de la capture, l'état de synchronisation ---- */
+function Fn_V2Capture() {
+  const rt = Var_State._runtime;
+  const meta = rt.capture && rt.capture.meta;
+  const cap = Var_State.captures.find(c => c.type === 'capture') || Var_State.captures.find(c => c.type === 'positions');
+  const ts = cap ? Fn_Num(cap.ts) : null;
+  if (ts == null) return { lib: 'aucune capture', cls: 'crit' };
+  const h = (Date.now() - ts) / 3600000;
+  const jour = Fn_DateISO(new Date(ts)) === Fn_AujISO();
+  const heure = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' }).format(new Date(ts));
+  if (jour) return { lib: 'capture ' + heure, cls: h <= 3 ? 'ok' : 'warn', meta };
+  return { lib: 'capture du ' + Fn_FmtDateCourt(Fn_DateISO(new Date(ts))), cls: 'crit', meta };
+}
+function Fn_V2Statut() {
+  const el = document.getElementById('v2-statut');
+  if (!el) return;
+  const c = Fn_V2Capture();
+  el.innerHTML = '<span class="' + c.cls + '">' + (c.cls === 'ok' ? '✓ ' : '⚠ ') + Fn_Esc(c.lib) + '</span>'
+    + '<br><span id="sync-etat">' + Fn_Esc(Fn_SyncLibelle()) + '</span>';
+}
+function Fn_V2NbATrancher() { return Fn_V2File().length; }
+function Fn_V2Nav(v) {
+  const el = document.getElementById('v2-nav');
+  if (!el) return;
+  const nT = Fn_V2NbATrancher();
+  const nI = (Var_State.decouvertes || []).filter(d => d.statut === 'proposee').length;
+  el.innerHTML = Cst_V2Vues.map(x => '<button type="button" class="' + (x[0] === v ? 'actif' : '') + '" data-action="v2-vue" data-id="' + x[0] + '">'
+    + Fn_Esc(x[1]) + (x[0] === 'jour' && nT ? '<span class="n">' + nT + '</span>' : '') + (x[0] === 'idees' && nI ? '<span class="n n-info">' + nI + '</span>' : '')
+    + '</button>').join('');
+}
+
+/* ================================================================
+   AUJOURD'HUI — le portefeuille, le desk, ce qui est à trancher, la semaine
+   ================================================================ */
+function Fn_V2Jour() {
+  return Fn_HtmlReception()
+    + '<div class="v2-cols"><div>' + Fn_V2CartePortefeuille() + Fn_V2CarteDesk() + Fn_V2CarteSemaine() + '</div>'
+    + '<div>' + Fn_V2CarteATrancher() + '</div></div>';
+}
+function Fn_V2Chiffre(lib, val, sous, cls) {
+  return '<div class="v2-c"><span class="l">' + Fn_Esc(lib) + '</span><span class="v' + (cls ? ' ' + cls : '') + '">' + Fn_Esc(val) + '</span>'
+    + (sous ? '<span class="s">' + Fn_Esc(sous) + '</span>' : '') + '</div>';
+}
+/* La variation du jour, en euros : chaque ligne valorisée, rapportée à sa clôture de
+   la veille. Approchée pour une ligne en devise (le change du jour s'y ajoute). */
+function Fn_V2VariationJour() {
+  let eur = 0, base = 0, n = 0;
+  Var_State.positions.forEach(p => {
+    const v = Fn_Num(p.detention.valEur), r = Fn_Num(p.detention.var);
+    if (v == null || r == null || r <= -100) return;
+    const veille = v / (1 + r / 100);
+    eur += v - veille; base += veille; n++;
+  });
+  return n ? { eur, pct: base ? eur / base * 100 : null } : null;
+}
+function Fn_V2CartePortefeuille() {
+  const vn = Fn_ValeurNette();
+  const m = Var_State.marge || {};
+  const vj = Fn_V2VariationJour();
+  const s = Var_State.seuils;
+  const zLev = Fn_Num(m.levier) == null ? '' : (Fn_Num(m.levier) >= (Fn_Num(s.leverageMax) || 99) ? 'z-crit' : '');
+  return '<div class="carte"><div class="carte-titre">Portefeuille</div><div class="v2-chiffres">'
+    + Fn_V2Chiffre('valeur nette', vn ? Fn_FmtEur(vn.vn, 0) : '—', m.as ? 'courtier à ' + m.as : (vn && vn.approx ? 'approchée' : ''))
+    + Fn_V2Chiffre('jour', vj ? (vj.eur >= 0 ? '+' : '−') + Fn_FmtEur(Math.abs(vj.eur), 0) : '—', vj && vj.pct != null ? Fn_FmtPct(vj.pct, 2, true) : '', vj ? (vj.eur >= 0 ? 'v-pos' : 'v-neg') : '')
+    + Fn_V2Chiffre('marge libre', Fn_Num(m.libre) != null ? Fn_FmtEur(m.libre, 0) : '—', Fn_Num(m.coussinPct) != null ? 'coussin ' + Fn_FmtPct(m.coussinPct, 0) : '')
+    + Fn_V2Chiffre('levier', Fn_Num(m.levier) != null ? Fn_FmtNb(m.levier, 2) : '—', Fn_Num(m.cash) != null ? 'liquidités ' + Fn_FmtEur(m.cash, 0) : '', zLev)
+    + '</div>' + Fn_V2AlerteRisques() + '</div>';
+}
+function Fn_V2AlerteRisques() {
+  const inds = Fn_IndicateursDiscipline();
+  const rouges = inds.filter(i => i.zone === 'crit');
+  if (!rouges.length) return '';
+  return '<div class="note note-crit tres-petit" style="margin:8px 0 0"><b>' + rouges.length + ' risque(s) en rouge</b> — '
+    + Fn_Esc(rouges.slice(0, 2).map(i => i.nom + ' ' + i.valeurAff).join(' · '))
+    + ' <button class="btn btn-mini" data-action="v2-vue" data-id="risques">Voir</button></div>';
+}
+/* ---- Le desk : un bouton, ce qu'il fera, ce qu'il coûtera, et le sort du dernier appel ---- */
+function Fn_V2CarteDesk() {
+  const rt = Var_State._runtime;
+  const mode = Fn_ModeAcces();
+  const charge = Fn_ChargeDesk();
+  const aEnr = Fn_LignesAEnrichir(), agendas = Fn_AgendasAEnrichir();
+  const dernier = (Var_State.majJournaux || []).find(j => j.passe !== 'enrichissement' && j.statut !== 'en cours');
+  let h = '<div class="carte"><div class="carte-titre">Analyse du desk</div>';
+  if (mode.mode === 'aucun') {
+    return h + '<div class="note note-warn tres-petit">Aucune clé API sur cet appareil : la clé est enregistrée appareil par appareil, jamais synchronisée.'
+      + ' <button class="btn btn-mini" data-action="v2-vue" data-id="reglages">Réglages</button></div></div>';
+  }
+  if (rt.enCours || rt.chaine) {
+    const etape = rt.chaine && rt.chaine.etape;
+    return h + '<div class="petit"><b>' + (etape === 'documenter' ? 'Étape 1/2 — documentation' : 'Étape 2/2 — analyse') + '</b> · '
+      + Fn_Esc(Fn_ModeleMeta().nom) + ', effort ' + Fn_Esc(Fn_EffortPasse(etape === 'documenter' ? 'enrichissement' : 'desk')) + '</div>'
+      + '<div class="tres-petit muted">L’avancement s’affiche en haut de page. Gardez cette page ouverte : une requête ne survit pas au rechargement.</div>'
+      + '<div class="v2-btns"><button class="btn btn-danger arme" data-action="maj-annuler">■ Annuler</button></div></div>';
+  }
+  const unitesEnr = aEnr.length + Math.ceil(agendas.length / 2);
+  const pDesk = Fn_ProjectionAppel('desk', charge.unites), pEnr = unitesEnr ? Fn_ProjectionAppel('enrichissement', unitesEnr) : null;
+  const cout = (pDesk.cout != null ? pDesk.cout : 0) + (pEnr && pEnr.cout != null ? pEnr.cout : 0);
+  const connu = pDesk.cout != null && (!pEnr || pEnr.cout != null);
+  const relance = dernier && (dernier.statut === 'echec' || dernier.statut === 'interrompue');
+  h += Fn_HtmlAlerteAppel(Var_State.majJournaux[0])
+    + '<div class="v2-btns"><button class="btn btn-accent v2-gros" data-action="maj-chaine">' + (relance ? 'Relancer l’analyse' : 'Analyser avec le desk') + '</button></div>'
+    + '<div class="tres-petit muted" style="margin-top:6px">'
+    + (unitesEnr ? 'Documente d’abord ' + aEnr.length + ' ligne(s)' + (agendas.length ? ' et ' + agendas.length + ' agenda(s)' : '') + ', puis analyse : ' : 'Analyse : ')
+    + charge.sansTexte.length + ' texte(s) d’événement · ' + charge.aDebriefer.length + ' débrief(s) · ' + Cst_DecouvertesVisees + ' idée(s) visée(s). '
+    + Fn_Esc(Fn_ModeleMeta().nom) + (connu ? ' · ≈ ' + Fn_FmtUsd(cout) : '') + '.</div>'
+    + (dernier ? '<div class="tres-petit muted">Dernière analyse : ' + Fn_Esc(Fn_FmtHeure(dernier.debutTs)) + ' — '
+      + Fn_Esc({ terminee: 'terminée', partielle: 'partielle', echec: 'échec', interrompue: 'interrompue' }[dernier.statut] || dernier.statut)
+      + (dernier.coutUsd != null ? ' — ' + Fn_Esc(Fn_FmtUsd(dernier.coutUsd)) : '') + '.</div>' : '<div class="tres-petit muted">Jamais lancée sur cet état.</div>');
+  return h + '</div>';
+}
+/* ---- LA FILE « À TRANCHER » : une seule liste, triée par urgence ----
+   rang 0 : la capture et l'état ne disent pas la même chose (ligne nouvelle, soldée,
+            quantité, lecture incomplète) — tant que ce n'est pas tranché, les chiffres
+            affichés partout ailleurs sont douteux ;
+   rang 1 : arbitrage prioritaire du desk, contrôle non expliqué ;
+   rang 2 : arbitrage ordinaire, échu à débriefer ;
+   rang 3 : point de décision (rien à faire aujourd'hui), écart expliqué. */
+const Cst_V2KindsCritiques = ['position_soldee', 'nouvelle_ligne', 'ligne_non_appariee', 'ligne_absente_capture', 'ecart_quantite',
+  'ecart_quantite_export', 'parametres_levier', 'capture_degradee', 'ecart_lecture', 'capture_paginee', 'ecart_ordres', 'ecart_executes'];
+function Fn_V2RangCarte(c) {
+  if (Cst_V2KindsCritiques.indexOf(c.kind) >= 0) return 0;
+  if (/expliqu/i.test(String(c.propo || '') + String(c.preuve || ''))) return 3;
+  return 1;
+}
+function Fn_V2File() {
+  const items = [];
+  Var_State.controles.filter(c => c.statut === 'a_valider').forEach(c => items.push({
+    type: 'Contrôle', cle: 'c-' + c.id, rang: Fn_V2RangCarte(c), date: '',
+    titre: Cst_KindLabels[c.kind] || c.kind, texte: c.resume, detail: [c.preuve, c.propo],
+    oui: ['av-accepter', 'Accepter', c.id], non: ['av-rejeter', 'Rejeter', c.id]
+  }));
+  Var_State.actions.filter(a => a.statut === 'a_valider').forEach(a => {
+    const suivre = Fn_NatureAction(a) === 'suivre';
+    const nom = Fn_NomDe(a.isin) || a.ticker || 'Portefeuille';
+    items.push({
+      type: suivre ? 'Point de décision' : 'Arbitrage P' + (a.prio || 3), cle: 'a-' + a.id,
+      rang: suivre ? 3 : ((a.prio || 3) <= 1 ? 1 : 2), date: '',
+      titre: nom, texte: a.propo,
+      detail: [a.decl && 'Déclencheur : ' + a.decl, a.cb && 'Coût / bénéfice : ' + a.cb, a.inval && 'Invalidation : ' + a.inval, a.hor && 'Horizon : ' + a.hor],
+      oui: ['act-accepter', suivre ? 'Inscrire le rendez-vous' : 'Inscrire au calendrier', a.id], non: ['act-rejeter', suivre ? 'Sans suite' : 'Écarter', a.id]
+    });
+  });
+  Fn_ADebriefer().forEach(e => {
+    const j = Fn_JoursDepuis(e.date);
+    const reste = j == null ? null : Cst_ClasserEchusApresJours + j;
+    items.push({
+      type: 'Échu', cle: 'e-' + e.id, rang: 2, date: e.date || '',
+      titre: Fn_FmtDateCourt(e.date) + (j != null ? ' · il y a ' + (-j) + ' j' : ''), texte: e.libelle,
+      detail: [(e.metriques || []).map(x => x.l + ' ' + x.v).join(' · '),
+        e.debriefDemande ? 'Débrief demandé : il sera fait à la prochaine analyse.' : (reste != null && reste > 0 ? 'Sans décision, classé seul dans ' + reste + ' j.' : '')],
+      oui: e.debriefDemande ? null : ['ev-debriefer', 'Débriefer', e.id], non: ['ev-classer', 'Classer', e.id]
+    });
+  });
+  return items.sort((a, b) => a.rang - b.rang || String(b.date).localeCompare(String(a.date)));
+}
+function Fn_V2HtmlItem(it) {
+  const detail = (it.detail || []).filter(Boolean);
+  return '<div class="v2-item r' + it.rang + '"><div class="v2-item-tete"><span class="v2-tag">' + Fn_Esc(it.type) + '</span></div>'
+    + '<div class="v2-item-titre">' + Fn_Gloss(Fn_Esc(it.titre)) + '</div>'
+    + (it.texte ? '<div class="v2-item-txt">' + Fn_Gloss(Fn_Esc(it.texte)) + '</div>' : '')
+    + (detail.length ? '<details><summary>Détail</summary>' + detail.map(d => '<div>' + Fn_Gloss(Fn_Esc(d)) + '</div>').join('') + '</details>' : '')
+    + '<div class="v2-btns">'
+    + (it.oui ? '<button class="btn btn-ok" data-action="' + it.oui[0] + '" data-id="' + Fn_Esc(it.oui[2]) + '">' + Fn_Esc(it.oui[1]) + '</button>' : '')
+    + '<button class="btn" data-action="' + it.non[0] + '" data-id="' + Fn_Esc(it.non[2]) + '">' + Fn_Esc(it.non[1]) + '</button>'
+    + '</div></div>';
+}
+function Fn_V2CarteATrancher() {
+  const rt = Var_State._runtime;
+  const file = Fn_V2File();
+  let h = '<div class="carte" id="ancre-avalider"><div class="carte-titre">À trancher' + (file.length ? ' (' + file.length + ')' : '') + '</div>';
+  if (!file.length) return h + '<div class="vide">Rien à trancher. Les écarts de capture, les arbitrages du desk et les échus arriveront ici.</div></div>';
+  const voir = rt.v2ToutVoir ? file : file.slice(0, Cst_V2Visibles);
+  h += voir.map(Fn_V2HtmlItem).join('');
+  if (file.length > Cst_V2Visibles) {
+    h += '<div class="v2-btns"><button class="btn" data-action="v2-tout-voir">' + (rt.v2ToutVoir ? 'Réduire' : 'Tout voir (' + file.length + ')') + '</button></div>';
+  }
+  return h + '</div>';
+}
+/* ---- La semaine, et le calendrier complet à la demande ---- */
+function Fn_V2LigneEv(e) {
+  const c = Fn_Compteur(e.date, false);
+  return '<details class="v2-ev"><summary><span class="d">' + Fn_Esc(Fn_FmtDateCourt(e.date)) + '</span>'
+    + '<span class="v2-sev sev-' + Fn_Esc(e.sev || 'Info') + '"></span>'
+    + '<span class="t">' + Fn_Esc(e.court || e.libelle) + '</span>'
+    + '<span class="compteur ' + c.cls + '">' + Fn_Esc(c.label) + '</span></summary>'
+    + Fn_HtmlEvCarte(e) + '</details>';
+}
+function Fn_V2CarteSemaine() {
+  const rt = Var_State._runtime;
+  const vifs = Fn_CalendrierVif().filter(e => e.statut !== 'echu' && e.date)
+    .sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+  const semaine = vifs.filter(e => { const j = Fn_JoursDepuis(e.date); return j != null && j >= 0 && j <= Cst_V2JoursSemaine; });
+  let h = '<div class="carte"><div class="carte-titre">Cette semaine</div>'
+    + (semaine.length ? semaine.map(Fn_V2LigneEv).join('') : '<div class="vide">Aucun événement dans les sept jours.</div>');
+  h += '<div class="v2-btns"><button class="btn" data-action="v2-calendrier">' + (rt.v2Calendrier ? 'Masquer le calendrier' : 'Calendrier complet (' + vifs.length + ')') + '</button></div>';
+  if (rt.v2Calendrier) {
+    const parSem = {};
+    vifs.forEach(e => { const s = Fn_SemaineLundi(e.date) || 'sans date'; (parSem[s] = parSem[s] || []).push(e); });
+    Object.keys(parSem).sort().forEach(s => {
+      h += '<div class="v2-sem">Semaine du ' + Fn_Esc(Fn_FmtDateCourt(s)) + '</div>' + parSem[s].map(Fn_V2LigneEv).join('');
+    });
+    h += '<div id="v-form" style="margin-top:8px"></div>';
+  }
+  return h + '</div>';
+}
+
+/* ================================================================
+   POSITIONS — une ligne par position, la fiche à la demande
+   ================================================================ */
+function Fn_V2Positions() {
+  const rt = Var_State._runtime;
+  const pos = Fn_PositionsTriees();
+  if (!pos.length) return '<div class="carte"><div class="vide">Aucune position suivie. Lancez la capture DEGIRO depuis le widget : Vigie s’ouvrira et l’intégrera.</div></div>';
+  const m = Var_State.marge || {};
+  let h = '<div class="carte"><div class="carte-titre">Positions (' + pos.length + ')</div><div class="tres-petit muted">Classées par poids. '
+    + (Fn_Num(m.titres) != null ? 'Valeur des titres ' + Fn_FmtEur(m.titres, 0) + '. ' : '') + 'Touchez une ligne pour sa fiche.</div></div>';
+  pos.forEach(p => {
+    const d = p.detention, pr = p.produit || {};
+    const ouverte = rt.v2Fiche === p.id;
+    const jour = Fn_Num(d.var), lat = Fn_Num(d.plPct);
+    const signaux = [];
+    if (pr.type === 'derive' && Fn_Num(pr.distBarriere) != null) {
+      const z = Fn_ZoneSeuil(pr.distBarriere, Var_State.seuils.barriereVert, Var_State.seuils.barriereRouge, 'bas');
+      signaux.push('<span class="' + (z ? 'z-' + z : '') + '">barrière à ' + Fn_Esc(Fn_FmtPct(pr.distBarriere, 1)) + '</span>');
+    }
+    const prochain = Fn_CalendrierVif().filter(e => e.isin === p.id && e.statut !== 'echu' && e.date).sort((a, b) => a.date < b.date ? -1 : 1)[0];
+    if (prochain) signaux.push(Fn_Esc(Fn_FmtDateCourt(prochain.date) + ' · ' + (prochain.court || prochain.libelle)));
+    const th = Var_State.theses[p.id] || {};
+    if (!th.ecrite) signaux.push('<span class="muted">thèse non déclarée</span>');
+    h += '<div class="v2-pos' + (ouverte ? ' ouverte' : '') + '" data-action="v2-fiche" data-id="' + Fn_Esc(p.id) + '">'
+      + '<div class="v2-pos-l1"><span class="v2-pos-nom">' + Fn_Esc(d.nom || p.id) + (p.ticker ? ' <span class="muted">' + Fn_Esc(p.ticker) + '</span>' : '')
+      + (pr.type === 'derive' ? ' <span class="badge badge-warn">levier</span>' : '') + '</span>'
+      + '<span class="v2-pos-poids">' + Fn_Esc(Fn_FmtPct(d.pctVN, 1)) + '</span></div>'
+      + '<div class="v2-pos-l2">' + Fn_Esc(Fn_FmtEur(d.valEur, 0))
+      + ' · jour <span class="' + (jour == null ? '' : jour >= 0 ? 'v-pos' : 'v-neg') + '">' + Fn_Esc(Fn_FmtPct(jour, 2, true)) + '</span>'
+      + ' · latente <span class="' + (lat == null ? '' : lat >= 0 ? 'v-pos' : 'v-neg') + '">' + Fn_Esc(Fn_FmtPct(lat, 1, true)) + '</span></div>'
+      + (signaux.length ? '<div class="v2-pos-l3">' + signaux.join(' · ') + '</div>' : '')
+      + '</div>';
+    if (ouverte) h += '<div class="v2-fiche carte">' + Fn_V2Fiche(p) + '</div>';
+  });
+  return h;
+}
+function Fn_V2Fiche(p) {
+  let h = Fn_HtmlSocle(p) + Fn_HtmlDesk(p);
+  if (p.desk && (p.desk.niveau === 'complet' || p.desk.niveau === 'compact')) h += Fn_HtmlConsensus(p) + Fn_HtmlValorisation(p);
+  const evs = Var_State.calendrier.filter(e => e.isin === p.id && (e.statut === 'prevu' || e.statut === 'imminent' || e.statut === 'echu'))
+    .sort((a, b) => String(a.date) < String(b.date) ? -1 : 1);
+  if (evs.length) h += '<div class="cours-ligne"><span class="lib">Événements de la ligne</span>' + evs.map(Fn_V2LigneEv).join('') + '</div>';
+  h += Fn_HtmlThese(p)
+    + '<div class="cours-ligne"><span class="lib">Profil</span><select data-action="pos-profil" data-id="' + Fn_Esc(p.id) + '">'
+    + '<option value="">— non attribué</option>'
+    + Cst_Profils.map(x => '<option value="' + x.id + '"' + (p.desk && p.desk.profil === x.id ? ' selected' : '') + '>' + Fn_Esc(x.nom) + '</option>').join('')
+    + '</select><div class="tres-petit muted">Le profil choisit les ratios cherchés pour cette ligne.</div></div>';
+  return h;
+}
+
+/* ================================================================
+   RISQUES — le score, puis les indicateurs du plus grave au plus sain
+   ================================================================ */
+function Fn_V2Risques() {
+  const inds = Fn_IndicateursDiscipline();
+  const score = Fn_ScoreDiscipline(inds);
+  const ordre = { crit: 0, warn: 1, ok: 2 };
+  const tries = inds.slice().sort((a, b) => (a.zone in ordre ? ordre[a.zone] : 3) - (b.zone in ordre ? ordre[b.zone] : 3));
+  let h = '<div class="carte"><div class="carte-titre">Discipline</div><div class="v2-score" style="color:var('
+    + (score == null ? '--muted' : score >= 70 ? '--ok' : score >= 40 ? '--warn' : '--crit') + ')">' + (score == null ? '—' : score)
+    + '<span class="petit muted"> / 100</span></div>'
+    + '<div class="tres-petit muted">' + inds.filter(i => i.zone === 'crit').length + ' en rouge · ' + inds.filter(i => i.zone === 'warn').length
+    + ' en ambre · un indicateur sans donnée est exclu du score, jamais compté zéro.</div></div>'
+    + '<div class="carte">';
+  tries.forEach(i => {
+    h += '<details class="v2-ind"><summary><span class="pastille ' + (i.zone ? 'p-' + i.zone : '') + '"></span>'
+      + '<span class="t">' + Fn_Gloss(Fn_Esc(i.nom)) + '</span><span class="v"' + (i.zone ? ' style="color:var(--' + i.zone + ')"' : '') + '>' + Fn_Gloss(Fn_Esc(i.valeurAff)) + '</span></summary>'
+      + (i.jauge || '') + '<div class="ind-seuils">' + Fn_Esc(i.seuils || '') + '</div>'
+      + (i.manquant ? '<div class="petit muted">Donnée manquante : ' + Fn_Gloss(Fn_Esc(i.manquant)) + '</div>' : '')
+      + (i.extra ? '<div class="petit">' + Fn_Gloss(i.extra) + '</div>' : '')
+      + (i.pratique ? '<div class="svap">' + Fn_HtmlSvap('prat', i.pratique) + '</div>' : '')
+      + '</details>';
+  });
+  return h + '</div><div id="v-regles"></div>';
+}
+
+/* ================================================================
+   IDÉES — les découvertes du desk : garder, écarter, le reste à la demande
+   ================================================================ */
+function Fn_V2Idees() {
+  const rt = Var_State._runtime;
+  const toutes = (Var_State.decouvertes || []).slice().sort((a, b) => (Fn_Num(b.ts) || 0) - (Fn_Num(a.ts) || 0));
+  const vives = toutes.filter(d => d.statut === 'proposee' || d.statut === 'gardee');
+  const liste = rt.v2IdeesToutes ? toutes : vives;
+  const perem = Fn_Num(Var_State.seuils.peremptionDecouverteJours) || 30;
+  let h = '<div class="carte"><div class="carte-titre">Idées du desk (' + vives.length + ' vive' + (vives.length > 1 ? 's' : '') + ')</div>'
+    + '<div class="tres-petit muted">Pistes ancrées dans le portefeuille, adossées à un fait daté, réfutables. Des dossiers à étudier, jamais des ordres. Sans décision, une idée se périme en ' + perem + ' jours.</div>'
+    + '<div class="v2-btns"><button class="btn" data-action="v2-idees-toutes">' + (rt.v2IdeesToutes ? 'Seulement les vives' : 'Voir aussi les écartées (' + (toutes.length - vives.length) + ')') + '</button>'
+    + '<button class="btn" data-action="dec-ajouter">Ajouter une idée</button></div></div>';
+  if (!liste.length) return h + '<div class="carte"><div class="vide">Aucune idée pour l’instant : la prochaine analyse du desk en cherchera.</div></div>';
+  liste.forEach(d => {
+    const edition = rt.decEdition === d.id;
+    const age = Fn_Num(d.ts) != null ? Math.floor((Date.now() - Fn_Num(d.ts)) / 86400000) : null;
+    h += '<div class="carte v2-idee' + (d.statut === 'ecartee' ? ' v2-eteinte' : '') + '">'
+      + '<div class="v2-item-titre">' + Fn_Esc(d.titre || 'Idée') + '</div>'
+      + '<div class="opp-meta"><span class="badge badge-info">' + Fn_Esc(d.intention || '—') + '</span>'
+      + (d.cible ? '<span class="badge badge-neutre">' + Fn_Esc(String(Fn_NomDe(d.cible) || d.cible).slice(0, 24)) + '</span>' : '')
+      + (d.verdict ? '<span class="badge ' + ((Cst_VerdictsDec[d.verdict] || {}).badge || 'badge-neutre') + '">' + Fn_Esc(d.verdict) + '</span>' : '')
+      + '<span class="badge badge-neutre">' + Fn_Esc({ proposee: 'proposée', gardee: 'gardée', ecartee: 'écartée' }[d.statut] || d.statut) + '</span>'
+      + (d.statut === 'proposee' && age != null ? '<span class="tres-petit muted">périme dans ' + Math.max(0, perem - age) + ' j</span>' : '') + '</div>'
+      + (d.fait ? '<div class="v2-item-txt">' + Fn_Gloss(Fn_Esc(d.fait)) + (d.dateFait ? ' <span class="mono muted">(' + Fn_Esc(Fn_FmtDateCourt(d.dateFait)) + ')</span>' : '') + '</div>' : '')
+      + '<details' + (edition ? ' open' : '') + '><summary>Entrée, invalidation, source</summary>' + Fn_HtmlDecouverteDetail(d, edition) + '</details>'
+      + (edition ? '' : '<div class="v2-btns">'
+        + (d.statut !== 'gardee' ? '<button class="btn btn-ok" data-action="dec-garder" data-id="' + Fn_Esc(d.id) + '">Garder</button>' : '')
+        + (d.statut !== 'ecartee' ? '<button class="btn" data-action="dec-ecarter" data-id="' + Fn_Esc(d.id) + '">Écarter</button>' : '')
+        + '</div>')
+      + '</div>';
+  });
+  return h;
+}
+function Fn_HtmlDecouverteDetail(d, edition) {
+  const arme = Var_State._runtime.armes['dec-' + d.id];
+  let h = '';
+  if (d.entree) h += '<div class="opp-section"><b>Niveau d’entrée</b><br>' + Fn_Gloss(Fn_Esc(d.entree)) + '</div>';
+  if (d.inval) h += '<div class="opp-section"><b>Invalidation</b><br>' + Fn_Gloss(Fn_Esc(d.inval)) + '</div>';
+  if (d.hor) h += '<div class="opp-section"><b>Horizon</b><br>' + Fn_Gloss(Fn_Esc(d.hor)) + '</div>';
+  if (d.discipline) h += '<div class="opp-section"><b>Effet sur la discipline</b><br>' + Fn_Gloss(Fn_Esc(d.discipline)) + '</div>';
+  if (Fn_Num(d.taille) != null) h += '<div class="opp-section"><b>Taille envisagée</b> ' + Fn_Esc(Fn_FmtPct(d.taille, 1)) + ' de la valeur nette</div>';
+  if (d.note) h += '<div class="note note-info petit"><b>Note</b> — ' + Fn_Esc(d.note) + '</div>';
+  if (d.s || d.u) h += '<div class="opp-source">Source : ' + Fn_Esc(d.s || '—') + (d.u ? ' · ' + Fn_Lien(d.u) : '') + '</div>';
+  if (edition) {
+    h += '<div class="opp-edition"><div class="form-grille">'
+      + '<div class="col3"><label class="champ">Titre</label><input id="dec-titre" type="text" value="' + Fn_Esc(d.titre || '') + '"></div>'
+      + '<div><label class="champ">Intention</label><select id="dec-intention">'
+      + Cst_Intentions.map(i => '<option' + (d.intention === i ? ' selected' : '') + '>' + Fn_Esc(i) + '</option>').join('') + '</select></div>'
+      + '<div><label class="champ">Ligne ancrée</label><select id="dec-cible"><option value="">— aucune</option>'
+      + Var_State.positions.map(p => '<option value="' + Fn_Esc(p.id) + '"' + (d.cible === p.id ? ' selected' : '') + '>' + Fn_Esc(String(p.detention.nom || p.id).slice(0, 30)) + '</option>').join('') + '</select></div>'
+      + '<div><label class="champ">Taille envisagée (% VN)</label><input id="dec-taille" type="number" step="0.1" value="' + (Fn_Num(d.taille) == null ? '' : Fn_Esc(String(d.taille))) + '"></div>'
+      + '<div class="col3"><label class="champ">Fait daté</label><textarea id="dec-fait">' + Fn_Esc(d.fait || '') + '</textarea></div>'
+      + '<div><label class="champ">Date du fait</label><input id="dec-datefait" type="date" value="' + Fn_Esc(d.dateFait || '') + '"></div>'
+      + '<div class="col2"><label class="champ">Source (lien direct)</label><input id="dec-u" type="text" value="' + Fn_Esc(d.u || '') + '"></div>'
+      + '<div class="col3"><label class="champ">Niveau d’entrée</label><textarea id="dec-entree">' + Fn_Esc(d.entree || '') + '</textarea></div>'
+      + '<div class="col3"><label class="champ">Invalidation</label><textarea id="dec-inval">' + Fn_Esc(d.inval || '') + '</textarea></div>'
+      + '<div class="col3"><label class="champ">Note personnelle</label><textarea id="dec-note">' + Fn_Esc(d.note || '') + '</textarea></div></div>'
+      + '<div class="v2-btns"><button class="btn btn-ok" data-action="dec-enregistrer" data-id="' + Fn_Esc(d.id) + '">Enregistrer</button>'
+      + '<button class="btn" data-action="dec-annuler">Annuler</button></div></div>';
+  } else {
+    h += '<div class="v2-btns"><button class="btn" data-action="dec-modifier" data-id="' + Fn_Esc(d.id) + '">Modifier</button>'
+      + '<button class="btn btn-danger' + (arme ? ' arme' : '') + '" data-action="dec-suppr" data-id="' + Fn_Esc(d.id) + '">' + (arme ? 'Confirmer ?' : 'Supprimer') + '</button></div>';
+  }
+  return h;
+}
+
+/* ================================================================
+   RÉGLAGES — accès, desk, synchronisation, seuils, capture, sauvegarde
+   ================================================================ */
+function Fn_V2Section(titre, contenu, ouvert) {
+  return '<details class="carte v2-section"' + (ouvert ? ' open' : '') + '><summary class="carte-titre">' + titre + '</summary>' + contenu + '</details>';
+}
+function Fn_V2Reglages() {
+  const rt = Var_State._runtime;
+  const mode = Fn_ModeAcces();
+  const s = Var_State.seuils, c = Var_State.cumulApi;
+  const arme = k => rt.armes[k];
+  let h = '';
+  // ---- Accès à Claude
+  h += Fn_V2Section('Accès à Claude', '<div class="petit">' + Fn_Gloss(Fn_Esc(mode.libelle)) + '</div>'
+    + (Cst_IsArtifact ? '' : '<label class="champ">Clé API personnelle</label>'
+      + '<input type="password" id="p-cle" class="champ-code" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="' + (Fn_GetApiKey() ? 'clé enregistrée — saisir pour remplacer' : 'enregistrée sur cet appareil seulement') + '">'
+      + '<div class="v2-btns"><button class="btn btn-ok" data-action="cle-enregistrer">Enregistrer</button><button class="btn" data-action="cle-voir">Afficher</button>'
+      + '<button class="btn btn-danger' + (arme('cle-effacer') ? ' arme' : '') + '" data-action="cle-effacer">' + (arme('cle-effacer') ? 'Confirmer ?' : 'Effacer') + '</button></div>'),
+    mode.mode === 'aucun');
+  // ---- Desk
+  const m = Fn_ModeleMeta();
+  const journaux = (Var_State.majJournaux || []).filter(j => j.statut !== 'en cours');
+  h += Fn_V2Section('Desk : modèle, effort, dépense',
+    '<div class="form-grille"><div class="col2"><label class="champ">Modèle</label><select data-action="modele">'
+    + Cst_Modeles.map(x => '<option value="' + x.id + '"' + (x.id === Fn_ModeleMAJ() ? ' selected' : '') + '>' + Fn_Esc(x.nom) + ' — ' + x.entreeParM + ' / ' + x.sortieParM + ' $</option>').join('') + '</select></div>'
+    + '<div><label class="champ">Effort — analyse</label><select data-action="effort">'
+    + Cst_Efforts.map(x => '<option value="' + x.id + '"' + (x.id === Fn_EffortMAJ() ? ' selected' : '') + '>' + Fn_Esc(x.nom) + '</option>').join('') + '</select></div>'
+    + '<div><label class="champ">Effort — documentation</label><select data-action="effort-enrichissement">'
+    + Cst_Efforts.map(x => '<option value="' + x.id + '"' + (x.id === Fn_EffortEnrichissement() ? ' selected' : '') + '>' + Fn_Esc(x.nom) + '</option>').join('') + '</select></div></div>'
+    + '<div class="tres-petit muted">' + Fn_Esc(m.note) + ' La recherche web est libre : aucun site n’est imposé.</div>'
+    + '<div class="carte-titre" style="margin-top:10px">Derniers appels</div>'
+    + (journaux.length ? '<table class="tbl"><tr><th>date</th><th>étape</th><th>issue</th><th>coût</th></tr>'
+      + journaux.map(j => '<tr><td class="mono">' + Fn_Esc(Fn_FmtHeure(j.debutTs)) + '</td><td>' + Fn_Esc(j.passe === 'enrichissement' ? 'documentation' : 'analyse')
+        + '</td><td>' + Fn_Esc({ terminee: 'terminé', partielle: 'partiel', echec: 'échec', interrompue: 'interrompu' }[j.statut] || j.statut)
+        + '</td><td class="mono">' + Fn_Esc(j.coutUsd != null ? Fn_FmtUsd(j.coutUsd) : '—') + '</td></tr>').join('') + '</table>'
+      + '<details><summary class="tres-petit">Journal détaillé du dernier appel</summary>' + Fn_HtmlJournalMAJ(journaux[0]) + '</details>'
+      : '<div class="vide">Aucun appel.</div>')
+    + '<div class="tres-petit muted" style="margin-top:6px">Cumul : ' + c.appels + ' appel(s), ' + Fn_Esc(Fn_FmtUsd(c.coutUsd)) + ' estimés. La facturation réelle se lit sur la console du fournisseur.</div>'
+    + '<div class="v2-btns"><button class="btn btn-danger' + (arme('cumul-raz') ? ' arme' : '') + '" data-action="cumul-raz">' + (arme('cumul-raz') ? 'Confirmer ?' : 'Remettre le cumul à zéro') + '</button></div>');
+  // ---- Synchronisation
+  h += Fn_V2Section('Synchronisation entre appareils', '<div class="petit">État : <span id="p-sync-etat">' + Fn_Esc(Fn_SyncLibelle()) + '</span></div>'
+    + '<label class="champ">Jeton d’accès au dépôt privé</label>'
+    + '<input type="password" id="p-ghtoken" class="champ-code" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="' + (Fn_GetSyncToken() ? 'jeton enregistré — saisir pour remplacer' : 'jeton restreint au seul dépôt de données') + '">'
+    + '<div class="v2-btns"><button class="btn btn-ok" data-action="ghtoken-enregistrer">Enregistrer</button><button class="btn" data-action="ghtoken-voir">Afficher</button>'
+    + '<button class="btn" data-action="sync-maintenant">Synchroniser</button>'
+    + '<button class="btn btn-danger' + (arme('ghtoken-effacer') ? ' arme' : '') + '" data-action="ghtoken-effacer">' + (arme('ghtoken-effacer') ? 'Confirmer ?' : 'Effacer') + '</button></div>'
+    + '<div class="v2-btns"><label class="btn">Restaurer un état<input type="file" accept="application/json,.json" data-action="sync-importer" style="display:none"></label>'
+    + '<button class="btn" data-action="etat-exporter">Télécharger une copie</button></div>');
+  // ---- Seuils
+  h += Fn_V2Section('Seuils d’alerte', '<div class="form-grille">' + Cst_SeuilsMeta.map(x =>
+    '<div><label class="champ">' + Fn_Esc(x.label) + ' (' + Fn_Esc(x.unite) + ')</label><input type="number" step="0.1" data-action="seuil" data-id="' + x.cle + '" value="' + Fn_Esc(String(s[x.cle])) + '"></div>').join('')
+    + '</div><div class="v2-btns"><button class="btn btn-danger' + (arme('seuils-reset') ? ' arme' : '') + '" data-action="seuils-reset">' + (arme('seuils-reset') ? 'Confirmer ?' : 'Seuils par défaut') + '</button></div>');
+  // ---- Instruments suivis
+  h += Fn_V2Section('Instruments suivis hors portefeuille (' + Var_State.instruments.length + ')',
+    (Var_State.instruments.length ? Var_State.instruments.map(i => '<div class="instr-ligne"><span>' + Fn_Esc(i.ticker || '') + ' <span class="muted">' + Fn_Esc(i.libelle || '') + '</span></span>'
+      + '<button class="btn btn-danger' + (arme('inst-' + i.id) ? ' arme' : '') + '" data-action="inst-suppr" data-id="' + Fn_Esc(i.id) + '">' + (arme('inst-' + i.id) ? 'Confirmer ?' : 'Retirer') + '</button></div>').join('') : '<div class="vide">Aucun.</div>')
+    + '<div class="form-grille" style="margin-top:8px"><div><label class="champ">Ticker</label><input id="i-ticker" type="text"></div>'
+    + '<div><label class="champ">ISIN</label><input id="i-isin" type="text"></div><div><label class="champ">Libellé</label><input id="i-lib" type="text"></div></div>'
+    + '<div class="v2-btns"><button class="btn btn-ok" data-action="inst-ajouter">Suivre</button></div>');
+  // ---- Capture : ce qui a été lu, et le secours manuel
+  const meta = (rt.capture && rt.capture.meta) || {};
+  h += Fn_V2Section('Dernière capture et secours',
+    '<div class="petit">' + (rt.capture ? 'Capture du ' + Fn_Esc(meta.capture || Fn_FmtHeure(rt.capture.ts)) + ' · statut ' + Fn_Esc(meta.statut || '—')
+      + ' · ' + Fn_Esc((meta.lignes_positions || '?') + ' positions · ' + (meta.lignes_ordres || '?') + ' ordres · ' + (meta.lignes_transactions || '?') + ' transactions') : 'Aucune capture sur cet appareil.') + '</div>'
+    + ['positions', 'ordres', 'executes'].filter(k => rt.collages[k]).map(k => '<details><summary class="tres-petit">Texte brut — ' + k + '</summary><pre class="v2-brut">' + Fn_Esc(rt.collages[k].texte || '') + '</pre></details>').join('')
+    + '<div class="tres-petit muted" style="margin-top:8px">Secours, si le presse-papier ne s’ouvre pas : collez ici le document de la macro.</div>'
+    + '<textarea id="v2-saisie" class="champ-texte" rows="3" placeholder="===VIGIE:META=== …"></textarea>'
+    + '<div class="v2-btns"><button class="btn" data-action="v2-coller">Intégrer ce texte</button></div>');
+  // ---- Interface, version, remise à zéro
+  h += Fn_V2Section('Interface et version', '<div class="petit">Version : <span class="mono">' + Fn_Esc(Cst_Version) + '</span>'
+    + (rt.versionPubliee ? ' · publiée : <span class="mono">' + Fn_Esc(rt.versionPubliee) + '</span>' : '') + '</div>'
+    + '<div class="v2-btns"><button class="btn" data-action="v2-ui" data-id="1">Revenir à l’ancienne Vigie</button></div>'
+    + '<details><summary class="tres-petit">Repartir d’une vigie neuve</summary>'
+    + '<div class="note note-crit tres-petit">Efface toutes les données de portefeuille, ici et au dépôt privé (tous vos appareils). Téléchargez d’abord une copie.</div>'
+    + '<div class="v2-btns"><button class="btn btn-danger' + (arme('etat-raz') ? ' arme' : '') + '" data-action="etat-raz">' + (arme('etat-raz') ? 'Confirmer — tout effacer ?' : 'Repartir d’une vigie neuve') + '</button></div></details>'
+    + '<details><summary class="tres-petit">Codes d’erreur d’appel</summary><table class="tbl">'
+    + Cst_ErreursAPI.map(e => '<tr><td class="mono">' + Fn_Esc(e.code) + '</td><td>' + Fn_Esc(e.quoi) + '<br><span class="muted">' + Fn_Esc(e.faire) + '</span></td></tr>').join('') + '</table></details>');
+  return h;
+}
+
+/* ================================================================
    INIT
    ================================================================ */
 (async function Fn_Init() {
@@ -8635,6 +9264,8 @@ function Fn_TickCompteurs() {
   Fn_VerifierVersion();
   Var_State._runtime.timers.version = setInterval(Fn_VerifierVersion, 600000);
   await Promise.race([Fn_SyncTirer(), new Promise(r => setTimeout(r, 4000))]);
+  Fn_UiDepuisAdresse();
+  if (Fn_UiV2()) Fn_V2Installer();
   const nav = document.getElementById('nav-onglets');
   if (nav) {
     nav.addEventListener('click', e => {
@@ -8671,7 +9302,7 @@ function Fn_TickCompteurs() {
   window.addEventListener('scroll', Fn_FermerGloss, { passive: true });
   Var_State._runtime.timers.tick = setInterval(Fn_TickCompteurs, 60000);
   Fn_RenderTout();
-  Fn_MontrerOnglet(Var_State.onglet || 'vigie');
+  Fn_MontrerOnglet(Fn_UiV2() ? 'jour' : (Var_State.onglet || 'vigie'));
   // Ouverte par la macro après une capture : le document attend dans le presse-papier.
   // APRÈS la synchronisation, pour intégrer sur l'état le plus récent.
   await Fn_ReceptionAuto();
